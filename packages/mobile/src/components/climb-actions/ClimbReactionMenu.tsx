@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Keyboard,
   type LayoutChangeEvent,
@@ -32,6 +32,7 @@ import { getBoardRenderData } from '../../lib/board-details';
 import { formatSends, formatQuality } from '../../lib/format-climb-stats';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { useTheme } from '../../providers/theme-provider';
+import { useToast } from '../../providers/toast-provider';
 import type { BoardConfig } from '../../providers/drawer-host-provider';
 import { springs, timing } from '../../theme/animations';
 import { spacing, borderRadius, overlays } from '../../theme/tokens';
@@ -176,6 +177,44 @@ export function ClimbReactionMenu({
   const backToMenu = useCallback(() => setView('menu'), []);
   // Stable so useClimbActions' memo doesn't rebuild the action list every render.
   const openPlaylist = useCallback(() => setView('playlist'), []);
+
+  // A playlist add/remove that fails after the picker is gone but while THIS
+  // overlay is still up (back-to-menu unmounts the picker; the overlay stays).
+  // A toast fired now would render behind the FullWindowOverlay / Modal and
+  // auto-dismiss after 3s, so hold the message and fire it on the way out — the
+  // unmount cleanup covers both dismissal and the parent tearing us down. Ref'd
+  // showToast so the cleanup effect never re-runs and flushes early (#3891).
+  //
+  // Holding only works while there is still a cleanup to come. Dismiss the whole
+  // overlay while the request is in flight and the cleanup has already run by the
+  // time the rejection lands — writing to the ref then would park the message in a
+  // dead component forever. `overlayGoneRef` records that we are past cleanup, and
+  // a message arriving after it goes straight to the toast, which by then is the
+  // top layer anyway.
+  const { showToast } = useToast();
+  const showToastRef = useRef(showToast);
+  showToastRef.current = showToast;
+  const pendingFailureRef = useRef<string | null>(null);
+  const overlayGoneRef = useRef(false);
+  const holdFailureUntilDismissed = useCallback((message: string) => {
+    if (overlayGoneRef.current) {
+      showToastRef.current(message, 'error');
+      return;
+    }
+    pendingFailureRef.current = message;
+  }, []);
+  useEffect(() => {
+    // Reset on mount as well as set on unmount: a mount/cleanup/mount cycle
+    // (StrictMode, Fast Refresh) would otherwise leave a live overlay classified as
+    // gone, toasting failures behind itself where nobody sees them.
+    overlayGoneRef.current = false;
+    return () => {
+      overlayGoneRef.current = true;
+      const pendingFailure = pendingFailureRef.current;
+      pendingFailureRef.current = null;
+      if (pendingFailure) showToastRef.current(pendingFailure, 'error');
+    };
+  }, []);
 
   // Hardware back (Android) / VoiceOver escape: pop the playlist view first,
   // dismiss the whole overlay only from the top-level menu.
@@ -482,6 +521,7 @@ export function ClimbReactionMenu({
                   TextInputComponent={TextInput}
                   onBack={backToMenu}
                   maxHeight={menuMaxHeight}
+                  onDetachedFailure={holdFailureUntilDismissed}
                 />
               ) : (
                 <View>

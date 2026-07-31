@@ -232,6 +232,8 @@
         "removed": "Retiré de la playlist",
         "addFailed": "Impossible d'ajouter à la playlist",
         "removeFailed": "Impossible de retirer de la playlist",
+        "addFailedNamed": "Impossible d'ajouter à « {{playlist}} »",
+        "removeFailedNamed": "Impossible de retirer de « {{playlist}} »",
         "createdNamed": "Playlist « {{name}} » créée",
         "createFailed": "Impossible de créer la playlist"
       },

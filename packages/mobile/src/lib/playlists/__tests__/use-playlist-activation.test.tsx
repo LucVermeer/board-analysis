@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import type { Climb, ClimbQueueItem } from '@boardsesh/queue';
 import type { UsePlaylistClimbActivationOptions } from '@boardsesh/playlists-react';
-import { usePlaylistActivation } from '../use-playlist-activation';
+import { usePlaylistActivation, _resetEmptyBoardFetchReportsForTests } from '../use-playlist-activation';
 
 // The shared `usePlaylistClimbActivation` is exercised by @boardsesh/playlists-react's
 // own tests. Here we mock it to capture the options the mobile wrapper builds —
@@ -31,6 +31,7 @@ const mocks = vi.hoisted(() => ({
   fetchSuggestion: vi.fn(),
   captured: undefined as UsePlaylistClimbActivationOptions | undefined,
   queueItemCounter: 0,
+  reportHandledError: vi.fn(),
 }));
 
 const VIEW_ONLY_BOARD = { boardName: 'tension', layoutId: 9, sizeId: 5, setIds: '1,2', angle: 35 };
@@ -67,6 +68,7 @@ vi.mock('react-i18next', () => ({
 vi.mock('../../graphql/use-active-board', () => ({
   useActiveBoard: () => ({ data: mocks.activeBoard }),
 }));
+vi.mock('../../error-reporting', () => ({ reportHandledError: mocks.reportHandledError }));
 // Unique uuid per call (mirrors the real randomUUID wrapper) — the "same item"
 // assertions below would be vacuous if every call minted the same uuid.
 vi.mock('../../climb-to-queue-item', () => ({
@@ -77,7 +79,7 @@ vi.mock('../../climb-to-queue-item', () => ({
   }),
 }));
 
-function makeClimb(uuid: string): Climb {
+function makeClimb(uuid: string, overrides: Partial<Climb> = {}): Climb {
   return {
     uuid,
     name: `Climb ${uuid}`,
@@ -90,6 +92,7 @@ function makeClimb(uuid: string): Climb {
     stars: 3,
     difficulty_error: '0',
     benchmark_difficulty: null,
+    ...overrides,
   };
 }
 
@@ -125,6 +128,9 @@ function captured(): UsePlaylistClimbActivationOptions {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // The canary's once-per-session Set is module state; clear it so a reused
+  // sourceId can't make a case pass by reporting nothing.
+  _resetEmptyBoardFetchReportsForTests();
   mocks.activeBoard = { boardType: 'kilter', layoutId: 1, sizeId: 2, setIds: '3', angle: 40 };
   mocks.activeClimbUuid = null;
   mocks.suggestionSource = null;
@@ -489,6 +495,185 @@ describe('usePlaylistActivation (mobile wrapper)', () => {
 
       expect(result.current.queueReplaceSheet.visible).toBe(false);
       expect(mocks.setQueue).not.toHaveBeenCalled();
+    });
+
+    // #3891 canary. A board-scoped fetch that comes back empty for a playlist whose
+    // detail list already has climbs degrades into a plausible one-item queue —
+    // no error, no toast, just a circuit you can't swipe through. That is exactly
+    // how the MoonBoard size filter hid for months, so it now reports to Sentry.
+    it('reports (and does not silently one-item) an empty board-scoped fetch for a non-empty playlist', async () => {
+      const tapped = makeClimb('b');
+      const fetchPage = vi.fn().mockResolvedValue({ climbs: [], hasMore: false });
+      const { result } = renderActivation(fetchPage, {
+        replaceQueueOnActivate: true,
+        sourceId: 'playlist:empty-fetch-1',
+        allClimbs: [makeClimb('a'), tapped, makeClimb('c')],
+      });
+
+      await act(async () => {
+        await result.current.activate(tapped);
+      });
+
+      await waitFor(() => {
+        expect(mocks.reportHandledError).toHaveBeenCalledWith(expect.any(Error), {
+          tags: { source: 'playlist', op: 'replace-queue-empty' },
+          extra: { sourceId: 'playlist:empty-fetch-1', renderableCount: 3, loadedCount: 3 },
+        });
+      });
+      // Documents the degraded-but-not-crashed behaviour: the tapped climb is still
+      // playable, it just has nowhere to swipe to. The canary is telemetry, not a fix.
+      const lastSetQueue = mocks.setQueue.mock.calls.at(-1);
+      expect(lastSetQueue?.[0].map((item: ClimbQueueItem) => item.climb.uuid)).toEqual(['b']);
+      expect(mocks.showToast).not.toHaveBeenCalled();
+    });
+
+    it('reports an empty board-scoped fetch at most once per playlist per session', async () => {
+      const tapped = makeClimb('b');
+      const fetchPage = vi.fn().mockResolvedValue({ climbs: [], hasMore: false });
+      const { result } = renderActivation(fetchPage, {
+        replaceQueueOnActivate: true,
+        sourceId: 'playlist:empty-fetch-2',
+        allClimbs: [makeClimb('a'), tapped],
+      });
+
+      await act(async () => {
+        await result.current.activate(tapped);
+      });
+      await waitFor(() => expect(mocks.reportHandledError).toHaveBeenCalledTimes(1));
+
+      // A climber poking at a broken playlist re-taps rows freely, and
+      // reportHandledError has no dedup of its own — one bad playlist must not
+      // become hundreds of identical Sentry events.
+      await act(async () => {
+        await result.current.activate(tapped);
+      });
+      await waitFor(() => expect(fetchPage).toHaveBeenCalledTimes(2));
+      expect(mocks.reportHandledError).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not report an empty board-scoped fetch for a playlist with no loaded climbs', async () => {
+      // Nothing loaded means nothing to disagree with — an empty playlist legitimately
+      // fetches nothing, and a false positive here would be permanent noise.
+      const fetchPage = vi.fn().mockResolvedValue({ climbs: [], hasMore: false });
+      const { result } = renderActivation(fetchPage, {
+        replaceQueueOnActivate: true,
+        sourceId: 'playlist:empty-fetch-3',
+        allClimbs: [],
+      });
+
+      await act(async () => {
+        await result.current.activate(makeClimb('b'));
+      });
+
+      await waitFor(() => expect(fetchPage).toHaveBeenCalled());
+      expect(mocks.reportHandledError).not.toHaveBeenCalled();
+    });
+
+    it('stays silent when the loaded climbs are all on a board this one cannot render', async () => {
+      // The detail list runs the resolver in ALL-BOARDS mode on purpose, so
+      // `allClimbs` carries climbs from other board types and layouts. A playlist
+      // declared on kilter layout 1 whose climbs were all added from a Tension
+      // board legitimately fetches nothing here — reporting it would drown the
+      // signal this canary exists to give.
+      const tapped = makeClimb('b');
+      const fetchPage = vi.fn().mockResolvedValue({ climbs: [], hasMore: false });
+      const { result } = renderActivation(fetchPage, {
+        replaceQueueOnActivate: true,
+        sourceId: 'playlist:empty-fetch-4',
+        allClimbs: [
+          makeClimb('a', { boardType: 'tension', layoutId: 9 }),
+          makeClimb('b', { boardType: 'tension', layoutId: 9 }),
+        ],
+      });
+
+      await act(async () => {
+        await result.current.activate(tapped);
+      });
+
+      await waitFor(() => expect(fetchPage).toHaveBeenCalled());
+      expect(mocks.reportHandledError).not.toHaveBeenCalled();
+    });
+
+    it('still reports when only some of the loaded climbs belong to the active board', async () => {
+      // The mixed case is the one that matters: one climbable row plus a pile of
+      // off-board ones still means the board-scoped fetch owed us that row.
+      const tapped = makeClimb('b');
+      const fetchPage = vi.fn().mockResolvedValue({ climbs: [], hasMore: false });
+      const { result } = renderActivation(fetchPage, {
+        replaceQueueOnActivate: true,
+        sourceId: 'playlist:empty-fetch-5',
+        allClimbs: [makeClimb('a', { boardType: 'tension', layoutId: 9 }), tapped],
+      });
+
+      await act(async () => {
+        await result.current.activate(tapped);
+      });
+
+      await waitFor(() => {
+        expect(mocks.reportHandledError).toHaveBeenCalledWith(expect.any(Error), {
+          tags: { source: 'playlist', op: 'replace-queue-empty' },
+          extra: { sourceId: 'playlist:empty-fetch-5', renderableCount: 1, loadedCount: 2 },
+        });
+      });
+    });
+
+    it('stays silent when a MoonBoard wall lacks the sets its playlist climbs need', async () => {
+      // MoonBoard's renderable holds are the whole grid whatever add-on sets are
+      // bolted on, so the canary's compatibility check has to look at hold sets
+      // too. A base-only 2024 wall opening a wooden-holds playlist legitimately
+      // fetches nothing (the backend's `required_set_ids <@ selected sets`
+      // containment drops every row) — reporting that would poison the signal.
+      mocks.activeBoard = {
+        boardType: 'moonboard',
+        layoutId: 3,
+        sizeId: 21,
+        setIds: '5,6,7',
+        angle: 40,
+      } as ActiveBoard;
+      const tapped = makeClimb('b', { boardType: 'moonboard', layoutId: 3, frames: 'p1r42p2r43' });
+      const fetchPage = vi.fn().mockResolvedValue({ climbs: [], hasMore: false });
+      const { result } = renderActivation(fetchPage, {
+        replaceQueueOnActivate: true,
+        sourceId: 'playlist:empty-fetch-6',
+        allClimbs: [makeClimb('a', { boardType: 'moonboard', layoutId: 3, frames: 'p2r42p17r43' }), tapped],
+      });
+
+      await act(async () => {
+        await result.current.activate(tapped);
+      });
+
+      await waitFor(() => expect(fetchPage).toHaveBeenCalled());
+      expect(mocks.reportHandledError).not.toHaveBeenCalled();
+    });
+
+    it('still reports for a MoonBoard wall that does have the sets its playlist climbs need', async () => {
+      // Same wall with the wooden sets installed: now the backend owed us those
+      // rows, so an empty fetch is a real defect and must page us.
+      mocks.activeBoard = {
+        boardType: 'moonboard',
+        layoutId: 3,
+        sizeId: 21,
+        setIds: '5,6,7,8,9,10',
+        angle: 40,
+      } as ActiveBoard;
+      const tapped = makeClimb('b', { boardType: 'moonboard', layoutId: 3, frames: 'p1r42p2r43' });
+      const fetchPage = vi.fn().mockResolvedValue({ climbs: [], hasMore: false });
+      const { result } = renderActivation(fetchPage, {
+        replaceQueueOnActivate: true,
+        sourceId: 'playlist:empty-fetch-7',
+        allClimbs: [tapped],
+      });
+
+      await act(async () => {
+        await result.current.activate(tapped);
+      });
+
+      await waitFor(() => {
+        expect(mocks.reportHandledError).toHaveBeenCalledWith(expect.any(Error), {
+          tags: { source: 'playlist', op: 'replace-queue-empty' },
+          extra: { sourceId: 'playlist:empty-fetch-7', renderableCount: 1, loadedCount: 1 },
+        });
+      });
     });
 
     it('keeps the queue unchanged and shows a toast when the full playlist fetch fails', async () => {

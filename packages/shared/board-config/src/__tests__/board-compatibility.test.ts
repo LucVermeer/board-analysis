@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canAddClimbToBoard,
   classifyClimbBoardCompatibility,
   findNextCompatibleQueueItem,
   type ActiveBoardForCompatibility,
   type ClimbBoardIdentity,
 } from '../board-compatibility';
+import type { BoardCompatibilityTarget } from '../types';
 
 const KILTER_L1: ActiveBoardForCompatibility = { boardName: 'kilter', layoutId: 1 };
 const KILTER_HOMEWALL_L8: ActiveBoardForCompatibility = { boardName: 'kilter', layoutId: 8 };
@@ -126,5 +128,57 @@ describe('findNextCompatibleQueueItem', () => {
     const result = findNextCompatibleQueueItem(queue, 'gone', KILTER_L1);
     expect(result.item?.uuid).toBe('q1');
     expect(result.skippedCount).toBe(1);
+  });
+});
+
+describe('canAddClimbToBoard — MoonBoard hold-set containment', () => {
+  // MoonBoard 2024 (layout 3). getMoonBoardDetails emits the whole grid as
+  // holdsData whichever add-on sets are bolted on, so the hold-id check below
+  // passes for every same-layout climb — the set check is the only thing that
+  // can tell a wooden-set climb from a base-set one.
+  const FULL_GRID_HOLDS = Array.from({ length: 198 }, (_, index) => ({ id: index + 1 }));
+
+  function moonBoard2024(setIds?: number[]): BoardCompatibilityTarget {
+    return { board_name: 'moonboard', layout_id: 3, holdsData: FULL_GRID_HOLDS, set_ids: setIds };
+  }
+
+  // Cell 1 is Hold Set D (set 5); cells 2 and 17 are the wooden sets (8 and 10).
+  const BASE_SET_CLIMB = { boardType: 'moonboard', layoutId: 3, frames: 'p1r42p9r43' };
+  const WOODEN_SET_CLIMB = { boardType: 'moonboard', layoutId: 3, frames: 'p1r42p2r43p17r44' };
+
+  it('rejects a wooden-set climb on a wall built without the wooden sets', () => {
+    expect(canAddClimbToBoard(WOODEN_SET_CLIMB, moonBoard2024([5]))).toEqual({
+      ok: false,
+      reason: 'holds_out_of_range',
+    });
+  });
+
+  it('accepts the same climb once the wooden sets are installed', () => {
+    expect(canAddClimbToBoard(WOODEN_SET_CLIMB, moonBoard2024([5, 8, 10]))).toEqual({ ok: true });
+  });
+
+  it('accepts a base-set climb on a base-only wall', () => {
+    expect(canAddClimbToBoard(BASE_SET_CLIMB, moonBoard2024([5]))).toEqual({ ok: true });
+  });
+
+  it('skips the set check when the caller supplies no set_ids', () => {
+    // Opt-in: callers that never knew about hold sets keep their old answer
+    // rather than silently losing every wooden-set climb.
+    expect(canAddClimbToBoard(WOODEN_SET_CLIMB, moonBoard2024())).toEqual({ ok: true });
+  });
+
+  it('does not apply the MoonBoard cell-set map to Aurora boards', () => {
+    // Aurora hold placements are already per-set, so their uninstalled-set holds
+    // fail the hold-id check instead. Running the MoonBoard map over a Kilter
+    // frames string would reject on hold ids that mean something else entirely.
+    const kilterTarget: BoardCompatibilityTarget = {
+      board_name: 'kilter',
+      layout_id: 3,
+      holdsData: FULL_GRID_HOLDS,
+      set_ids: [5],
+    };
+    expect(canAddClimbToBoard({ boardType: 'kilter', layoutId: 3, frames: 'p1r42p2r43p17r44' }, kilterTarget)).toEqual({
+      ok: true,
+    });
   });
 });

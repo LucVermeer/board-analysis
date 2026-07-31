@@ -45,6 +45,11 @@ export function getPlaylistRenderBoardTarget(renderBoard: PlaylistRenderBoard): 
     board_name: boardName,
     layout_id: renderBoard.layoutId,
     holdsData: renderData?.holdsData,
+    // MoonBoard holdsData covers the full grid whichever add-on sets are bolted
+    // on, so hand over the wall's sets too. Without them a wooden-set climb reads
+    // as an exact fit on a base-only wall: the row renders undimmed, and the tap
+    // then falls through the set-scoped backend fetch into a one-item queue.
+    set_ids: setIds,
   };
 }
 

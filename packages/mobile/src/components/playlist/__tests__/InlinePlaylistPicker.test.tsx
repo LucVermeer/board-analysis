@@ -20,6 +20,8 @@ const queryClientMock = vi.hoisted(() => ({
   cancelQueries: vi.fn(async () => {}),
 }));
 const membershipStore = vi.hoisted(() => ({ setMembershipForClimb: vi.fn() }));
+const showToast = vi.hoisted(() => vi.fn());
+const reportHandledError = vi.hoisted(() => vi.fn());
 
 vi.mock('react-native', () => ({
   ActivityIndicator: () => createElement('div', { 'data-spinner': 'true' }),
@@ -64,9 +66,17 @@ vi.mock('react-native', () => ({
   StyleSheet: { create: (styles: Record<string, unknown>) => styles, hairlineWidth: 1 },
 }));
 
+// Interpolating values into the key keeps the named-toast copy assertable without
+// pulling in a real i18n instance.
 vi.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({
+    t: (key: string, values?: Record<string, unknown>) =>
+      values ? `${key}:${Object.entries(values).map(([name, value]) => `${name}=${String(value)}`)}` : key,
+  }),
 }));
+
+vi.mock('../../../providers/toast-provider', () => ({ useToast: () => ({ showToast }) }));
+vi.mock('../../../lib/error-reporting', () => ({ reportHandledError }));
 
 vi.mock('@tanstack/react-query', () => ({
   useQuery: () => ({ data: qstate.data, isLoading: qstate.loading }),
@@ -163,7 +173,7 @@ function NameInput(props: { value?: string; onChangeText?: (text: string) => voi
   });
 }
 
-function renderPicker(onBack?: () => void) {
+function renderPicker(onBack?: () => void, onDetachedFailure?: (message: string) => void) {
   return render(
     <InlinePlaylistPicker
       climb={climb}
@@ -172,6 +182,7 @@ function renderPicker(onBack?: () => void) {
       layoutId={1}
       TextInputComponent={NameInput as never}
       onBack={onBack}
+      onDetachedFailure={onDetachedFailure}
     />,
   );
 }
@@ -202,6 +213,8 @@ describe('InlinePlaylistPicker', () => {
     queryClientMock.setQueryData.mockReset();
     queryClientMock.cancelQueries.mockClear();
     membershipStore.setMembershipForClimb.mockReset();
+    showToast.mockReset();
+    reportHandledError.mockReset();
   });
 
   it('shows the sign-in blurb and no create button when signed out', () => {
@@ -273,6 +286,135 @@ describe('InlinePlaylistPicker', () => {
     expect(queryClientMock.setQueryData).toHaveBeenNthCalledWith(2, expect.anything(), []);
   });
 
+  // #3891: the climber taps a playlist, sees the optimistic checkmark, and
+  // dismisses the sheet/overlay before the request settles — which on gym wifi is
+  // most of the window. The catch block still runs (the rollback below proves it),
+  // but `setError` on an unmounted component is a silent no-op, so the failure used
+  // to reach nobody: no banner, no toast, no Sentry. These four cases pin the
+  // routing; 5 and 6 are only meaningful as a pair (each alone is satisfied by an
+  // always-toast or a never-toast implementation).
+  describe('failure feedback survives the host being dismissed', () => {
+    function setupDeferredAdd(members: string[] = []) {
+      playlistContext.playlists = [makePlaylist('p-1', 'Minimoon circuit')];
+      qstate.data = members;
+      const pending = deferred<void>();
+      const rejection = pending.promise.then(() => {
+        throw new Error('offline');
+      });
+      // Swallow the rejection here so an unhandled-rejection warning can't fail the
+      // run; the component has its own catch on the same promise.
+      rejection.catch(() => {});
+      return { pending, rejection };
+    }
+
+    it('toasts the failure, naming the playlist, when the picker unmounted before the add settled', async () => {
+      const { pending, rejection } = setupDeferredAdd();
+      playlistContext.addToPlaylist.mockReset().mockReturnValueOnce(rejection);
+      const { getByLabelText, unmount } = renderPicker();
+
+      fireEvent.click(getByLabelText('Minimoon circuit'));
+      await waitFor(() => expect(playlistContext.addToPlaylist).toHaveBeenCalled());
+      // Optimistic checkmark is already written — this is what the climber saw
+      // before dismissing.
+      expect(queryClientMock.setQueryData).toHaveBeenNthCalledWith(1, expect.anything(), ['p-1']);
+
+      unmount();
+      pending.resolve();
+
+      await waitFor(() => {
+        expect(showToast).toHaveBeenCalledWith(
+          'actions.playlist.toast.addFailedNamed:playlist=Minimoon circuit',
+          'error',
+        );
+      });
+      // The optimistic membership is still rolled back, so the checkmark is gone
+      // when the picker is reopened.
+      expect(membershipStore.setMembershipForClimb).toHaveBeenLastCalledWith('climb-1', []);
+    });
+
+    it('keeps the failure inline and does NOT toast while the picker is still mounted', async () => {
+      const { pending, rejection } = setupDeferredAdd();
+      playlistContext.addToPlaylist.mockReset().mockReturnValueOnce(rejection);
+      const { getByLabelText, getByText } = renderPicker();
+
+      fireEvent.click(getByLabelText('Minimoon circuit'));
+      await waitFor(() => expect(playlistContext.addToPlaylist).toHaveBeenCalled());
+      pending.resolve();
+
+      await waitFor(() => expect(getByText('actions.playlist.toast.addFailed')).not.toBeNull());
+      // A root toast would render behind the sheet / FullWindowOverlay hosting the
+      // picker, so this one must stay inline.
+      expect(showToast).not.toHaveBeenCalled();
+    });
+
+    it('toasts the remove failure (not the add copy) when the picker is gone', async () => {
+      const { pending, rejection } = setupDeferredAdd(['p-1']);
+      playlistContext.removeFromPlaylist.mockReset().mockReturnValueOnce(rejection);
+      const { getByLabelText, unmount } = renderPicker();
+
+      fireEvent.click(getByLabelText('Minimoon circuit'));
+      await waitFor(() => expect(playlistContext.removeFromPlaylist).toHaveBeenCalled());
+      unmount();
+      pending.resolve();
+
+      await waitFor(() => {
+        expect(showToast).toHaveBeenCalledWith(
+          'actions.playlist.toast.removeFailedNamed:playlist=Minimoon circuit',
+          'error',
+        );
+      });
+      // Membership is restored, so the checkmark comes back.
+      expect(membershipStore.setMembershipForClimb).toHaveBeenLastCalledWith('climb-1', ['p-1']);
+    });
+
+    // Mount state alone is the WRONG signal for "is a toast visible". The reaction
+    // overlay's back button pops to its action menu, which unmounts the picker
+    // while the FullWindowOverlay / transparent Modal is still presented — and a
+    // root toast renders behind those, then self-dismisses in 3s. So the host gets
+    // to say where a detached failure goes; only hosts whose dismissal IS the
+    // picker's unmount (the ModalSheet) fall through to the toast.
+    it('hands the failure to the host channel instead of a toast when the host outlives the picker', async () => {
+      const { pending, rejection } = setupDeferredAdd();
+      playlistContext.addToPlaylist.mockReset().mockReturnValueOnce(rejection);
+      const onDetachedFailure = vi.fn();
+      const { getByLabelText, unmount } = renderPicker(undefined, onDetachedFailure);
+
+      fireEvent.click(getByLabelText('Minimoon circuit'));
+      await waitFor(() => expect(playlistContext.addToPlaylist).toHaveBeenCalled());
+      // Back-to-menu: the picker goes, the overlay stays.
+      unmount();
+      pending.resolve();
+
+      await waitFor(() => {
+        expect(onDetachedFailure).toHaveBeenCalledWith(
+          'actions.playlist.toast.addFailedNamed:playlist=Minimoon circuit',
+        );
+      });
+      expect(showToast).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['mounted', false],
+      ['unmounted', true],
+    ])('reports the toggle failure to Sentry while %s', async (_label, dismiss) => {
+      const { pending, rejection } = setupDeferredAdd();
+      playlistContext.addToPlaylist.mockReset().mockReturnValueOnce(rejection);
+      const { getByLabelText, unmount } = renderPicker();
+
+      fireEvent.click(getByLabelText('Minimoon circuit'));
+      await waitFor(() => expect(playlistContext.addToPlaylist).toHaveBeenCalled());
+      if (dismiss) unmount();
+      pending.resolve();
+
+      await waitFor(() => {
+        expect(reportHandledError).toHaveBeenCalledWith(expect.any(Error), {
+          tags: { source: 'playlist', op: 'toggle-membership' },
+        });
+      });
+      expect(reportHandledError).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('creates a playlist inline and adds the climb to it', async () => {
     const created = makePlaylist('p-new', 'Projects');
     playlistContext.createPlaylist.mockResolvedValueOnce(created);
@@ -304,13 +446,84 @@ describe('InlinePlaylistPicker', () => {
     fireEvent.click(getByLabelText('actions.playlist.create.submit'));
 
     await waitFor(() => {
-      expect(getByText('actions.playlist.toast.addFailed')).not.toBeNull();
+      expect(getByText('actions.playlist.toast.addFailedNamed:playlist=Projects')).not.toBeNull();
     });
     // Created exactly once (no duplicate), the add was attempted, and the form
     // closed — so a retry taps the existing row rather than re-creating.
     expect(playlistContext.createPlaylist).toHaveBeenCalledTimes(1);
     expect(playlistContext.addToPlaylist).toHaveBeenCalledWith('p-new', 'climb-1', 40);
     expect(queryByLabelText('actions.playlist.create.submit')).toBeNull();
+  });
+
+  it('toasts a failed create-then-add when the picker went away mid-request', async () => {
+    // The same hole as the toggle path, one flow over: the create succeeds, the
+    // picker unmounts, then the add rejects. This one used to be gated on
+    // isCurrent() — false after unmount — so it reported nothing at all. The form
+    // is already closed by the time the add runs, so a stale token here means the
+    // picker is gone, which is exactly when the toast is the only channel left.
+    const created = makePlaylist('p-new', 'Projects');
+    playlistContext.createPlaylist.mockResolvedValueOnce(created);
+    const pending = deferred<void>();
+    const rejection = pending.promise.then(() => {
+      throw new Error('offline');
+    });
+    rejection.catch(() => {});
+    playlistContext.addToPlaylist.mockReset().mockReturnValueOnce(rejection);
+    const { getByLabelText, unmount } = renderPicker();
+
+    fireEvent.click(getByLabelText('actions.playlist.popover.createNew'));
+    fireEvent.change(getByLabelText('name-input'), { target: { value: 'Projects' } });
+    fireEvent.click(getByLabelText('actions.playlist.create.submit'));
+    await waitFor(() => expect(playlistContext.addToPlaylist).toHaveBeenCalled());
+
+    unmount();
+    pending.resolve();
+
+    await waitFor(() => {
+      expect(showToast).toHaveBeenCalledWith('actions.playlist.toast.addFailedNamed:playlist=Projects', 'error');
+    });
+    expect(reportHandledError).toHaveBeenCalledWith(expect.any(Error), {
+      tags: { source: 'playlist', op: 'create-then-add' },
+    });
+  });
+
+  it('names the playlist when a create-then-add fails while a SECOND create form is open', async () => {
+    // The other way the create token goes stale, with the picker still mounted:
+    // submit a second inline create while the first playlist's add is in flight.
+    // The stale continuation must still speak (dropping it loses the first
+    // playlist's add silently), it must name which playlist it is about, and the
+    // message has to land in the form's error slot — the list header that
+    // normally carries it isn't mounted while the form is open.
+    const first = makePlaylist('p-first', 'Minimoon circuit');
+    const secondCreate = deferred<Playlist>();
+    playlistContext.createPlaylist.mockReset().mockResolvedValueOnce(first).mockReturnValueOnce(secondCreate.promise);
+    const pendingAdd = deferred<void>();
+    const rejection = pendingAdd.promise.then(() => {
+      throw new Error('offline');
+    });
+    rejection.catch(() => {});
+    playlistContext.addToPlaylist.mockReset().mockReturnValueOnce(rejection);
+    const { getByLabelText, getByText } = renderPicker();
+
+    fireEvent.click(getByLabelText('actions.playlist.popover.createNew'));
+    fireEvent.change(getByLabelText('name-input'), { target: { value: 'Minimoon circuit' } });
+    fireEvent.click(getByLabelText('actions.playlist.create.submit'));
+    await waitFor(() => expect(playlistContext.addToPlaylist).toHaveBeenCalledWith('p-first', 'climb-1', 40));
+
+    // Second create: bumps the token, so the first add's continuation is stale.
+    fireEvent.click(getByLabelText('actions.playlist.popover.createNew'));
+    fireEvent.change(getByLabelText('name-input'), { target: { value: 'Board projects' } });
+    fireEvent.click(getByLabelText('actions.playlist.create.submit'));
+    await waitFor(() => expect(playlistContext.createPlaylist).toHaveBeenCalledTimes(2));
+
+    pendingAdd.resolve();
+
+    await waitFor(() => {
+      expect(getByText('actions.playlist.toast.addFailedNamed:playlist=Minimoon circuit')).not.toBeNull();
+    });
+    // Still mounted, so nothing goes to the (invisible-behind-the-host) toast.
+    expect(showToast).not.toHaveBeenCalled();
+    secondCreate.resolve(makePlaylist('p-second', 'Board projects'));
   });
 
   it('shows a create failure inline and keeps the form open without adding', async () => {
