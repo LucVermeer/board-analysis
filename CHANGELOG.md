@@ -12,6 +12,10 @@ A new version shipped to the App Store and Play Store.
 
 ### Fixed
 
+- Fixed a rare glitch where hold markers could go missing on a climb if your phone ([#4041](https://github.com/boardsesh/boardsesh/pull/4041))
+  was low on storage — the app now rebuilds its overlay cache and redraws them.
+  Fixes #3182
+- Boardsesh now tells you why the board picker is empty on Android instead of blaming your board — if Android is hiding Bluetooth results until Location is allowed, you get a one-tap way to fix it. ([#3980](https://github.com/boardsesh/boardsesh/pull/3980))
 - MoonBoard playlists work on the wall again: light up a climb from a playlist and swiping left/right now walks the rest of the circuit instead of stranding you on one climb. ([#3997](https://github.com/boardsesh/boardsesh/pull/3997))
   If adding a climb to a playlist fails, you'll now hear about it — even if you've already swiped the sheet away — and the message names the playlist.
 - Fixes #3527 ([#4030](https://github.com/boardsesh/boardsesh/pull/4030))

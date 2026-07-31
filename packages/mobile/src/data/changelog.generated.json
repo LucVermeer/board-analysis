@@ -1,6 +1,21 @@
 {
-  "generatedAt": "2026-07-31T01:25:51.762Z",
+  "generatedAt": "2026-07-31T01:44:10.109Z",
   "entries": [
+    {
+      "prNumber": 4041,
+      "category": "fixed",
+      "title": "Fixed a rare glitch where hold markers could go missing on a climb if your phone",
+      "mergedAt": "2026-07-31T01:41:17Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4041",
+      "body": "was low on storage — the app now rebuilds its overlay cache and redraws them.\nFixes #3182"
+    },
+    {
+      "prNumber": 3980,
+      "category": "fixed",
+      "title": "Boardsesh now tells you why the board picker is empty on Android instead of blaming your board — if Android is hiding Bluetooth results until Location is allowed, you get a one-tap way to fix it.",
+      "mergedAt": "2026-07-31T01:41:00Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3980"
+    },
     {
       "prNumber": 3997,
       "category": "fixed",
