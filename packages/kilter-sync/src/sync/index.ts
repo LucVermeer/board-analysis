@@ -1,8 +1,11 @@
 export {
   syncKilterUserData,
-  // Exported for the real-Postgres test in packages/backend: the ratings
+  // Exported for the real-Postgres tests in packages/backend: the ratings
   // conflict clause (created_at from upstream + the setWhere change guard)
-  // can only be verified against an actual database.
+  // and the REMOVE soft-detach
+  // (backend/src/__tests__/climb-ratings-remove-detach.test.ts) can only be
+  // verified against an actual database. The package only exposes the '.'
+  // and './sync' subpaths, so a deep import into user-sync isn't an option.
   applyClimbRatings,
   type SyncKilterUserDataArgs,
   type SyncKilterUserDataResult,

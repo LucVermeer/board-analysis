@@ -1152,6 +1152,18 @@ function createRichTx(
         },
       };
     },
+    // applyClimbRatings' REMOVE path soft-detaches (update→set→where, awaited
+    // directly) instead of deleting.
+    update(_table: unknown) {
+      return {
+        set: (setValues: Record<string, unknown>) => ({
+          where: (_cond: unknown) => {
+            calls.push({ kind: 'update', args: [setValues, _cond] });
+            return Promise.resolve();
+          },
+        }),
+      };
+    },
     insert(_table: unknown) {
       return {
         values: (rows: Array<Record<string, unknown>>) => {
@@ -1245,8 +1257,9 @@ describe('applyClimbRatings — bulk upsert with COALESCE comment', () => {
       createdAt: new Date('2026-05-01T12:00:00.000Z'),
     });
     expect(insertValues[0][1]).toMatchObject({ kilterId: 'r-2', climbUuid: 'climb-B' });
-    // No delete because there were no REMOVEs.
-    expect(calls.filter((c) => c.kind === 'delete')).toHaveLength(0);
+    // No REMOVEs in this batch, so nothing may be soft-detached. (Asserting on
+    // deletes here would be vacuous now that no code path calls tx.delete.)
+    expect(calls.filter((c) => c.kind === 'update')).toHaveLength(0);
     // boardClimbRatings is the schema target — used by the bulk insert.
     expect(boardClimbRatings).toBeDefined();
   });
@@ -1262,7 +1275,7 @@ describe('applyClimbRatings — bulk upsert with COALESCE comment', () => {
     );
   });
 
-  it('issues exactly one bulk DELETE for N REMOVE ops, no INSERT', async () => {
+  it('issues exactly one bulk soft-detach UPDATE for N REMOVE ops, never a DELETE', async () => {
     const { tx, calls } = createRichTx();
     const ops: PowerSyncOp[] = [
       { op_id: '1', op: 'REMOVE', object_type: 'climb_ratings', object_id: 'r-1' },
@@ -1271,11 +1284,20 @@ describe('applyClimbRatings — bulk upsert with COALESCE comment', () => {
 
     await applyClimbRatings(tx as unknown as ApplyClimbRatingsTx, 'user-1', ops, new Map());
 
-    expect(calls.filter((c) => c.kind === 'delete')).toHaveLength(1);
+    const updates = calls.filter((c) => c.kind === 'update');
+    expect(updates).toHaveLength(1);
+    // A DELETE would take the whole row, including an adopted Boardsesh-origin
+    // rating's local-only fields (#3525).
+    expect(calls.filter((c) => c.kind === 'delete')).toHaveLength(0);
     expect(calls.filter((c) => c.kind === 'insert')).toHaveLength(0);
+    const setValues = updates[0].args[0] as { kilterId: unknown; kilterDetachedAt: unknown };
+    expect(setValues.kilterId).toBeNull();
+    // board_climb_ratings is Date-mode (boardsesh_ticks is string-mode), so the
+    // marker has to be a Date or drizzle hands Postgres the wrong type.
+    expect(setValues.kilterDetachedAt).toBeInstanceOf(Date);
   });
 
-  it('handles a mixed REMOVE + PUT batch in one delete + one upsert', async () => {
+  it('handles a mixed REMOVE + PUT batch in one soft-detach + one upsert', async () => {
     const { tx, calls, insertValues } = createRichTx();
     const ops: PowerSyncOp[] = [
       { op_id: '1', op: 'REMOVE', object_type: 'climb_ratings', object_id: 'r-old' },
@@ -1284,7 +1306,8 @@ describe('applyClimbRatings — bulk upsert with COALESCE comment', () => {
 
     await applyClimbRatings(tx as unknown as ApplyClimbRatingsTx, 'user-1', ops, aliasCacheFor(['climb-A']));
 
-    expect(calls.filter((c) => c.kind === 'delete')).toHaveLength(1);
+    expect(calls.filter((c) => c.kind === 'update')).toHaveLength(1);
+    expect(calls.filter((c) => c.kind === 'delete')).toHaveLength(0);
     expect(calls.filter((c) => c.kind === 'insert')).toHaveLength(1);
     expect(insertValues[0]).toHaveLength(1);
   });

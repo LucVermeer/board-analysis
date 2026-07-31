@@ -253,6 +253,9 @@ export const schemaSQL = `
     "weight" double precision,
     "kilter_id" text,
     "aurora_id" text,
+    -- Upstream-deleted marker (kilter-sync REMOVE soft-detach). Read paths
+    -- exclude a stamped row from the effectiveQuality fallback.
+    "kilter_detached_at" timestamp,
     "created_at" timestamp DEFAULT now() NOT NULL,
     "updated_at" timestamp DEFAULT now() NOT NULL,
     CONSTRAINT "board_climb_ratings_rating_range" CHECK ("rating" IS NULL OR ("rating" >= 1 AND "rating" <= 5))

@@ -576,6 +576,18 @@ export const boardClimbRatings = pgTable(
     weight: doublePrecision('weight'),
     kilterId: text('kilter_id'),
     auroraId: text('aurora_id'),
+    // Stamped when Kilter sends a REMOVE (soft-detach): the upstream rating was
+    // deleted. Mirrors boardsesh_ticks.kilter_detached_at (schema/app/ascents.ts)
+    // — the detach clears kilter_id, which alone makes the row indistinguishable
+    // from a rating Boardsesh authored and never pushed, so push-back would
+    // re-create it upstream once the POST is wired. It also stops the row from
+    // feeding the `effectiveQuality` fallback in the ascents feeds, because
+    // Kilter never sends another PUT for a rating it has already deleted.
+    // Cleared when a later PUT re-links the same climb_rating_uuid
+    // (REMOVE-then-PUT snapshot redelivery).
+    // NOTE: this table stores timestamps in Date mode (see createdAt/updatedAt);
+    // boardsesh_ticks uses string mode. Writers must hand drizzle a Date here.
+    kilterDetachedAt: timestamp('kilter_detached_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     // No `ON UPDATE` trigger — matches the project-wide convention (see
     // boardsesh_ticks, playlists, etc.). Every writer is responsible for

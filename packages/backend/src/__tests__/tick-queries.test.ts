@@ -1598,6 +1598,39 @@ describe('tickQueries — behavior fixes', () => {
       expect(row?.effectiveQuality).toBeNull();
     });
 
+    it('userAscentsFeed: a rating deleted on Kilter (detached) stops feeding effectiveQuality', async () => {
+      // Two identical ticks + ratings; only one rating carries the
+      // upstream-deleted marker kilter-sync stamps on a REMOVE. Kilter never
+      // re-PUTs a rating it deleted, so the marker is permanent and that star
+      // must disappear from the feed — while its non-detached twin still wins.
+      const detachedClimb = CLIMB_PREFIX + 'rating-detached';
+      const liveClimb = CLIMB_PREFIX + 'rating-not-detached';
+      await insertClimb(detachedClimb, 'Rating Detached');
+      await insertClimb(liveClimb, 'Rating Live');
+      await insertTick({
+        uuid: 'tick-rating-detached',
+        climbUuid: detachedClimb,
+        climbedAt: '2026-05-09 10:00:00',
+        status: 'send',
+      });
+      await insertTick({
+        uuid: 'tick-rating-live',
+        climbUuid: liveClimb,
+        climbedAt: '2026-05-09 11:00:00',
+        status: 'send',
+      });
+      await insertClimbRating({ climbUuid: detachedClimb, rating: 5 });
+      await insertClimbRating({ climbUuid: liveClimb, rating: 5 });
+      await db.execute(sql`
+        UPDATE board_climb_ratings SET kilter_id = NULL, kilter_detached_at = now()
+        WHERE user_id = ${TEST_USER_ID} AND climb_uuid = ${detachedClimb}
+      `);
+
+      const rows = feedItems(await callUserAscentsFeed(TEST_USER_ID, { limit: 50 }));
+      expect(rows.find((item) => item.uuid === 'tick-rating-detached')?.effectiveQuality).toBeNull();
+      expect(rows.find((item) => item.uuid === 'tick-rating-live')?.effectiveQuality).toBe(5);
+    });
+
     it('userAscentsFeed: a rating at a different angle does not apply', async () => {
       const climbUuid = CLIMB_PREFIX + 'rating-angle';
       await insertClimb(climbUuid, 'Rating Angle');
