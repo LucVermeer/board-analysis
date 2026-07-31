@@ -138,23 +138,15 @@ function isEnglishProseTransportSignal(error: unknown, depth = 0): boolean {
 }
 
 /**
- * Pure, locale-independent predicate: is this a transport/reachability failure
- * (offline, DNS, reset, TLS, timeout) that never reached the server? Matches on
- * error name/code and stable message markers rather than localized prose, and
- * recurses into `.cause` because WinterCG/undici wrap the underlying error there.
+ * Raw transport/reachability predicate covering both stable identifiers and the
+ * best-effort English NSURL prose fallback. It recurses into `.cause` because
+ * WinterCG/undici wrap the underlying error there.
  *
- * Shared by the offline drainer's dead-letter classifier (`isNetworkError` below)
- * and mobile's `reportHandledError` noise policy (imported via the
- * `@boardsesh/offline-sync/error-classification` subpath) so both agree on what
- * "offline" means. Deliberately excludes AbortError — its cancel-vs-retry meaning
- * differs per call site, so each site handles it.
- *
- * NOTE: this is the union of BOTH halves above with no precedence between them —
- * exactly the pre-#4027 behavior, preserved here unchanged because mobile's
- * `reportHandledError` severity tagging (error-reporting.ts) consumes this
- * function directly and doesn't need (or want) status-aware precedence for a
- * "warning vs error" Sentry tag. `isNetworkError` below is where the two halves
- * get different treatment.
+ * This preserves the raw union for callers that already know no server response
+ * exists. Status-sensitive callers must use `isNetworkError` below so a resolved
+ * HTTP/GraphQL status can take precedence over English prose without weakening
+ * stable transport signals. It deliberately excludes AbortError, whose
+ * cancel-vs-retry meaning differs by call site.
  */
 export function isTransportNetworkError(error: unknown, depth = 0): boolean {
   return isLocaleIndependentTransportSignal(error, depth) || isEnglishProseTransportSignal(error, depth);

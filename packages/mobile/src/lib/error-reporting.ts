@@ -1,5 +1,5 @@
 import { isBleWriteTimeoutError } from '@boardsesh/ble-protocol/connection-error';
-import { isTransportNetworkError } from '@boardsesh/offline-sync/error-classification';
+import { getErrorStatus, isNetworkError as isSharedNetworkError } from '@boardsesh/offline-sync/error-classification';
 import { captureToSentry, type ErrorReportContext } from './sentry';
 import {
   isExpectedAuthError,
@@ -44,20 +44,19 @@ function isCancellation(error: unknown): boolean {
  *   - every other transport rejection — RN's `TypeError: Network request failed`,
  *     the WinterCG `Error: "fetch failed: <cause>"` wrapper (graphql-ws HTTP),
  *     Android `UnknownHostException`, and bare iOS NSURLError descriptions — is
- *     classified by the shared, locale-independent `isTransportNetworkError`
- *     (message markers, error codes, `.cause` recursion). Sharing that matcher
- *     with the offline drainer's dead-letter classifier keeps the two in agreement
- *     on what counts as "offline" (#3610).
+ *     classified by the shared status-aware network predicate. A resolved
+ *     HTTP/GraphQL status beats the best-effort English prose fallback, keeping
+ *     telemetry in step with the offline drainer.
  */
 function isNetworkError(error: unknown): boolean {
   if (typeof error !== 'object' || error === null) return false;
   const name = (error as { name?: unknown }).name;
   if (name === 'GraphQLEmptyResponseError') return true;
-  const response = (error as { response?: { status?: unknown } }).response;
-  // A ClientError with a `response` but no numeric `status` is a transport
-  // failure; one with a status is a real server error (4xx/5xx) we want to see.
-  if (response !== undefined && typeof (response as { status?: unknown }).status !== 'number') return true;
-  return isTransportNetworkError(error);
+  const response = (error as { response?: unknown }).response;
+  // Preserve statusless ClientError as a transport signal while allowing a
+  // status nested in response.errors[].extensions to win over message prose.
+  if (response !== undefined && getErrorStatus(error) === null) return true;
+  return isSharedNetworkError(error);
 }
 
 // Board-account credential codes the app already surfaces as UX — the integrations

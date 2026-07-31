@@ -222,11 +222,9 @@ describe('isTransportNetworkError', () => {
     expect(isTransportNetworkError(new Error('The secure connection failed.'))).toBe(true);
   });
 
-  it('still matches the English-prose fallback even when a status resolves — the union contract is unconditional (#4027)', () => {
-    // isTransportNetworkError itself carries NO status-aware precedence — that
-    // logic lives only in isNetworkError. This pins the unchanged contract that
-    // error-reporting.ts's Sentry severity tagging depends on: a resolved status
-    // must NOT suppress this predicate, only isNetworkError's retry decision.
+  it('keeps the low-level transport predicate status-blind', () => {
+    // Status precedence belongs to isNetworkError; callers may still ask for
+    // transport evidence directly without changing this predicate's contract.
     const error = Object.assign(new Error('The connection has timed out unexpectedly.'), { status: 400 });
     expect(isTransportNetworkError(error)).toBe(true);
   });
@@ -263,7 +261,7 @@ describe('isNetworkError', () => {
   });
 });
 
-describe('isNetworkError / isRetryable — resolved status beats the English-prose heuristic (#4027)', () => {
+describe('isNetworkError / isRetryable — resolved status beats the English-prose heuristic', () => {
   // A server that replies with a real HTTP/GraphQL status has, by definition,
   // received the request — that's a server verdict, not a transport failure, no
   // matter what its message happens to say. Without this, a status whose message
@@ -282,6 +280,16 @@ describe('isNetworkError / isRetryable — resolved status beats the English-pro
     const error = Object.assign(new Error('The connection has timed out unexpectedly.'), { status: 503 });
     expect(isNetworkError(error)).toBe(false);
     expect(isRetryable(error)).toBe(true);
+  });
+
+  it('nested GraphQL 400 plus NSURL prose: status wins and the mutation dead-letters', () => {
+    const error = Object.assign(new Error('The connection has timed out unexpectedly.'), {
+      response: {
+        errors: [{ message: 'invalid input', extensions: { code: 400 } }],
+      },
+    });
+    expect(isNetworkError(error)).toBe(false);
+    expect(isRetryable(error)).toBe(false);
   });
 
   it('no status + an NSURL-prose-matching message: unchanged, still a network error and retryable', () => {
