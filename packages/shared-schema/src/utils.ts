@@ -82,6 +82,10 @@ export function normalizeQualityTo5(quality: number | null | undefined): number 
  * middle interpolates linearly (2->2, 3->2, 4->3), so convertQuality
  * round-trips (1->1->1, 2->3->2, 3->5->3). 0/null ("unrated") stays null;
  * out-of-range input is clamped to 1-5 defensively.
+ *
+ * Has no production callers today; kept for the Aurora/Tension push path.
+ * Do NOT use it for the Kilter Grips push (`packages/kilter-sync`) — Grips
+ * ticks are natively 1-5, so converting there silently downscales them.
  */
 export function convertQualityToAurora(quality: number | null | undefined): number | null {
   if (quality == null) return null;

@@ -32,7 +32,11 @@ export type LogPushItem = {
    */
   topped: boolean;
   attemptCount: number;
-  /** Aurora scale (1-3), NOT the Boardsesh 1-5 scale — see convertQualityToAurora. */
+  /**
+   * Raw Boardsesh/Kilter Grips scale (1-5). Grips is natively 1-5
+   * (catalog-sync.ts, user-sync.ts), not Aurora 1-3. Confirm the scale
+   * against captured /api/logs traffic when wiring up the POST.
+   */
   quality?: number;
   difficulty?: number;
   isMirror: boolean;
