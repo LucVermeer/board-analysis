@@ -12,6 +12,19 @@ A new version shipped to the App Store and Play Store.
 
 ### Fixed
 
+- Tap the queue too fast and the app now tells you so. Adding, removing, clearing or replacing climbs used to fail silently when the server asked you to slow down — the queue just quietly snapped back. Now you get the same "give it a second" nudge you already get when switching the current climb, and your queue still lands on whatever the server actually has. ([#4019](https://github.com/boardsesh/boardsesh/pull/4019))
+- Adding a climb to a playlist no longer errors out when the same climb gets added twice at once — a double-tap, or your phone syncing a queued add while another device adds the same climb, now quietly ends up with one entry instead of a failure. ([#4021](https://github.com/boardsesh/boardsesh/pull/4021))
+- Angles with no community rating no longer show an empty row of stars in the angle picker — the rating only appears when there's an actual rating behind it. ([#4024](https://github.com/boardsesh/boardsesh/pull/4024))
+  Fixes #3784
+- The Logbook's filter button on iOS now shows a clean filter icon instead of a chopped-off "F…". ([#4026](https://github.com/boardsesh/boardsesh/pull/4026))
+  Fixes #3782
+- Narrow searches no longer cut off early. If a filter turned up 35 climbs but the list stopped at 21 and said "no more climbs", the missing ones were projects with no logged ascents — they're back in the list now, ranked after the climbs people have sent. ([#4043](https://github.com/boardsesh/boardsesh/pull/4043))
+  Fixes #1971
+- Fixes #3524 ([#4044](https://github.com/boardsesh/boardsesh/pull/4044))
+- Kiosk displays now clear a board's queue preview the moment you flip that board to private or delete it, instead of leaving the last climb on screen. ([#4046](https://github.com/boardsesh/boardsesh/pull/4046))
+  Fixes #3649
+- The ascent counts above the Flash vs Redpoint bars on your Progress tab no longer get chopped off. When the bars are too narrow for a three-digit count, the number now stands on end so you can still read it. ([#4031](https://github.com/boardsesh/boardsesh/pull/4031))
+  Fixes #3779
 - When someone ends a session you're in, you now get a plain "session ended" note instead of a red sync error. ([#4032](https://github.com/boardsesh/boardsesh/pull/4032))
 - Fixes #3538 ([#4033](https://github.com/boardsesh/boardsesh/pull/4033))
 - Fixes #2863 ([#4039](https://github.com/boardsesh/boardsesh/pull/4039))

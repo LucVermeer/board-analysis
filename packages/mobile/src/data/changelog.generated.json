@@ -1,6 +1,67 @@
 {
-  "generatedAt": "2026-07-31T09:25:59.623Z",
+  "generatedAt": "2026-07-31T09:31:33.284Z",
   "entries": [
+    {
+      "prNumber": 4019,
+      "category": "fixed",
+      "title": "Tap the queue too fast and the app now tells you so. Adding, removing, clearing or replacing climbs used to fail silently when the server asked you to slow down — the queue just quietly snapped back. Now you get the same \"give it a second\" nudge you already get when switching the current climb, and your queue still lands on whatever the server actually has.",
+      "mergedAt": "2026-07-31T09:29:57Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4019"
+    },
+    {
+      "prNumber": 4021,
+      "category": "fixed",
+      "title": "Adding a climb to a playlist no longer errors out when the same climb gets added twice at once — a double-tap, or your phone syncing a queued add while another device adds the same climb, now quietly ends up with one entry instead of a failure.",
+      "mergedAt": "2026-07-31T09:29:44Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4021"
+    },
+    {
+      "prNumber": 4024,
+      "category": "fixed",
+      "title": "Angles with no community rating no longer show an empty row of stars in the angle picker — the rating only appears when there's an actual rating behind it.",
+      "mergedAt": "2026-07-31T09:29:32Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4024",
+      "body": "Fixes #3784"
+    },
+    {
+      "prNumber": 4026,
+      "category": "fixed",
+      "title": "The Logbook's filter button on iOS now shows a clean filter icon instead of a chopped-off \"F…\".",
+      "mergedAt": "2026-07-31T09:28:47Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4026",
+      "body": "Fixes #3782"
+    },
+    {
+      "prNumber": 4043,
+      "category": "fixed",
+      "title": "Narrow searches no longer cut off early. If a filter turned up 35 climbs but the list stopped at 21 and said \"no more climbs\", the missing ones were projects with no logged ascents — they're back in the list now, ranked after the climbs people have sent.",
+      "mergedAt": "2026-07-31T09:28:05Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4043",
+      "body": "Fixes #1971"
+    },
+    {
+      "prNumber": 4044,
+      "category": "fixed",
+      "title": "Fixes #3524",
+      "mergedAt": "2026-07-31T09:27:46Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4044"
+    },
+    {
+      "prNumber": 4046,
+      "category": "fixed",
+      "title": "Kiosk displays now clear a board's queue preview the moment you flip that board to private or delete it, instead of leaving the last climb on screen.",
+      "mergedAt": "2026-07-31T09:26:56Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4046",
+      "body": "Fixes #3649"
+    },
+    {
+      "prNumber": 4031,
+      "category": "fixed",
+      "title": "The ascent counts above the Flash vs Redpoint bars on your Progress tab no longer get chopped off. When the bars are too narrow for a three-digit count, the number now stands on end so you can still read it.",
+      "mergedAt": "2026-07-31T09:25:58Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4031",
+      "body": "Fixes #3779"
+    },
     {
       "prNumber": 4032,
       "category": "fixed",
