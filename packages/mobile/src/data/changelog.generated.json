@@ -1,6 +1,27 @@
 {
-  "generatedAt": "2026-07-31T01:44:10.109Z",
+  "generatedAt": "2026-07-31T09:25:59.623Z",
   "entries": [
+    {
+      "prNumber": 4032,
+      "category": "fixed",
+      "title": "When someone ends a session you're in, you now get a plain \"session ended\" note instead of a red sync error.",
+      "mergedAt": "2026-07-31T09:25:37Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4032"
+    },
+    {
+      "prNumber": 4033,
+      "category": "fixed",
+      "title": "Fixes #3538",
+      "mergedAt": "2026-07-31T09:25:12Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4033"
+    },
+    {
+      "prNumber": 4039,
+      "category": "fixed",
+      "title": "Fixes #2863",
+      "mergedAt": "2026-07-31T09:24:43Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4039"
+    },
     {
       "prNumber": 4041,
       "category": "fixed",
@@ -2431,6 +2452,19 @@
     }
   ],
   "nativeReleases": [
+    {
+      "kind": "native-release",
+      "date": "2026-07-31T11:41:16+10:00",
+      "sha": "765d32f5f219e44ce6855128c2807c1a7d9a83d1",
+      "platforms": [
+        "android",
+        "ios"
+      ],
+      "fingerprints": {
+        "android": "16caef1abaa0e4d600a766980f779405d170b2b6",
+        "ios": "5891cea68264eb726b4a8a66b0efe6813787542d"
+      }
+    },
     {
       "kind": "native-release",
       "date": "2026-07-31T09:05:20+10:00",

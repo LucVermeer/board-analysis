@@ -12,6 +12,9 @@ A new version shipped to the App Store and Play Store.
 
 ### Fixed
 
+- When someone ends a session you're in, you now get a plain "session ended" note instead of a red sync error. ([#4032](https://github.com/boardsesh/boardsesh/pull/4032))
+- Fixes #3538 ([#4033](https://github.com/boardsesh/boardsesh/pull/4033))
+- Fixes #2863 ([#4039](https://github.com/boardsesh/boardsesh/pull/4039))
 - Fixed a rare glitch where hold markers could go missing on a climb if your phone ([#4041](https://github.com/boardsesh/boardsesh/pull/4041))
   was low on storage — the app now rebuilds its overlay cache and redraws them.
   Fixes #3182
