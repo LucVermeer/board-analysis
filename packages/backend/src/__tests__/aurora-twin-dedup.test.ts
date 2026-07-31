@@ -341,9 +341,10 @@ describe('#3535 Aurora-side duplicate ascents', () => {
 
     // `updateTick` also accepts `angle` and `climbedAt`. Either moves the
     // survivor out of the group entirely, so the rows it was hiding come back —
-    // the relaxation only covers payload columns. Recorded, not fixed; see the
-    // known-limitations section of the PR.
-    await db.execute(sql`UPDATE boardsesh_ticks SET angle = ${ANGLE + 5}, updated_at = now() WHERE aurora_id = 'aur-1'`);
+    // the relaxation only covers payload columns. Recorded, not fixed — #4060.
+    await db.execute(
+      sql`UPDATE boardsesh_ticks SET angle = ${ANGLE + 5}, updated_at = now() WHERE aurora_id = 'aur-1'`,
+    );
 
     expect(await visibleAuroraIds()).toEqual(['aur-1', 'aur-2']);
   });
@@ -356,7 +357,7 @@ describe('#3535 Aurora-side duplicate ascents', () => {
     // deleteTick removes one row. The group is unaware of it, so the next id is
     // promoted and the entry stays on screen. Known limitation, recorded here
     // so a future reader does not mistake it for a predicate bug; the honest
-    // fix is a group-aware delete, tracked separately.
+    // fix is a group-aware delete, tracked in #4059.
     await db.execute(sql`DELETE FROM boardsesh_ticks WHERE aurora_id = 'aur-1'`);
 
     expect(await visibleAuroraIds()).toEqual(['aur-2']);
