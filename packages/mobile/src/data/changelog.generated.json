@@ -1,6 +1,22 @@
 {
-  "generatedAt": "2026-07-31T21:22:22.754Z",
+  "generatedAt": "2026-07-31T22:20:46.552Z",
   "entries": [
+    {
+      "prNumber": 4066,
+      "category": "fixed",
+      "title": "Your V-Points progress line now connects the dots straight instead of curving — no more phantom dips or bumps between weeks making a session look better or worse than it was.",
+      "mergedAt": "2026-07-31T22:19:43Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4066",
+      "body": "Closes #3780"
+    },
+    {
+      "prNumber": 4067,
+      "category": "fixed",
+      "title": "Offline ticks logged while your connection is spotty no longer get stuck waiting behind one bad request — a real server error now clears out of the queue (or retries on its own terms) instead of stalling every other queued tick behind it.",
+      "mergedAt": "2026-07-31T22:19:30Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4067",
+      "body": "Closes #4027"
+    },
     {
       "prNumber": 4022,
       "category": "fixed",
