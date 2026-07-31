@@ -7,7 +7,7 @@ import { validateInput } from '../../shared/helpers';
 import { GetPlaylistClimbsInputSchema } from '../../../../validation/schemas';
 import { UNIFIED_TABLES, isValidBoardName } from '../../../../db/queries/util/table-select';
 import { verifyPlaylistAccess } from '../helpers/enrichment';
-import { hydrateClimbsByRefs } from '../helpers/hydrate-climbs';
+import { hydrateClimbsByRefs, type HydrateClimbsOptions } from '../helpers/hydrate-climbs';
 
 export type PlaylistClimbsInput = {
   playlistId: string;
@@ -36,7 +36,10 @@ function paginateResults<T>(results: T[], pageSize: number) {
  * playlistClimbs (with the board/layout/size filters on the join), then hand
  * them to the shared hydrator, which joins stats/grades at the requested angle
  * and falls back to the most-ascended angle when the climb has no stats there
- * — so the selected angle never blanks a grade.
+ * — so the selected angle never blanks a grade. The returned `angle` still
+ * reports the requested wall angle: these climbs go straight into the queue on
+ * playlist activation, and the tick badge, the board-presence report and the
+ * logged ascent all read `climb.angle` as the wall in front of the user.
  */
 async function fetchSpecificBoardClimbs(
   playlistId: bigint,
@@ -113,16 +116,23 @@ async function fetchSpecificBoardClimbs(
 
   const { items, hasMore } = paginateResults(refRows, pageSize);
 
-  // The caller's angle (the wall the user is on) wins; a climb's added-at
-  // angle is the secondary signal, mirroring the all-boards path.
-  const angleOverrides = new Map<string, number | null>();
-  for (const row of items) {
-    angleOverrides.set(`${boardName}:${row.climbUuid}`, input.angle ?? row.playlistAngle ?? null);
+  // The caller's angle is the wall the user is standing at, so it applies to
+  // every row and is reported back verbatim. Without one, fall back per row to
+  // the climb's added-at angle, mirroring the all-boards path.
+  let hydrateOptions: HydrateClimbsOptions;
+  if (input.angle != null) {
+    hydrateOptions = { wallAngle: input.angle };
+  } else {
+    const angleOverrides = new Map<string, number | null>();
+    for (const row of items) {
+      angleOverrides.set(`${boardName}:${row.climbUuid}`, row.playlistAngle ?? null);
+    }
+    hydrateOptions = { angleOverrides };
   }
 
   const climbs = await hydrateClimbsByRefs(
     items.map((row) => ({ climbUuid: row.climbUuid, boardType: boardName })),
-    { angleOverrides },
+    hydrateOptions,
   );
 
   return { climbs, hasMore };

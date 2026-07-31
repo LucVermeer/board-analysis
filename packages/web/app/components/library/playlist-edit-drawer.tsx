@@ -48,9 +48,11 @@ const EmojiPicker = dynamic(
   },
 );
 
-// Validate hex color format
+// Matches the server's PlaylistColorSchema (`^(#[0-9A-Fa-f]{6})?$`) exactly.
+// A shorthand `#abc` would pass a looser check here and then fail validation
+// server-side, sinking the whole updatePlaylist mutation, not just the colour.
 const isValidHexColor = (color: string): boolean => {
-  return /^#([0-9A-Fa-f]{3}){1,2}$/.test(color);
+  return /^#[0-9A-Fa-f]{6}$/.test(color);
 };
 
 type PlaylistEditDrawerProps = {

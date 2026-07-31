@@ -16,6 +16,17 @@ export type HydrateClimbsOptions = {
    * `null` values are treated as "no override" (same as omitting the entry).
    */
   angleOverrides?: Map<string, number | null>;
+  /**
+   * Single angle applied to every ref — the wall the user is actually on. Stats
+   * still fall back to the most-ascended angle when the climb has nothing at
+   * this angle (so the grade never blanks), but the returned `angle` stays the
+   * requested one, because downstream consumers (queue tick badges, board
+   * presence, logged ascents) read it as the live wall angle.
+   *
+   * Takes precedence over `angleOverrides`, which stays the right choice when
+   * each ref genuinely carries its own angle.
+   */
+  wallAngle?: number;
 };
 
 /**
@@ -37,13 +48,28 @@ export async function hydrateClimbsByRefs(refs: ClimbRef[], options?: HydrateCli
   // the board's angle; playlists store a per-climb angle), join board_climb_stats
   // at THAT angle so difficulty/quality/ascents/benchmark all match — not just
   // the returned `angle` field. Falls back to the most-ascended angle.
-  const overrideEntries = [...(options?.angleOverrides ?? new Map<string, number | null>())].filter(
-    (entry): entry is [string, number] => typeof entry[1] === 'number',
-  );
+  const wallAngle = typeof options?.wallAngle === 'number' ? options.wallAngle : null;
+  const overrideEntries =
+    wallAngle != null
+      ? []
+      : [...(options?.angleOverrides ?? new Map<string, number | null>())].filter(
+          (entry): entry is [string, number] => typeof entry[1] === 'number',
+        );
   // The override only wins when the climb actually has a stats row at that
   // angle — the EXISTS guard makes a missing row yield NULL so the COALESCE
   // falls through to the most-ascended angle rather than blanking the grade
   // (a climb with no ascents at the user's selected angle still shows one).
+  // One wall angle for every ref needs no VALUES list — just the same guard
+  // around a constant.
+  const wallAngleExpr =
+    wallAngle == null
+      ? null
+      : sql`(SELECT ${wallAngle}::int WHERE EXISTS (
+            SELECT 1 FROM board_climb_stats s_ov
+            WHERE s_ov.board_type = ${tables.climbs.boardType}
+              AND s_ov.climb_uuid = ${tables.climbs.uuid}
+              AND s_ov.angle = ${wallAngle}::int
+          ))`;
   const overrideAngleExpr = overrideEntries.length
     ? sql`(SELECT ov.angle FROM (VALUES ${sql.join(
         overrideEntries.map(([key, angle]) => {
@@ -61,7 +87,7 @@ export async function hydrateClimbsByRefs(refs: ClimbRef[], options?: HydrateCli
               AND s_ov.climb_uuid = ${tables.climbs.uuid}
               AND s_ov.angle = ov.angle
           ))`
-    : sql`NULL::int`;
+    : (wallAngleExpr ?? sql`NULL::int`);
 
   const rows = await db
     .select({
@@ -140,7 +166,11 @@ export async function hydrateClimbsByRefs(refs: ClimbRef[], options?: HydrateCli
     // `angle` always matches the difficulty/quality/ascents shown — the
     // override can fall back to most-ascents (via the EXISTS guard above) when
     // the climb has no stats at the requested angle.
-    const angle = row.statsAngle ?? override ?? DEFAULT_ANGLE;
+    // A caller-supplied wall angle is the live board angle and is returned
+    // verbatim, even when the stats join fell back to the most-ascended angle
+    // for the displayed grade. Otherwise prefer the angle the stats row was
+    // actually joined at, so `angle` matches the difficulty shown.
+    const angle = wallAngle ?? row.statsAngle ?? override ?? DEFAULT_ANGLE;
     const boardName = (row.boardType || ref.boardType) as BoardName;
     climbs.push({
       uuid: row.climbUuid,

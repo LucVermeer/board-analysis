@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vite-plus/test';
+import { describe, it, expect, beforeAll, afterAll } from 'vite-plus/test';
 import { sql } from 'drizzle-orm';
 import type { ConnectionContext } from '@boardsesh/shared-schema';
 import { db } from '../db/client';
@@ -84,6 +84,13 @@ describe('playlistClimbs / setterClimbsFull — size filter skips non-size-scope
     `);
   });
 
+  // Hand the worker DB back clean: `playlists` isn't in setup.ts's reset list
+  // and the explicit ids above don't advance the sequence, so leaving rows
+  // behind would collide with the next file that inserts without an id.
+  afterAll(async () => {
+    await db.execute(sql`TRUNCATE TABLE playlist_climbs, playlist_ownership, playlists RESTART IDENTITY CASCADE`);
+  });
+
   it('returns every MoonBoard playlist climb in specific-board mode even when a sizeId is passed', async () => {
     const result = await playlistQueries.playlistClimbs(
       null,
@@ -96,7 +103,7 @@ describe('playlistClimbs / setterClimbsFull — size filter skips non-size-scope
     expect(result.hasMore).toBe(false);
   });
 
-  it('still size-filters Aurora boards, and falls back to the most-ascents angle when the requested angle has no stats', async () => {
+  it('still size-filters Aurora boards, and keeps the requested angle while the grade falls back', async () => {
     const result = await playlistQueries.playlistClimbs(
       null,
       { input: { playlistId: KILTER_PLAYLIST_UUID, boardName: 'kilter', layoutId: 1, sizeId: 10, angle: 40 } },
@@ -105,9 +112,13 @@ describe('playlistClimbs / setterClimbsFull — size filter skips non-size-scope
 
     expect(result.climbs.map((climb) => climb.uuid)).toEqual(['kilter-sized-climb']);
     // No 40° stats row → the EXISTS guard drops the override and the join
-    // falls back to the most-ascents angle (50°) instead of blanking the grade.
-    expect(result.climbs[0].angle).toBe(50);
+    // falls back to the most-ascents angle (50°) instead of blanking the grade…
     expect(result.climbs[0].difficulty).toBeTruthy();
+    // …but the reported angle stays the wall the user asked for. These climbs
+    // are queued straight from playlist activation, and the tick badge, the
+    // board-presence report and the logged ascent all read `climb.angle` as
+    // the angle of the wall in front of the user.
+    expect(result.climbs[0].angle).toBe(40);
   });
 
   it('setterClimbsFull returns MoonBoard climbs in specific-board mode even when a sizeId is passed', async () => {
