@@ -4,6 +4,16 @@ User-facing changes to Boardsesh, newest first. Auto-generated from the "Release
 Notes" section of merged pull requests — do not edit by hand (a CI check rejects
 manual changes). See docs/mobile-ota-updates.md.
 
+## 2026-07-31
+
+### App update
+
+A new version shipped to the App Store and Play Store.
+
+### Fixed
+
+- Fixes #3527 ([#4030](https://github.com/boardsesh/boardsesh/pull/4030))
+
 ## 2026-07-30
 
 ### App update

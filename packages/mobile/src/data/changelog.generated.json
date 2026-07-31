@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-30T23:08:13.383Z",
+  "generatedAt": "2026-07-31T01:20:41.307Z",
   "entries": [
+    {
+      "prNumber": 4030,
+      "category": "fixed",
+      "title": "Fixes #3527",
+      "mergedAt": "2026-07-31T01:18:43Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4030"
+    },
     {
       "prNumber": 3998,
       "category": "fixed",
@@ -2401,6 +2408,28 @@
     }
   ],
   "nativeReleases": [
+    {
+      "kind": "native-release",
+      "date": "2026-07-31T09:05:20+10:00",
+      "sha": "7ff0d2585318153bf1d1546344f2f0bdedd4a183",
+      "platforms": [
+        "ios"
+      ],
+      "fingerprints": {
+        "ios": "13a164d4c576dffe267289cd5c322e903e563618"
+      }
+    },
+    {
+      "kind": "native-release",
+      "date": "2026-07-31T09:04:17+10:00",
+      "sha": "b1fbc022e684ea01dc206a4f22d1f14918ef3817",
+      "platforms": [
+        "android"
+      ],
+      "fingerprints": {
+        "android": "ded4184889423571bab0652993b241dfe7d97ab5"
+      }
+    },
     {
       "kind": "native-release",
       "date": "2026-07-30T18:53:29+10:00",
