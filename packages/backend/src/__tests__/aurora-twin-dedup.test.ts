@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { beforeAll, afterEach, describe, expect, it } from 'vite-plus/test';
 import { sql } from 'drizzle-orm';
 import { applyAuroraAscents } from '@boardsesh/aurora-sync/apply-user-logbook';
@@ -59,6 +61,11 @@ async function insertTick(overrides: TickOverrides = {}): Promise<void> {
     comment: 'crimpy',
     climbedAt: CLIMBED_AT,
     auroraType: 'ascents',
+    // The pull writes updated_at and aurora_synced_at from one `now()`, so a
+    // freshly pulled row is never "locally edited". Leaving updated_at on its
+    // defaultNow() would make every seeded row look edited and silently switch
+    // off the payload comparison these tests exercise.
+    updatedAt: CLIMBED_AT,
     auroraSyncedAt: CLIMBED_AT,
     ...overrides,
   });
@@ -102,6 +109,53 @@ beforeAll(async () => {
 
 afterEach(async () => {
   await db.execute(sql`DELETE FROM boardsesh_ticks WHERE user_id = ${USER_ID}`);
+});
+
+/**
+ * The predicate is a SQL restatement of `payloadDiffersFromStored`'s column
+ * list, and nothing in the type system pins the two together. Add a
+ * user-visible column to the pull's comparison — the natural place to add one —
+ * and the predicate would keep collapsing rows that now differ in it, hiding a
+ * real ascent with no other test going red. This is the guard for that.
+ */
+describe('#3535 payload column list stays in step with the pull', () => {
+  const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url));
+
+  function sourceOf(relativePath: string): string {
+    return readFileSync(repoRoot + relativePath, 'utf8');
+  }
+
+  function bodyBetween(source: string, startMarker: string, endMarker: string): string {
+    const start = source.indexOf(startMarker);
+    expect(start, `missing marker ${startMarker}`).toBeGreaterThan(-1);
+    const end = source.indexOf(endMarker, start);
+    expect(end, `missing marker ${endMarker}`).toBeGreaterThan(start);
+    return source.slice(start, end);
+  }
+
+  it('compares every column payloadDiffersFromStored compares', () => {
+    const pullBody = bodyBetween(
+      sourceOf('packages/aurora-sync/src/sync/apply-user-logbook.ts'),
+      'function payloadDiffersFromStored',
+      '\n}',
+    );
+    const predicateBody = bodyBetween(
+      sourceOf('packages/db/src/queries/ticks/aurora-twin-dedup.ts'),
+      'export function notAuroraTwinDuplicate',
+      '\n}',
+    );
+
+    const pullColumns = new Set(Array.from(pullBody.matchAll(/\bstored\.(\w+)/g), (match) => match[1]));
+    const predicateColumns = new Set(
+      Array.from(predicateBody.matchAll(/\b(?:ticks|twin)\.(\w+)/g), (match) => match[1]),
+    );
+
+    // Sanity-check the extraction itself before trusting the comparison.
+    expect(pullColumns.size).toBeGreaterThanOrEqual(10);
+
+    const missing = [...pullColumns].filter((column) => !predicateColumns.has(column)).sort();
+    expect(missing, 'columns the pull compares but the twin predicate ignores').toEqual([]);
+  });
 });
 
 describe('#3535 Aurora-side duplicate ascents', () => {
@@ -211,6 +265,101 @@ describe('#3535 Aurora-side duplicate ascents', () => {
 
     expect(await visibleAuroraIds()).toEqual(['aur-2']);
     expect(await feedTotalCount()).toBe(1);
+  });
+
+  /**
+   * Editing the one visible tick drifts its payload away from the twins it is
+   * hiding. `isLocallyEdited` then makes every later pull skip that row, so
+   * payload parity is never restored and a strict payload rule would resurrect
+   * the duplicates permanently — making it look like rating a send created
+   * them. `updateTick` writes in place and knows nothing about the group, so
+   * the predicate has to absorb this itself.
+   */
+  const localEdits: Array<[string, string]> = [
+    ['rated', `quality = 5`],
+    ['commented on', `comment = 'new beta'`],
+    ['re-graded', `difficulty = 24`],
+  ];
+
+  for (const [action, assignment] of localEdits) {
+    it(`stays collapsed after the visible tick is ${action}`, async () => {
+      await insertTick({ auroraId: 'aur-1' });
+      await insertTick({ auroraId: 'aur-2' });
+      await insertTick({ auroraId: 'aur-3' });
+      expect(await visibleAuroraIds()).toEqual(['aur-1']);
+
+      // What updateTick does: writes the column and bumps updated_at past
+      // aurora_synced_at.
+      await db.execute(
+        sql.raw(`UPDATE boardsesh_ticks SET ${assignment}, updated_at = now() WHERE aurora_id = 'aur-1'`),
+      );
+
+      expect(await visibleAuroraIds()).toEqual(['aur-1']);
+      expect(await feedTotalCount()).toBe(1);
+    });
+  }
+
+  it('surfaces a hidden twin that itself diverges, rather than swallowing the change', async () => {
+    await insertTick({ auroraId: 'aur-1' });
+    await insertTick({ auroraId: 'aur-2' });
+    expect(await visibleAuroraIds()).toEqual(['aur-1']);
+
+    // Only the SURVIVOR's local edits relax the payload rule. A hidden row that
+    // diverges is a deliberate difference and must not be silently absorbed.
+    await db.execute(
+      sql`UPDATE boardsesh_ticks SET comment = 'other beta', updated_at = now() WHERE aurora_id = 'aur-2'`,
+    );
+
+    expect(await visibleAuroraIds()).toEqual(['aur-1', 'aur-2']);
+  });
+
+  it('keeps a logged attempt beside a send at the same instant, even once the attempt is edited', async () => {
+    // Aurora's bids land in the same table as its ascents. `status` and
+    // `aurora_type` sit outside the locally-edited relaxation precisely so an
+    // edit on the smaller-id row can never let a send absorb a real attempt.
+    await insertTick({ auroraId: 'aur-1', status: 'attempt', auroraType: 'bids', difficulty: null });
+    await insertTick({ auroraId: 'aur-2' });
+    expect(await visibleAuroraIds()).toEqual(['aur-1', 'aur-2']);
+
+    await db.execute(sql`UPDATE boardsesh_ticks SET quality = 5, updated_at = now() WHERE aurora_id = 'aur-1'`);
+
+    expect(await visibleAuroraIds()).toEqual(['aur-1', 'aur-2']);
+    expect(await feedTotalCount()).toBe(2);
+  });
+
+  it('keeps a bids row beside an ascents row that matches it in every other column', async () => {
+    await insertTick({ auroraId: 'aur-1', auroraType: 'bids' });
+    await insertTick({ auroraId: 'aur-2', auroraType: 'ascents' });
+
+    expect(await visibleAuroraIds()).toEqual(['aur-1', 'aur-2']);
+  });
+
+  it('resurfaces the twins when the survivor is moved off the natural key (recorded behaviour)', async () => {
+    await insertTick({ auroraId: 'aur-1' });
+    await insertTick({ auroraId: 'aur-2' });
+    expect(await visibleAuroraIds()).toEqual(['aur-1']);
+
+    // `updateTick` also accepts `angle` and `climbedAt`. Either moves the
+    // survivor out of the group entirely, so the rows it was hiding come back —
+    // the relaxation only covers payload columns. Recorded, not fixed; see the
+    // known-limitations section of the PR.
+    await db.execute(sql`UPDATE boardsesh_ticks SET angle = ${ANGLE + 5}, updated_at = now() WHERE aurora_id = 'aur-1'`);
+
+    expect(await visibleAuroraIds()).toEqual(['aur-1', 'aur-2']);
+  });
+
+  it('reveals the next twin when the visible tick is deleted (recorded behaviour)', async () => {
+    await insertTick({ auroraId: 'aur-1' });
+    await insertTick({ auroraId: 'aur-2' });
+    expect(await visibleAuroraIds()).toEqual(['aur-1']);
+
+    // deleteTick removes one row. The group is unaware of it, so the next id is
+    // promoted and the entry stays on screen. Known limitation, recorded here
+    // so a future reader does not mistake it for a predicate bug; the honest
+    // fix is a group-aware delete, tracked separately.
+    await db.execute(sql`DELETE FROM boardsesh_ticks WHERE aurora_id = 'aur-1'`);
+
+    expect(await visibleAuroraIds()).toEqual(['aur-2']);
   });
 
   it('applies the same duplicate payload twice with no second-cycle churn', async () => {

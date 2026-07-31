@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, not, notExists, or, sql, type Column, type SQL } from 'drizzle-orm';
+import { and, eq, isNotNull, notExists, or, sql, type Column, type SQL } from 'drizzle-orm';
 import { QueryBuilder, alias } from 'drizzle-orm/pg-core';
 import { boardseshTicks } from '../../schema';
 
@@ -43,7 +43,15 @@ import { boardseshTicks } from '../../schema';
  *    status, attempt count, quality, difficulty, benchmark, comment. Aurora
  *    stored the same ascent verbatim, so requiring this costs nothing on the
  *    real rows and rules out collapsing a genuine re-log that differs only in,
- *    say, its comment.
+ *    say, its comment. The one exception, a deliberate widening: once the
+ *    survivor carries a local edit (`updated_at > aurora_synced_at`, the pull's
+ *    own `isLocallyEdited` test), equality on the user-editable columns is
+ *    dropped. Rating or commenting on the visible tick would otherwise un-hide
+ *    its twins, and the pull skips locally-edited rows, so nothing would ever
+ *    restore parity. `status` and `aurora_type` stay OUTSIDE that exception: an
+ *    attempt and a send, or a `bids` row and an `ascents` row, are two
+ *    different upstream facts, and an edited send must never swallow a real
+ *    logged attempt.
  *  - Never when BOTH rows carry a real `kilter_id`: that would hide a second
  *    real Kilter ascent link, the same guard 0166 spells as
  *    `tw.kilter_id IS NULL OR o.kilter_id IS NULL`.
@@ -64,6 +72,15 @@ type TicksTable = typeof boardseshTicks;
 
 /** Surrogate ids minted by the JSON importer — not real upstream Aurora ids. */
 const SYNTHETIC_AURORA_ID_PATTERN = 'json-import-%';
+
+/**
+ * SQL twin of `isLocallyEdited` (apply-user-logbook.ts): the row carries an edit
+ * made here that is newer than its last successful Aurora sync. A NULL
+ * `aurora_synced_at` means the pull is authoritative, so it is not a local edit.
+ */
+function isLocallyEdited(ticks: { updatedAt: Column; auroraSyncedAt: Column }): SQL {
+  return sql`(${ticks.auroraSyncedAt} IS NOT NULL AND ${ticks.updatedAt} > ${ticks.auroraSyncedAt})`;
+}
 
 /**
  * True for a row that is genuinely owned by the Aurora live pull. Takes the two
@@ -97,6 +114,14 @@ export function notAuroraTwinDuplicate(ticks: TicksTable = boardseshTicks): SQL 
     .from(twin)
     .where(
       and(
+        // The outer row must itself be a real Aurora-pull row. Testing it here
+        // rather than as an `or(not(...), notExists(...))` wrapper keeps the
+        // whole condition a plain NOT EXISTS, which Postgres plans as a hash
+        // anti-join; the wrapper form forces a per-row SubPlan and costs ~50×
+        // on the unbounded count/list reads (You page, logbook). Same truth
+        // table: for a non-Aurora-pull outer row the subquery is empty, so
+        // NOT EXISTS is true and the row is kept.
+        isRealAuroraPullRow(ticks),
         isRealAuroraPullRow(twin),
         eq(twin.userId, ticks.userId),
         eq(twin.boardType, ticks.boardType),
@@ -105,14 +130,35 @@ export function notAuroraTwinDuplicate(ticks: TicksTable = boardseshTicks): SQL 
         // Exact instant. `climbed_at` is `timestamp without time zone` on both
         // sides, written by the same normaliser — a plain `=` is the whole rule.
         eq(twin.climbedAt, ticks.climbedAt),
-        // Verbatim payload — same column set as payloadDiffersFromStored.
-        sql`COALESCE(${twin.isMirror}, false) = COALESCE(${ticks.isMirror}, false)`,
+        // Invariants no local edit may bridge. An attempt and a send, or an
+        // `ascents` row and a `bids` row, are two different upstream facts even
+        // at one instant, so they sit OUTSIDE the relaxation below: an edited
+        // send must never be able to swallow a real logged attempt.
         eq(twin.status, ticks.status),
-        eq(twin.attemptCount, ticks.attemptCount),
-        sql`${twin.quality} IS NOT DISTINCT FROM ${ticks.quality}`,
-        sql`${twin.difficulty} IS NOT DISTINCT FROM ${ticks.difficulty}`,
-        sql`COALESCE(${twin.isBenchmark}, false) = COALESCE(${ticks.isBenchmark}, false)`,
-        sql`COALESCE(${twin.comment}, '') = COALESCE(${ticks.comment}, '')`,
+        sql`${twin.auroraType} IS NOT DISTINCT FROM ${ticks.auroraType}`,
+        // Verbatim payload — same column set as payloadDiffersFromStored —
+        // UNLESS the survivor has since been edited here. Rating or commenting
+        // on the one visible tick is the most ordinary thing a climber does with
+        // a logbook entry, and it drifts the survivor's payload away from its
+        // twins; `isLocallyEdited` then makes the pull skip that row forever, so
+        // a strict payload rule would resurrect the duplicates permanently and
+        // make it look like the edit created them. Relaxing it is safe because
+        // the natural key above is the load-bearing guard: two genuine sends of
+        // one climb at one angle at the same instant are physically impossible.
+        // Only the SURVIVOR's edits relax the rule. If the hidden row is the one
+        // that changed, that is a deliberate divergence and it should surface
+        // rather than be swallowed.
+        or(
+          isLocallyEdited(twin),
+          and(
+            sql`COALESCE(${twin.isMirror}, false) = COALESCE(${ticks.isMirror}, false)`,
+            eq(twin.attemptCount, ticks.attemptCount),
+            sql`${twin.quality} IS NOT DISTINCT FROM ${ticks.quality}`,
+            sql`${twin.difficulty} IS NOT DISTINCT FROM ${ticks.difficulty}`,
+            sql`COALESCE(${twin.isBenchmark}, false) = COALESCE(${ticks.isBenchmark}, false)`,
+            sql`COALESCE(${twin.comment}, '') = COALESCE(${ticks.comment}, '')`,
+          ),
+        ),
         // Survivor = smallest aurora_id. Strict `<` also makes the row-vs-itself
         // comparison false, so a group of one always survives.
         sql`${twin.auroraId} < ${ticks.auroraId}`,
@@ -122,6 +168,5 @@ export function notAuroraTwinDuplicate(ticks: TicksTable = boardseshTicks): SQL 
       ),
     );
 
-  // Non-Aurora-pull rows short-circuit before the correlated lookup runs.
-  return or(not(isRealAuroraPullRow(ticks)), notExists(smallerTwinExists))!;
+  return notExists(smallerTwinExists);
 }
