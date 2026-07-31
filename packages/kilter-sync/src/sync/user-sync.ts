@@ -1161,7 +1161,7 @@ export async function applyClimbRatings(
         // the effectiveQuality fallback and skipped by push-back — even though
         // Kilter just told us it exists. A plain re-sync of an already-linked
         // rating leaves it NULL, a harmless no-op.
-        kilterDetachedAt: sql`NULL`,
+        kilterDetachedAt: null,
         updatedAt: new Date(),
       },
       // PowerSync redelivers a full snapshot every cycle, so without this
