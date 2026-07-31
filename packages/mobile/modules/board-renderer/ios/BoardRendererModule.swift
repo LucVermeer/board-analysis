@@ -48,7 +48,10 @@ public class BoardRendererModule: Module {
       guard FileManager.default.fileExists(atPath: cacheDir.path, isDirectory: &isDirectory),
         isDirectory.boolValue
       else { throw error }
-      NSLog("[BoardRenderer] Cache dir at \(cacheDir.path) was gone; re-created it and retrying the write")
+      // Deliberately not claiming the directory *had* vanished: `catch` here
+      // covers every thrown error, so a permissions or out-of-space failure
+      // reaches this line too, with the directory in place the whole time.
+      NSLog("[BoardRenderer] Overlay write failed (\(error)); cache dir at \(cacheDir.path) is in place, retrying once")
       return try action()
     }
   }

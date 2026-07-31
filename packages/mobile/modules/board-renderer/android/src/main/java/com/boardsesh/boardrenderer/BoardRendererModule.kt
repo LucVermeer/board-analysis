@@ -81,9 +81,12 @@ class BoardRendererModule : Module() {
             CacheDirRecovery.retryOnceAfterRecreating(
                 cacheDir,
                 onRecovered = { writeFailure ->
+                    // Not claiming the directory *had* vanished: any IOException
+                    // lands here, so an out-of-space failure with the directory
+                    // in place the whole time gets one retry and this line too.
                     android.util.Log.w(
                         "BoardRenderer",
-                        "Cache dir ${cacheDir.absolutePath} was gone; re-created it and retrying the write",
+                        "Overlay write failed; cache dir ${cacheDir.absolutePath} is in place, retrying once",
                         writeFailure
                     )
                 },
