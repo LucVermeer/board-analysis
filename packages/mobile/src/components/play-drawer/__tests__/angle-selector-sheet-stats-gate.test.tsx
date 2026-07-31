@@ -80,7 +80,13 @@ vi.mock('../../../hooks/use-grade-format', () => ({
   useGradeFormat: () => ({ gradeFormat: 'v_grade' }),
 }));
 
-vi.mock('../community-utils', () => ({ buildAngleStatsMap: () => new Map() }));
+const angleStats = vi.hoisted(() => ({
+  map: new Map<number, { quality: number; sends: number; gradeName?: string; color?: string }>(),
+}));
+
+vi.mock('../community-utils', () => ({
+  buildAngleStatsMap: () => angleStats.map,
+}));
 
 vi.mock('../AngleBoardDiagram', () => ({ AngleBoardDiagram: () => null }));
 
@@ -105,6 +111,7 @@ const noop = () => {};
 
 beforeEach(() => {
   stats.calls = [];
+  angleStats.map = new Map();
 });
 
 afterEach(() => {
@@ -146,5 +153,67 @@ describe('AngleSelectorSheet — stats-history fetch gating', () => {
     );
 
     expect(stats.calls.some((call) => call.climbUuid === 'climb-1')).toBe(true);
+  });
+});
+
+// Regression for #3784: the angle preview's star row rendered unconditionally,
+// so any angle without community rating data (or a stats row with quality 0)
+// showed five hollow stars next to the real min-rating filter in
+// ClimbFilterSheet, reading as a second, broken-looking rating control. The
+// star row must only render once there is a meaningful (> 0) quality value.
+describe('AngleSelectorSheet — star row quality gating', () => {
+  it('hides the star row when there is no stats entry for the selected angle', () => {
+    const { container } = render(
+      createElement(AngleSelectorSheet, {
+        visible: true,
+        onClose: noop,
+        boardName: 'kilter',
+        layoutId: 1,
+        climbUuid: 'climb-1',
+        currentAngle: 40,
+        onAngleChange: noop,
+      }),
+    );
+
+    expect(container.textContent).not.toContain('★');
+    expect(container.textContent).not.toContain('☆');
+  });
+
+  it('hides the star row when stats exist but quality is 0', () => {
+    angleStats.map.set(40, { quality: 0, sends: 12 });
+
+    const { container } = render(
+      createElement(AngleSelectorSheet, {
+        visible: true,
+        onClose: noop,
+        boardName: 'kilter',
+        layoutId: 1,
+        climbUuid: 'climb-1',
+        currentAngle: 40,
+        onAngleChange: noop,
+      }),
+    );
+
+    expect(container.textContent).not.toContain('★');
+    expect(container.textContent).not.toContain('☆');
+  });
+
+  it('shows the star row once the selected angle has a meaningful quality', () => {
+    angleStats.map.set(40, { quality: 3.5, sends: 12 });
+
+    const { container } = render(
+      createElement(AngleSelectorSheet, {
+        visible: true,
+        onClose: noop,
+        boardName: 'kilter',
+        layoutId: 1,
+        climbUuid: 'climb-1',
+        currentAngle: 40,
+        onAngleChange: noop,
+      }),
+    );
+
+    expect(container.textContent).toContain('★');
+    expect(container.textContent).toContain('☆');
   });
 });

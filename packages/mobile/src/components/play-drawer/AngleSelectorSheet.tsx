@@ -118,17 +118,19 @@ export const AngleSelectorSheet = memo(function AngleSelectorSheet({
           </Text>
         ) : null}
 
-        <View style={styles.stars} accessibilityLabel={`★ ${quality.toFixed(1)}`}>
-          {[1, 2, 3, 4, 5].map((n) => (
-            <Text
-              key={n}
-              variant="body"
-              style={[styles.star, { color: quality >= n ? iosSystemColors.starGold : systemColors.secondaryLabel }]}
-            >
-              {quality >= n ? '★' : '☆'}
-            </Text>
-          ))}
-        </View>
+        {quality > 0 ? (
+          <View style={styles.stars} accessibilityLabel={`★ ${quality.toFixed(1)}`}>
+            {[1, 2, 3, 4, 5].map((n) => (
+              <Text
+                key={n}
+                variant="body"
+                style={[styles.star, { color: quality >= n ? iosSystemColors.starGold : systemColors.secondaryLabel }]}
+              >
+                {quality >= n ? '★' : '☆'}
+              </Text>
+            ))}
+          </View>
+        ) : null}
 
         {stats && stats.sends > 0 ? (
           <Text variant="caption1" style={[styles.ascents, { color: systemColors.secondaryLabel }]}>
