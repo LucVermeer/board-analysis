@@ -55,19 +55,17 @@ function* errorChain(error: unknown): Generator<ErrorRecord> {
 // message match on "duplicate key" is satisfied by any unique violation on the
 // table — including user_boards_unique_owner_config and the uuid primary key —
 // so it would go green without proving anything about the serial index.
+// Both fields must come from the SAME chain node: a code read off one wrapper and
+// a constraint name off another would let two unrelated failures satisfy the
+// assertion together.
 function violatesConstraint(error: unknown, constraintName: string): boolean {
-  let sawUniqueViolation = false;
-  let sawConstraint = false;
   for (const errorRecord of errorChain(error)) {
-    if (errorRecord.code === UNIQUE_VIOLATION_CODE) {
-      sawUniqueViolation = true;
-    }
     const constraint = errorRecord.constraint ?? errorRecord.constraint_name;
-    if (constraint === constraintName) {
-      sawConstraint = true;
+    if (errorRecord.code === UNIQUE_VIOLATION_CODE && constraint === constraintName) {
+      return true;
     }
   }
-  return sawUniqueViolation && sawConstraint;
+  return false;
 }
 
 function localDatabaseUrl(): string | null {
