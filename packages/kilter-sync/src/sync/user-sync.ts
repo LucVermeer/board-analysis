@@ -1003,6 +1003,14 @@ function hasZoneInfo(value: string): boolean {
   return TIMESTAMP_UTC_SUFFIX.test(value) || TIMESTAMP_OFFSET_SUFFIX.test(value);
 }
 
+// Pin a zone-less value to UTC. A date-only value gets a full midnight time
+// component: `2024-03-05Z` is outside the ECMAScript date-time grammar, so
+// `Date.parse` would be free to reject it.
+function toUtcIsoString(value: string): string {
+  const withTimeSeparator = value.replace(/\s+/, 'T');
+  return withTimeSeparator.includes('T') ? `${withTimeSeparator}Z` : `${withTimeSeparator}T00:00:00Z`;
+}
+
 /**
  * Kilter timestamps observed on the wire are `Z`-suffixed UTC ISO strings.
  * A value that carries a `Z` or a `±HH:MM` offset is normalised to that
@@ -1018,7 +1026,7 @@ export function parseKilterTimestamp(value: string | null | undefined): Date | u
   if (!value) return undefined;
   const trimmed = value.trim();
   if (!trimmed) return undefined;
-  const normalized = hasZoneInfo(trimmed) ? trimmed : `${trimmed.replace(' ', 'T')}Z`;
+  const normalized = hasZoneInfo(trimmed) ? trimmed : toUtcIsoString(trimmed);
   const parsedMs = Date.parse(normalized);
   if (!Number.isFinite(parsedMs)) return undefined;
   return new Date(parsedMs);
