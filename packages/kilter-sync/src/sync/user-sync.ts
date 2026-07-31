@@ -1051,21 +1051,37 @@ export async function applyClimbRatings(
   }
 
   if (removeIds.length > 0) {
-    // Ratings HARD-delete on REMOVE, unlike logs which SOFT-detach (see
-    // the long REMOVE comment in applyLogs). The asymmetry is safe here
-    // for two reasons:
-    //   1. The DELETE is scoped to kilter_id IN (removeIds), so it only
-    //      removes kilter-origin rows. Boardsesh-origin ratings have a
-    //      NULL kilter_id and never match this predicate — they survive.
-    //   2. On PowerSync snapshot re-delivery (REMOVE-before-PUT), the
-    //      upsert below re-inserts the kilter-origin row via its
-    //      natural-key conflict target, so the round-trip is lossless.
-    // Unlike a tick, a rating carries no promoted Boardsesh-side state
-    // (no attempt→send promotion, party-session links, computed fields)
-    // that a delete-then-reinsert would destroy — the row is fully
-    // reconstructable from the next PUT, so soft-detach buys nothing.
+    // Ratings SOFT-detach on REMOVE, exactly like logs (see the long REMOVE
+    // comment in applyLogs). This used to be a hard DELETE, justified by the
+    // claim that `kilter_id IN (removeIds)` can only ever match kilter-origin
+    // rows. That claim was wrong: the upsert below deliberately ADOPTS a
+    // kilter_id onto a pre-existing Boardsesh-origin row (its conflict target
+    // is the natural key, not kilter_id), so an adopted row matches this
+    // predicate and the DELETE took the whole row with it — including the
+    // fields Kilter's payload can never restore (`weight` is always null on a
+    // kilter PUT, `comment` is overwritten with the upstream value).
+    //
+    // Detaching instead clears the surrogate key and stamps the
+    // upstream-deleted marker. The marker is load-bearing twice over:
+    //   1. The ascents feeds LEFT JOIN board_climb_ratings for the
+    //      `effectiveQuality` fallback. A rating deleted upstream must stop
+    //      feeding that COALESCE, and kilter_id alone can't say so — Kilter
+    //      never sends another PUT for a row it deleted, so nothing would ever
+    //      clear it.
+    //   2. Push-back selects ratings on `kilter_id IS NULL`. Without the
+    //      marker a detached row looks never-pushed and would be re-created
+    //      upstream once the POST is wired.
+    // On PowerSync snapshot re-delivery (REMOVE-before-PUT) the upsert below
+    // re-adopts the row and clears the marker, so the round-trip is lossless.
     await tx
-      .delete(boardClimbRatings)
+      .update(boardClimbRatings)
+      .set({
+        kilterId: null,
+        // board_climb_ratings stores timestamps in Date mode (unlike
+        // boardsesh_ticks, which is `mode: 'string'`) — hand drizzle a Date.
+        kilterDetachedAt: new Date(),
+        updatedAt: new Date(),
+      })
       .where(and(eq(boardClimbRatings.userId, userId), inArray(boardClimbRatings.kilterId, removeIds)));
   }
 
@@ -1138,6 +1154,14 @@ export async function applyClimbRatings(
         // happen for kilter-origin PUTs in practice, but defensive)
         // never nulls out a kilter_id we already adopted.
         kilterId: sql`COALESCE(EXCLUDED.kilter_id, ${boardClimbRatings.kilterId})`,
+        // Re-linking a rating clears the upstream-deleted marker: a
+        // REMOVE-then-PUT snapshot redelivery detaches (stamping
+        // kilter_detached_at) then re-adopts, and the adopted row is live
+        // again. Without this the row would stay marked forever — invisible to
+        // the effectiveQuality fallback and skipped by push-back — even though
+        // Kilter just told us it exists. A plain re-sync of an already-linked
+        // rating leaves it NULL, a harmless no-op.
+        kilterDetachedAt: null,
         updatedAt: new Date(),
       },
       // PowerSync redelivers a full snapshot every cycle, so without this

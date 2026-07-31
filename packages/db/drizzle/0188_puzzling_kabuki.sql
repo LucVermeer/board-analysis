@@ -1,0 +1,1 @@
+ALTER TABLE "board_climb_ratings" ADD COLUMN "kilter_detached_at" timestamp;

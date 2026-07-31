@@ -240,6 +240,14 @@ async function pushPendingRatings(db: DrizzleDb, userId: string, _accessToken: s
         eq(boardClimbRatings.userId, userId),
         eq(boardClimbRatings.boardType, KILTER_BOARD_TYPE),
         isNull(boardClimbRatings.kilterId),
+        // Exclude upstream-deleted rows: a REMOVE soft-detach nulls kilter_id
+        // but stamps kilter_detached_at, which alone makes the row look
+        // never-pushed. Same guard as pushPendingTicks above. Nothing can
+        // reach Kilter yet — the POST below is still pushNotWired — so this is
+        // future-proofing that has to already be in place the day the wire
+        // lands, otherwise the first real push re-creates every rating the
+        // climber deleted on Kilter.
+        isNull(boardClimbRatings.kilterDetachedAt),
       ),
     );
 
