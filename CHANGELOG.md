@@ -16,6 +16,14 @@ A new version shipped to the App Store and Play Store.
 
 ### Fixed
 
+- Aurora sometimes filed the same ascent two to four times. Your logbook and your send totals now count it once — every real send is still there, nothing was deleted, and a repeat lap on the same climb still shows up as its own send. ([#4061](https://github.com/boardsesh/boardsesh/pull/4061))
+  Fixes #3535
+- Fixed a data glitch where some Kilter climbs could show an impossible fraction-of-a-star rating. ([#4047](https://github.com/boardsesh/boardsesh/pull/4047))
+- MoonBoard playlists now queue up properly — set a climb active and the rest of the playlist lines up behind it ([#4010](https://github.com/boardsesh/boardsesh/pull/4010))
+  Add MoonBoard climbs to playlists from the queue and play views, with checkmarks that actually show what's already in
+  Removing a playlist's icon or description now sticks when you save
+  Playlist climbs keep their grade even at angles nobody's logged yet
+- Fixes #3869 ([#4028](https://github.com/boardsesh/boardsesh/pull/4028))
 - Pick the app back up after months away and it now rebuilds your ticks, playlists and favourites from the server, instead of quietly hanging on to ones you deleted while you were gone. Your downloaded boards stay put — no surprise re-download — and anything you logged offline still goes up. ([#4048](https://github.com/boardsesh/boardsesh/pull/4048))
 - Climbs you queue from the phone now show your name and avatar to everyone in the session instead of landing anonymous — and a phone in the session no longer wipes the "added by" avatars off the climbs your crew queued from the web. ([#4050](https://github.com/boardsesh/boardsesh/pull/4050))
   Fixes #3995

@@ -1,6 +1,36 @@
 {
-  "generatedAt": "2026-07-31T20:48:07.488Z",
+  "generatedAt": "2026-07-31T20:53:57.237Z",
   "entries": [
+    {
+      "prNumber": 4061,
+      "category": "fixed",
+      "title": "Aurora sometimes filed the same ascent two to four times. Your logbook and your send totals now count it once — every real send is still there, nothing was deleted, and a repeat lap on the same climb still shows up as its own send.",
+      "mergedAt": "2026-07-31T20:49:19Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4061",
+      "body": "Fixes #3535"
+    },
+    {
+      "prNumber": 4047,
+      "category": "fixed",
+      "title": "Fixed a data glitch where some Kilter climbs could show an impossible fraction-of-a-star rating.",
+      "mergedAt": "2026-07-31T20:49:04Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4047"
+    },
+    {
+      "prNumber": 4010,
+      "category": "fixed",
+      "title": "MoonBoard playlists now queue up properly — set a climb active and the rest of the playlist lines up behind it",
+      "mergedAt": "2026-07-31T20:48:34Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4010",
+      "body": "Add MoonBoard climbs to playlists from the queue and play views, with checkmarks that actually show what's already in\nRemoving a playlist's icon or description now sticks when you save\nPlaylist climbs keep their grade even at angles nobody's logged yet"
+    },
+    {
+      "prNumber": 4028,
+      "category": "fixed",
+      "title": "Fixes #3869",
+      "mergedAt": "2026-07-31T20:48:14Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4028"
+    },
     {
       "prNumber": 4048,
       "category": "fixed",
