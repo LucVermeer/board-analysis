@@ -134,3 +134,53 @@ describe('resolvePlaylistClimbRenderBoard', () => {
     expect(result).toBeNull();
   });
 });
+
+describe('MoonBoard hold-set fit', () => {
+  // MoonBoard 2024 (layout 3): cell 1 is Hold Set D (set 5), cell 2 is Wooden
+  // Holds (set 8). getMoonBoardDetails renders the full grid whichever sets are
+  // bolted on, so without the set check both climbs below would read as an exact
+  // fit on a base-only wall — and the row would open into a queue the set-scoped
+  // backend fetch had already emptied (#3891).
+  function moonBoard2024(setIds: number[]): PlaylistRenderBoard {
+    const config = getBoardConfigForPlaylist('moonboard', 3);
+    if (!config) throw new Error('Missing MoonBoard 2024 board config');
+    return {
+      boardName: config.boardName,
+      layoutId: config.layoutId,
+      sizeId: config.sizeId,
+      setIds: setIds.join(','),
+      angle: 40,
+    };
+  }
+
+  it('marks a wooden-set climb incompatible on a base-only wall', () => {
+    const baseOnlyWall = moonBoard2024([5, 6, 7]);
+    const climb = makeClimb({ boardType: 'moonboard', layoutId: 3, frames: 'p1r42p2r43' });
+
+    const result = resolvePlaylistClimbRenderBoard(climb, baseOnlyWall);
+
+    expect(result?.incompatible).toBe(true);
+    expect(result?.fit).toBe('incompatible');
+  });
+
+  it('renders the same climb on the active wall once the wooden set is installed', () => {
+    const woodenWall = moonBoard2024([5, 6, 7, 8]);
+    const climb = makeClimb({ boardType: 'moonboard', layoutId: 3, frames: 'p1r42p2r43' });
+
+    const result = resolvePlaylistClimbRenderBoard(climb, woodenWall);
+
+    expect(result?.incompatible).toBe(false);
+    expect(result?.fit).toBe('exact');
+    expect(result?.renderBoard).toEqual(woodenWall);
+  });
+
+  it('keeps a base-set climb on a base-only wall', () => {
+    const baseOnlyWall = moonBoard2024([5, 6, 7]);
+    const climb = makeClimb({ boardType: 'moonboard', layoutId: 3, frames: 'p1r42p9r43' });
+
+    const result = resolvePlaylistClimbRenderBoard(climb, baseOnlyWall);
+
+    expect(result?.incompatible).toBe(false);
+    expect(result?.fit).toBe('exact');
+  });
+});

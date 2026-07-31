@@ -64,6 +64,10 @@ export function _resetEmptyBoardFetchReportsForTests(): void {
  * `canAddClimbToBoard` is the same predicate the playlist rows use to decide
  * whether to dim a climb as incompatible, so "the list showed it as climbable
  * here" and "the board-scoped query should have returned it" stay in agreement.
+ * Hold sets included: `getPlaylistRenderBoardTarget` hands the wall's `set_ids`
+ * to the predicate, which is what keeps it matching the backend's
+ * `required_set_ids <@ selected sets` containment on MoonBoard — whose render
+ * data covers the whole grid whichever add-on sets are actually bolted on.
  */
 function countClimbsThisBoardCanRender(climbs: Climb[], board: PlaylistRenderBoard): number {
   const target = getPlaylistRenderBoardTarget(board);

@@ -1,6 +1,7 @@
 import type { BoardName } from '@boardsesh/shared-schema';
 
 import { toBoardName } from './board-name';
+import { requiredSetIdsForMoonBoard } from './moonboard-cell-sets';
 import type { ClimbCompatibilityInput, BoardCompatibilityTarget } from './types';
 
 /**
@@ -57,6 +58,12 @@ function getValidHoldIds(target: BoardCompatibilityTarget): Set<number> | null {
  *     board. This naturally allows smaller boards to be added to larger
  *     queues (subset of holds) but rejects larger-board climbs that use
  *     holds missing on a smaller board.
+ *  4. On MoonBoard only, and only when the caller supplies `target.set_ids`:
+ *     the sets the climb's cells belong to must all be installed on the wall.
+ *     MoonBoard's `holdsData` is the whole grid whatever sets are bolted on, so
+ *     rule 3 can't catch a wooden-set climb on a base-only wall — the cell-to-set
+ *     map can. Aurora boards need no equivalent because their hold placements are
+ *     per-set, so an uninstalled set's holds already fail rule 3.
  */
 export function canAddClimbToBoard(
   climb: ClimbCompatibilityInput,
@@ -67,6 +74,15 @@ export function canAddClimbToBoard(
   }
   if (climb.layoutId != null && climb.layoutId !== target.layout_id) {
     return { ok: false, reason: 'layout' };
+  }
+  if (target.board_name === 'moonboard' && target.set_ids && target.set_ids.length > 0) {
+    const installedSetIds = new Set(target.set_ids);
+    const requiredSetIds = requiredSetIdsForMoonBoard(target.layout_id, climb.frames ?? '');
+    for (const setId of requiredSetIds) {
+      if (!installedSetIds.has(setId)) {
+        return { ok: false, reason: 'holds_out_of_range' };
+      }
+    }
   }
   const validIds = getValidHoldIds(target);
   if (!validIds) {

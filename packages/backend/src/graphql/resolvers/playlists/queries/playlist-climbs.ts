@@ -79,7 +79,11 @@ async function fetchSpecificBoardClimbs(
   // MoonBoard and drafts: `required_set_ids` is denormalised and backfilled
   // asynchronously, and a playlist is a list the climber curated by hand. Missing
   // provenance should not make one of their own climbs disappear — only a climb we
-  // positively know needs an uninstalled set is dropped.
+  // positively know needs an uninstalled set is dropped. The blast radius of the
+  // more permissive choice is small: in prod (2026-07-31) 1,223 of 408,035 Kilter
+  // climbs (0.30%) and 776 of 153,370 Tension climbs (0.51%) still have a NULL
+  // `required_set_ids`, so at most half a percent of Aurora playlist rows keep the
+  // pre-#3891 behaviour, versus every one of them disappearing on a backfill lag.
   const selectedSetIds = input.setIds == null ? [] : parseSetIds(input.setIds);
   if (selectedSetIds.length > 0) {
     climbJoinConditions.push(
