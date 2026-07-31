@@ -11,9 +11,9 @@ import org.junit.Test
 /**
  * Covers [CachePruner] in isolation: the orphaned-temp-file sweep (a process
  * kill between [AtomicFileWrite]'s compress and rename leaves a private
- * ".bsov-*.tmp" behind — #3748) and the size-based LRU eviction it runs
- * alongside. The private prefix is part of the safety contract: this helper
- * must never sweep an unrelated component's `.tmp` file.
+ * ".bsov-*.tmp" behind) and the size-based LRU eviction it runs alongside. The
+ * private prefix and final `.png` suffix are part of the safety contract: this
+ * helper must never sweep, count, or evict an unrelated component's file.
  */
 class CachePrunerTest {
     private lateinit var cacheDir: File
@@ -95,6 +95,35 @@ class CachePrunerTest {
         assertFalse("orphan swept", orphan.exists())
         assertFalse("oldest entry evicted by LRU", oldest.exists())
         assertTrue("newest entry survives", newest.exists())
+        assertEquals(10L, result.finalTotalBytes)
+    }
+
+    @Test
+    fun `over-cap eviction preserves unrelated files and temp files`() {
+        val unrelatedTemp = File(cacheDir, "download.tmp")
+        unrelatedTemp.writeBytes(ByteArray(1_000))
+        unrelatedTemp.setLastModified(1_000)
+
+        val unrelatedMetadata = File(cacheDir, "metadata.json")
+        unrelatedMetadata.writeBytes(ByteArray(1_000))
+        unrelatedMetadata.setLastModified(2_000)
+
+        val oldestManagedEntry = File(cacheDir, "oldest.png")
+        oldestManagedEntry.writeBytes(ByteArray(10))
+        oldestManagedEntry.setLastModified(3_000)
+
+        val newestManagedEntry = File(cacheDir, "newest.png")
+        newestManagedEntry.writeBytes(ByteArray(10))
+        newestManagedEntry.setLastModified(4_000)
+
+        val result = CachePruner.pruneCacheIfNeeded(cacheDir, maxBytes = 15)
+
+        assertEquals(0, result.orphanedTempFilesRemoved)
+        assertEquals(1, result.cacheEntriesEvicted)
+        assertTrue("unrelated .tmp file survives", unrelatedTemp.exists())
+        assertTrue("unrelated metadata survives", unrelatedMetadata.exists())
+        assertFalse("oldest managed PNG is evicted", oldestManagedEntry.exists())
+        assertTrue("newest managed PNG survives", newestManagedEntry.exists())
         assertEquals(10L, result.finalTotalBytes)
     }
 

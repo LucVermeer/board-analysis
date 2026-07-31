@@ -8,7 +8,7 @@
  * binaries during rollout. v4 (issue #2202) switches hold colors to each role's
  * calibrated displayColor and boosts Grasshopper's default stroke width — both
  * change the rendered pixels for a config that otherwise hashes the same, so
- * stale v3 PNGs must not be reused. v5 (issue #3748) invalidates any v4 native
+ * stale v3 PNGs must not be reused. v5 invalidates any v4 native
  * PNG that may have been truncated before publication became atomic. This
  * version is shared by native and Expo web, so the web Cache API intentionally
  * performs the same one-time v4 flush. The accompanying native-module changes

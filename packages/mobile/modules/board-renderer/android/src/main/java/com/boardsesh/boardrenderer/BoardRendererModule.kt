@@ -90,7 +90,7 @@ class BoardRendererModule : Module() {
                 // and the atomic Os.rename publication all live inside this retry
                 // boundary. A reclaimed cache directory therefore retries the
                 // entire pipeline with a new unique temp file, while concurrent
-                // renders never share an in-flight path (AtomicFileWrite, #3748).
+                // renders never share an in-flight path (see AtomicFileWrite).
                 AtomicFileWrite.writeAtomically(
                     destination = outputFile,
                     committer = AndroidAtomicFileCommitter,

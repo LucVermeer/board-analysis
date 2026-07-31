@@ -110,7 +110,7 @@ describe('buildCacheKey', () => {
   });
 
   it('uses RENDERER_VERSION v5 to invalidate non-atomic v4 overlay PNGs', () => {
-    // v5 (issue #3748) ensures a newly built native client never trusts a v4
+    // v5 ensures a newly built native client never trusts a v4
     // file that may have been truncated by the old direct-to-destination write.
     expect(buildCacheKey('kilter', 1, 10, '24', 'p1r42')).toMatch(/^v5_/);
   });
@@ -437,7 +437,7 @@ describe('renderedOverlays warm-up from disk cache', () => {
   });
 
   it('only loads PNGs whose name starts with the current RENDERER_VERSION prefix', () => {
-    // Mix older leftovers (including v4 files written before #3748) with
+    // Mix older leftovers (including v4 files written before atomic publication) with
     // current v5 entries. The warm-up must surface only v5 keys; all older
     // files are invalid under the current atomic-publication cache contract.
     const v1Entry = makeMockEntry('v1_kilter_1_10_24_aaaaaaaa.png');
