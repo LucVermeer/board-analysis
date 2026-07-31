@@ -12,8 +12,16 @@ export const DEFAULT_SEARCH_CACHE_TTL = 86400;
  * popular-sort counting NULL frames_count, name ILIKE escaping, zone fail-closed.
  * v4: stars field now maps quality_average (1-5) straight to 0-5 instead of the
  * old x5/x3 0-15 scale (was saturating at 15).
+ * v5: searches past the stats-having boundary now return stats-less climbs
+ * (issue #1971), and the stats-driven fallback orders stats-having climbs ahead
+ * of stats-less ones. Without the bump, already-cached truncated pages would keep
+ * serving the bug for the full 24h TTL, and an old-ordering page 0 next to a
+ * new-ordering page 1 would duplicate or skip rows at the boundary.
+ *
+ * Exported so search-cache.test.ts asserts the key layout against this constant
+ * instead of re-typing the version literal in every assertion.
  */
-const CACHE_VERSION = 'v4';
+export const CACHE_VERSION = 'v5';
 
 /**
  * Recursively sorts the keys of an object so that JSON.stringify produces

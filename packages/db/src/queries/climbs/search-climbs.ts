@@ -156,7 +156,7 @@ export const searchClimbs = async (
 
   const hasStatsFilters = filters.getClimbStatsConditions().length > 0;
   if (!statsDrivenSort) {
-    return standardSearch(db, params, searchParams, filters, sortBy, sortOrder, isDraftsQuery, page, pageSize);
+    return standardSearch(db, params, searchParams, filters, sortBy, sortOrder, isDraftsQuery, page, pageSize, false);
   }
 
   const path = chooseSearchPath({
@@ -165,12 +165,11 @@ export const searchClimbs = async (
     projectsOnly: !!searchParams.projectsOnly,
     // Routes-only (frames_count > 1, boulders off) — see chooseSearchPath.
     routesOnly: !!searchParams.routes && !searchParams.boulders,
-    page,
     hasStatsFilters,
   });
 
   if (path === 'standard-only') {
-    return standardSearch(db, params, searchParams, filters, sortBy, sortOrder, isDraftsQuery, page, pageSize);
+    return standardSearch(db, params, searchParams, filters, sortBy, sortOrder, isDraftsQuery, page, pageSize, false);
   }
 
   // Both 'stats-driven-only' and 'stats-driven-with-fallback' start with statsDriven.
@@ -179,30 +178,37 @@ export const searchClimbs = async (
     return statsResult;
   }
 
-  // statsDriven returned a partial page. Fall back to standardSearch only on page 0
-  // without stats filters, where stats-less climbs (projects) need to fill out
-  // narrow-filter results. The fallback's dataset is small enough that the planner
-  // picks a serial plan and doesn't allocate parallel-sort DSM segments.
+  // statsDriven returned a partial page: it has exhausted the climbs that HAVE a
+  // stats row at this angle. Re-run the same window through standardSearch's LEFT
+  // JOIN so stats-less climbs (projects) still show up — on ANY page, not just
+  // page 0 (issue #1971). The count badge comes from countClimbs, which counts the
+  // unified LEFT JOIN universe, so truncating here is what made the count disagree
+  // with the visible list and fired "no more climbs" early.
   //
-  // KNOWN TRADE-OFF: sparse first-page ascents/quality sorts can pay for two
-  // queries: the stats-driven index probe and then the LEFT JOIN fallback. That
-  // is intentional so stats-less climbs still appear at the bottom of the first
-  // page instead of disappearing from narrow result sets.
+  // Why running standardSearch past page 0 is safe now: the #1969 failure mode was
+  // a parallel plan whose per-worker DSM allocations exhausted /dev/shm. Both paths
+  // have since been wrapped in `SET LOCAL max_parallel_workers_per_gather = 0`
+  // (standardSearch in 07dfe54b2, statsDrivenSearch in a31f88baf / #3856), so
+  // neither can allocate a parallel-sort DSM segment regardless of page depth. The
+  // page-0 gate predates both guards (9acb8b913) and was protecting against a plan
+  // shape that is now disabled by GUC — do not re-introduce it.
   //
-  // KNOWN TRADE-OFF (search-climbs.ts:80-91 review feedback): when the page-0
-  // fallback returns hasMore=true but the user navigates to page 1, statsDriven on
-  // page 1 returns 0 and we don't fall back (page > 0). The user sees an empty
-  // next page. Accepted because:
-  //   - The narrow-filter case where this is visible is a small fraction of traffic.
-  //   - Running standardSearch on page > 0 with deep OFFSET re-creates the parallel
-  //     plan and /dev/shm pressure that PR #1969 fixes for the hot path.
-  //   - A properly correct fix needs server-side state across pages (count of
-  //     stats-having for the filter) which itself takes a parallel plan on broad
-  //     filters — verified ~862ms via EXPLAIN ANALYZE.
-  // Future work: track in production via cache-miss telemetry; consider keyset
-  // pagination or a popular_climbs materialized view as the next scale move.
+  // Cost: the fallback only fires once statsDriven is exhausted. Broad filters never
+  // reach it at shallow depth (hasMore stays true), but a deep enough page — one whose
+  // OFFSET lands past the stats-having count — reaches it on any filter, bounded by
+  // that filter's selectivity. The extra work is the countClimbs scan shape plus a
+  // top-N heapsort bounded by OFFSET + LIMIT, so per-page cost past the boundary is
+  // roughly constant and equal to today's page-0 fallback cost on the same filter.
+  // `page` is clamped to MAX_SEARCH_PAGE; `pageSize` is caller-supplied and is NOT
+  // clamped here (searchClimbs defaults it to 20), so the OFFSET bound is only as
+  // tight as whatever validates pageSize upstream.
+  //
+  // `orderStatsHavingFirst: true` makes the fallback's ordering a prefix-compatible
+  // continuation of the stats-driven pages — see runStandardSearch.
+  // Future work: keyset pagination or a popular_climbs materialized view so the
+  // stats-driven path can rank stats-less climbs natively.
   if (path === 'stats-driven-with-fallback') {
-    return standardSearch(db, params, searchParams, filters, sortBy, sortOrder, isDraftsQuery, page, pageSize);
+    return standardSearch(db, params, searchParams, filters, sortBy, sortOrder, isDraftsQuery, page, pageSize, true);
   }
   return statsResult;
 };
@@ -226,15 +232,15 @@ export type SearchPath = 'standard-only' | 'stats-driven-only' | 'stats-driven-w
  *   - drafts query          → standard-only (drafts have no stats rows)
  *   - projectsOnly          → standard-only (the user explicitly wants stats-less climbs)
  *   - routesOnly            → standard-only (routes are few + often unclimbed; the stats path drops them)
- *   - page === 0 && !hasStatsFilters → stats-driven-with-fallback
- *   - otherwise             → stats-driven-only
+ *   - hasStatsFilters       → stats-driven-only (a stats predicate can't be satisfied through the
+ *                             LEFT JOIN either, so a fallback would return nothing new)
+ *   - otherwise             → stats-driven-with-fallback (any page — see issue #1971)
  */
 export function chooseSearchPath(input: {
   statsDrivenSort: StatsDrivenSort | null;
   isDraftsQuery: boolean;
   projectsOnly: boolean;
   routesOnly: boolean;
-  page: number;
   hasStatsFilters: boolean;
 }): SearchPath {
   if (!input.statsDrivenSort) return 'standard-only';
@@ -246,8 +252,12 @@ export function chooseSearchPath(input: {
   // comes back empty while the count says e.g. 66. Force the LEFT JOIN path so
   // unclimbed routes surface; the tiny routes dataset makes the index plan moot.
   if (input.routesOnly) return 'standard-only';
-  if (input.page === 0 && !input.hasStatsFilters) return 'stats-driven-with-fallback';
-  return 'stats-driven-only';
+  // Stats filters (minAscents, grade range, quality, accuracy) exclude stats-less
+  // climbs from the LEFT JOIN path too, so a fallback would return nothing new and
+  // just double the query count. countClimbs applies the same conditions, so the
+  // count and the list already agree on this branch.
+  if (input.hasStatsFilters) return 'stats-driven-only';
+  return 'stats-driven-with-fallback';
 }
 
 /**
@@ -261,9 +271,10 @@ export function chooseSearchPath(input: {
  * mirroring the standardSearch / countClimbs / getHoldHeatmapData guards.
  *
  * The INNER JOIN excludes climbs without a stats row at this angle. The caller
- * (`searchClimbs`) compensates only on page 0 without stats filters, where
- * stats-less climbs (projects) need to fill out narrow-filter results. See the
- * comment in `searchClimbs` for the full reasoning.
+ * (`searchClimbs`) compensates on any page without stats filters, whenever this
+ * query returns a partial page — stats-less climbs (projects) need to fill out
+ * narrow-filter results at every depth, not just the first page (issue #1971).
+ * See the comment in `searchClimbs` for the full reasoning.
  *
  * All climb filters (including personal progress like hideCompleted) are in
  * the WHERE clause — not the JOIN ON — so they apply correctly to the result set.
@@ -385,6 +396,9 @@ async function runStatsDrivenSearch(
  * Standard search: FROM board_climbs LEFT JOIN board_climb_stats.
  * Used for non-default sorts (difficulty, name, creation, popular) and for
  * draft queries.
+ *
+ * @param orderStatsHavingFirst Pass `true` only from the stats-driven fallback so
+ * the result window lines up with statsDrivenSearch's pages. See runStandardSearch.
  */
 async function standardSearch(
   db: SearchDb,
@@ -396,6 +410,7 @@ async function standardSearch(
   isDraftsQuery: boolean,
   page: number,
   pageSize: number,
+  orderStatsHavingFirst: boolean,
 ): Promise<ClimbSearchResult> {
   const transaction = getTransaction(db);
   if (transaction) {
@@ -411,6 +426,7 @@ async function standardSearch(
         isDraftsQuery,
         page,
         pageSize,
+        orderStatsHavingFirst,
       );
     });
   }
@@ -424,7 +440,18 @@ async function standardSearch(
     await execute(sql`SET LOCAL max_parallel_workers_per_gather = 0`);
   }
 
-  return runStandardSearch(db, params, searchParams, filters, sortBy, sortOrder, isDraftsQuery, page, pageSize);
+  return runStandardSearch(
+    db,
+    params,
+    searchParams,
+    filters,
+    sortBy,
+    sortOrder,
+    isDraftsQuery,
+    page,
+    pageSize,
+    orderStatsHavingFirst,
+  );
 }
 
 async function runStandardSearch(
@@ -437,6 +464,7 @@ async function runStandardSearch(
   isDraftsQuery: boolean,
   page: number,
   pageSize: number,
+  orderStatsHavingFirst: boolean,
 ): Promise<ClimbSearchResult> {
   // For the popular sort, pre-aggregate total ascents across all angles via a joined subquery
   // instead of a correlated subquery that runs per candidate row.
@@ -540,6 +568,23 @@ async function runStandardSearch(
       ? sql`${sortColumn} ASC NULLS FIRST`
       : sql`${sortColumn} DESC NULLS LAST`;
 
+  // Stats-presence key, used ONLY by the stats-driven fallback (issue #1971). It
+  // pins every climb that has a board_climb_stats row at this angle ahead of every
+  // stats-less one, so the unified order becomes
+  //   [stats-having, in exactly statsDrivenSearch's order] ++ [stats-less by uuid DESC]
+  // and each fallback page is a prefix-compatible continuation of the stats-driven
+  // pages — nothing duplicated or skipped at the boundary. Rows with a non-NULL sort
+  // key are unaffected (they already sort ahead of every NULL); the key only
+  // disambiguates the NULL tail, where a stats row with a NULL ascensionist_count /
+  // quality_average would otherwise interleave with stats-less climbs by uuid DESC.
+  // Never set it for name/creation/popular/random sorts — it would reorder them (and
+  // break the md5 shuffle's page stability).
+  const orderByKeys = [
+    ...(orderStatsHavingFirst ? [sql`CASE WHEN ${boardClimbStats.climbUuid} IS NULL THEN 1 ELSE 0 END ASC`] : []),
+    orderByClause,
+    desc(boardClimbs.uuid),
+  ];
+
   // LEFT JOIN preserves climbs without stats (they get NULL stats columns).
   const coreQuery = db
     .select(selectFields)
@@ -562,7 +607,7 @@ async function runStandardSearch(
 
   const results: RawSelectResult[] = (await queryWithJoins
     .where(and(...whereConditions))
-    .orderBy(orderByClause, desc(boardClimbs.uuid))
+    .orderBy(...orderByKeys)
     .limit(pageSize + 1)
     .offset(page * pageSize)) as unknown as RawSelectResult[];
 

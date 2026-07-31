@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { PgDialect } from 'drizzle-orm/pg-core';
-import type { SQL } from 'drizzle-orm';
+import { getTableName, is, Table, type SQL } from 'drizzle-orm';
 import { chooseSearchPath, getStatsDrivenSort, clampSearchPage, MAX_SEARCH_PAGE, searchClimbs } from '../search-climbs';
 import { mapSearchInputToParams, normalizeSearchSortBy, type BoardRouteParams } from '../types';
 import type { DbInstance } from '../../../client/postgres';
@@ -11,7 +11,6 @@ const baseInput = {
   isDraftsQuery: false,
   projectsOnly: false,
   routesOnly: false,
-  page: 0,
   hasStatsFilters: false,
 };
 
@@ -52,7 +51,7 @@ void describe('clampSearchPage', () => {
 });
 
 void describe('chooseSearchPath', () => {
-  void describe('the hot path: ascents DESC, page 0, no stats filters', () => {
+  void describe('the hot path: ascents DESC, no stats filters', () => {
     void it('uses stats-driven-with-fallback so projects appear at the bottom of narrow-filter pages', () => {
       assert.equal(chooseSearchPath(baseInput), 'stats-driven-with-fallback');
     });
@@ -64,23 +63,9 @@ void describe('chooseSearchPath', () => {
     });
   });
 
-  void describe('pages > 0', () => {
-    void it('uses stats-driven-only on page 1 — fallback would re-create DSM pressure', () => {
-      assert.equal(chooseSearchPath({ ...baseInput, page: 1 }), 'stats-driven-only');
-    });
-
-    void it('uses stats-driven-only on a deep page', () => {
-      assert.equal(chooseSearchPath({ ...baseInput, page: 47 }), 'stats-driven-only');
-    });
-  });
-
   void describe('stats filters active (e.g. minAscents >= 1)', () => {
-    void it('uses stats-driven-only on page 0 — stats-less climbs would be filtered out anyway', () => {
+    void it('uses stats-driven-only — stats-less climbs would be filtered out anyway', () => {
       assert.equal(chooseSearchPath({ ...baseInput, hasStatsFilters: true }), 'stats-driven-only');
-    });
-
-    void it('uses stats-driven-only on deeper pages with stats filters', () => {
-      assert.equal(chooseSearchPath({ ...baseInput, page: 5, hasStatsFilters: true }), 'stats-driven-only');
     });
   });
 
@@ -97,33 +82,25 @@ void describe('chooseSearchPath', () => {
       assert.equal(chooseSearchPath({ ...baseInput, statsDrivenSort: null }), 'standard-only');
     });
 
-    void it('uses stats-driven-with-fallback for quality DESC page 0', () => {
+    void it('uses stats-driven-with-fallback for quality DESC', () => {
       assert.equal(chooseSearchPath({ ...baseInput, statsDrivenSort: 'quality' }), 'stats-driven-with-fallback');
-    });
-
-    void it('uses stats-driven-only for quality DESC after page 0', () => {
-      assert.equal(chooseSearchPath({ ...baseInput, statsDrivenSort: 'quality', page: 1 }), 'stats-driven-only');
     });
   });
 
   void describe('precedence', () => {
     void it('projectsOnly trumps the hot path', () => {
-      assert.equal(
-        chooseSearchPath({ ...baseInput, projectsOnly: true, page: 0, hasStatsFilters: false }),
-        'standard-only',
-      );
+      assert.equal(chooseSearchPath({ ...baseInput, projectsOnly: true, hasStatsFilters: false }), 'standard-only');
     });
 
     void it('drafts trumps the hot path', () => {
-      assert.equal(chooseSearchPath({ ...baseInput, isDraftsQuery: true, page: 0 }), 'standard-only');
+      assert.equal(chooseSearchPath({ ...baseInput, isDraftsQuery: true }), 'standard-only');
     });
 
-    void it('non-ascents sort trumps page/filter conditions', () => {
+    void it('non-ascents sort trumps the filter conditions', () => {
       assert.equal(
         chooseSearchPath({
           ...baseInput,
           statsDrivenSort: null,
-          page: 0,
           hasStatsFilters: false,
         }),
         'standard-only',
@@ -167,6 +144,40 @@ void describe('normalizeSearchSortBy', () => {
   });
 });
 
+const dialect = new PgDialect();
+const GUARD_PATTERN = /SET LOCAL max_parallel_workers_per_gather\s*=\s*0/i;
+// The stats-presence ORDER BY key the stats-driven fallback prepends (issue #1971).
+const STATS_PRESENCE_KEY_PATTERN = /case when\s+"?board_climb_stats"?\."?climb_uuid"?\s+is null/i;
+
+/** Minimal row shape searchClimbs' row mapper reads; enough to identify a row by uuid. */
+function fakeRow(uuid: string): Record<string, unknown> {
+  return {
+    uuid,
+    setter_username: null,
+    userId: null,
+    name: uuid,
+    frames: null,
+    is_draft: false,
+    angle: 40,
+    ascensionist_count: null,
+    difficulty_id: null,
+    quality_average: null,
+    difficulty_error: null,
+    benchmark_difficulty: null,
+    description: null,
+    characteristics: null,
+    created_at: null,
+    published_at: null,
+    frames_count: 1,
+    frames_pace: null,
+    boardsesh_difficulty: null,
+    boardsesh_confidence: null,
+  };
+}
+
+/** What one SELECT the code under test issued looked like. */
+type RecordedQuery = { table: string | null; orderBy: string[] };
+
 // Fake SearchDb: a minimal stand-in for a top-level Drizzle instance. Every
 // select chain method returns the same builder object, and awaiting it (via a
 // real `.then`) records that the query ran — so a test can assert the query
@@ -174,15 +185,30 @@ void describe('normalizeSearchSortBy', () => {
 // mock in packages/web/app/lib/db/queries/climbs/__tests__/holds-heatmap.test.ts,
 // adapted to node:test (no module mocking needed — searchClimbs takes `db` as
 // a plain parameter).
-function createFakeSearchDb() {
+//
+// Each builder also records the table `from()` was called with and the RENDERED
+// ORDER BY fragments, so a test can assert on the SQL the code actually emitted
+// instead of re-deriving an expectation from the same helpers. `scriptedRows`
+// supplies the rows the Nth select resolves with (default: none).
+function createFakeSearchDb(scriptedRows: Record<string, unknown>[][] = []) {
   const callOrder: string[] = [];
   const executedStatements: SQL[] = [];
+  const queries: RecordedQuery[] = [];
 
   const makeSelectBuilder = () => {
+    const recorded: RecordedQuery = { table: null, orderBy: [] };
     const builder: Record<string, unknown> = {};
-    for (const method of ['from', 'innerJoin', 'leftJoin', 'where', 'orderBy', 'limit', 'offset']) {
+    for (const method of ['innerJoin', 'leftJoin', 'where', 'limit', 'offset']) {
       builder[method] = () => builder;
     }
+    builder.from = (source: unknown) => {
+      recorded.table = is(source, Table) ? getTableName(source) : null;
+      return builder;
+    };
+    builder.orderBy = (...fragments: SQL[]) => {
+      recorded.orderBy = fragments.map((fragment) => dialect.sqlToQuery(fragment).sql);
+      return builder;
+    };
     // A real, spec-compliant thenable so drizzle's internal `await` can't
     // swallow a rejection and so this reliably resolves like a genuine query.
     builder.then = (
@@ -190,7 +216,9 @@ function createFakeSearchDb() {
       onRejected?: ((reason: unknown) => unknown) | null,
     ) => {
       callOrder.push('select');
-      return Promise.resolve([]).then(onFulfilled, onRejected);
+      queries.push(recorded);
+      const rows = scriptedRows[queries.length - 1] ?? [];
+      return Promise.resolve(rows).then(onFulfilled, onRejected);
     };
     return builder;
   };
@@ -208,11 +236,35 @@ function createFakeSearchDb() {
     transaction: (callback: (transactionDb: typeof tx) => unknown) => callback(tx),
   };
 
-  return { fakeDb, callOrder, executedStatements };
+  return { fakeDb, callOrder, executedStatements, queries };
 }
 
-const dialect = new PgDialect();
-const GUARD_PATTERN = /SET LOCAL max_parallel_workers_per_gather\s*=\s*0/i;
+/**
+ * The #3856 regression net, expressed as an invariant rather than a fixed call
+ * list: every SELECT must be immediately preceded by its own SET LOCAL guard, and
+ * every executed statement must BE that guard. Deleting the guard from either
+ * statsDrivenSearch or standardSearch turns this red.
+ */
+function assertEverySelectIsGuarded(callOrder: string[], executedStatements: SQL[]): void {
+  assert.ok(callOrder.length > 0, 'expected at least one statement');
+  assert.equal(callOrder.length % 2, 0, `expected alternating execute/select pairs; saw: ${callOrder.join(', ')}`);
+  for (let index = 0; index < callOrder.length; index += 2) {
+    assert.equal(
+      callOrder[index],
+      'execute',
+      `statement ${index} must be the SET LOCAL guard: ${callOrder.join(', ')}`,
+    );
+    assert.equal(callOrder[index + 1], 'select', `statement ${index + 1} must be the SELECT: ${callOrder.join(', ')}`);
+  }
+  const rendered = executedStatements.map((statement) => dialect.sqlToQuery(statement).sql);
+  assert.equal(rendered.length, callOrder.length / 2, 'every SELECT must have its own executed guard statement');
+  for (const statement of rendered) {
+    assert.ok(
+      GUARD_PATTERN.test(statement),
+      `expected a SET LOCAL max_parallel_workers_per_gather = 0 guard; saw: ${statement}`,
+    );
+  }
+}
 
 const SEARCH_PARAMS: BoardRouteParams = {
   board_name: 'kilter',
@@ -222,14 +274,32 @@ const SEARCH_PARAMS: BoardRouteParams = {
   angle: 40,
 };
 
-void describe('statsDrivenSearch — DSM parallelism guard (#3856)', () => {
+void describe('search queries — DSM parallelism guard (#3856)', () => {
   void it('runs the stats-driven query inside a transaction that disables per-gather parallelism first', async () => {
+    const { fakeDb, callOrder, executedStatements, queries } = createFakeSearchDb();
+
+    // minAscents makes this 'stats-driven-only' (a stats predicate can't be met
+    // through the LEFT JOIN), isolating the assertion to statsDrivenSearch's own
+    // guard — the same shape as the production repro (Sentry BOARDSESH-AK: page 1,
+    // narrow grade band, pageSize 100).
+    await searchClimbs(fakeDb as unknown as DbInstance, SEARCH_PARAMS, {
+      page: 1,
+      pageSize: 100,
+      sortBy: 'ascents',
+      sortOrder: 'desc',
+      minAscents: 1,
+    });
+
+    assert.deepEqual(callOrder, ['execute', 'select'], 'stats filters must keep this on the stats-driven path only');
+    assert.equal(queries[0].table, 'board_climb_stats');
+    assertEverySelectIsGuarded(callOrder, executedStatements);
+  });
+
+  void it('guards both queries when the stats-driven path falls back to the standard search', async () => {
+    // No stats filters + an empty stats-driven page ⇒ the fallback runs too, so
+    // this covers standardSearch's guard (07dfe54b2) in the same walk.
     const { fakeDb, callOrder, executedStatements } = createFakeSearchDb();
 
-    // page:1 forces chooseSearchPath to 'stats-driven-only' (no standardSearch
-    // fallback), isolating this assertion to statsDrivenSearch's own guard —
-    // the same page shape as the production repro (Sentry BOARDSESH-AK: page 1,
-    // narrow grade band, pageSize 100).
     await searchClimbs(fakeDb as unknown as DbInstance, SEARCH_PARAMS, {
       page: 1,
       pageSize: 100,
@@ -237,12 +307,8 @@ void describe('statsDrivenSearch — DSM parallelism guard (#3856)', () => {
       sortOrder: 'desc',
     });
 
-    assert.deepEqual(callOrder, ['execute', 'select'], 'SET LOCAL must run before the stats-driven SELECT');
-    const renderedGuards = executedStatements.map((statement) => dialect.sqlToQuery(statement).sql);
-    assert.ok(
-      renderedGuards.some((statement) => GUARD_PATTERN.test(statement)),
-      `expected a SET LOCAL max_parallel_workers_per_gather = 0 guard; saw: ${renderedGuards.join(', ')}`,
-    );
+    assert.deepEqual(callOrder, ['execute', 'select', 'execute', 'select']);
+    assertEverySelectIsGuarded(callOrder, executedStatements);
   });
 
   void it('also guards the quality-sort stats-driven path', async () => {
@@ -253,13 +319,98 @@ void describe('statsDrivenSearch — DSM parallelism guard (#3856)', () => {
       pageSize: 20,
       sortBy: 'quality',
       sortOrder: 'desc',
+      minRating: 3,
     });
 
-    assert.deepEqual(callOrder, ['execute', 'select'], 'SET LOCAL must run before the stats-driven SELECT');
-    const renderedGuards = executedStatements.map((statement) => dialect.sqlToQuery(statement).sql);
+    assert.deepEqual(callOrder, ['execute', 'select']);
+    assertEverySelectIsGuarded(callOrder, executedStatements);
+  });
+});
+
+void describe('stats-driven fallback past the first page (#1971)', () => {
+  void it('falls back to the LEFT JOIN search on page 2 and returns the fallback query results', async () => {
+    // First select (stats-driven) returns fewer than pageSize+1 rows ⇒ partial page.
+    // Second select (fallback) returns pageSize+1 rows ⇒ trimmed page with hasMore.
+    const { fakeDb, queries } = createFakeSearchDb([
+      [fakeRow('stats-only-1')],
+      [fakeRow('unified-1'), fakeRow('unified-2'), fakeRow('unified-3')],
+    ]);
+
+    const result = await searchClimbs(fakeDb as unknown as DbInstance, SEARCH_PARAMS, {
+      page: 2,
+      pageSize: 2,
+      sortBy: 'ascents',
+      sortOrder: 'desc',
+    });
+
+    assert.equal(queries.length, 2, 'a partial stats-driven page past page 0 must still fall back');
+    assert.equal(queries[0].table, 'board_climb_stats', 'the first query is the stats-driven INNER JOIN');
+    assert.equal(queries[1].table, 'board_climbs', 'the fallback query is the unified LEFT JOIN');
+    assert.deepEqual(
+      result.climbs.map((climb) => climb.uuid),
+      ['unified-1', 'unified-2'],
+      'searchClimbs must return the fallback rows, not the truncated stats-driven ones',
+    );
+    assert.equal(result.hasMore, true, 'hasMore must come from the fallback query');
+  });
+
+  void it('keeps a full stats-driven page as-is (no fallback when the page is not exhausted)', async () => {
+    const { fakeDb, queries } = createFakeSearchDb([[fakeRow('stats-1'), fakeRow('stats-2'), fakeRow('stats-3')]]);
+
+    const result = await searchClimbs(fakeDb as unknown as DbInstance, SEARCH_PARAMS, {
+      page: 2,
+      pageSize: 2,
+      sortBy: 'ascents',
+      sortOrder: 'desc',
+    });
+
+    assert.equal(queries.length, 1, 'a full stats-driven page must not pay for a second query');
+    assert.deepEqual(
+      result.climbs.map((climb) => climb.uuid),
+      ['stats-1', 'stats-2'],
+    );
+    assert.equal(result.hasMore, true);
+  });
+
+  void it('orders stats-having climbs ahead of stats-less ones in the fallback query only', async () => {
+    const { fakeDb, queries } = createFakeSearchDb();
+
+    await searchClimbs(fakeDb as unknown as DbInstance, SEARCH_PARAMS, {
+      page: 2,
+      pageSize: 2,
+      sortBy: 'ascents',
+      sortOrder: 'desc',
+    });
+
+    assert.equal(queries.length, 2);
+    // The stats-driven query INNER JOINs, so every row has a stats row — no key.
     assert.ok(
-      renderedGuards.some((statement) => GUARD_PATTERN.test(statement)),
-      `expected a SET LOCAL max_parallel_workers_per_gather = 0 guard; saw: ${renderedGuards.join(', ')}`,
+      !queries[0].orderBy.some((fragment) => STATS_PRESENCE_KEY_PATTERN.test(fragment)),
+      `stats-driven query must not carry the stats-presence key; saw: ${queries[0].orderBy.join(' | ')}`,
+    );
+    assert.ok(
+      STATS_PRESENCE_KEY_PATTERN.test(queries[1].orderBy[0] ?? ''),
+      `fallback ORDER BY must LEAD with the stats-presence key; saw: ${queries[1].orderBy.join(' | ')}`,
+    );
+  });
+
+  void it('does not add the stats-presence key to a standard-only search', async () => {
+    const { fakeDb, queries } = createFakeSearchDb();
+
+    // 'creation' has no stats-driven index path ⇒ standard-only. Adding the key
+    // here would reorder creation/name/popular and break the random shuffle.
+    await searchClimbs(fakeDb as unknown as DbInstance, SEARCH_PARAMS, {
+      page: 2,
+      pageSize: 2,
+      sortBy: 'creation',
+      sortOrder: 'desc',
+    });
+
+    assert.equal(queries.length, 1);
+    assert.equal(queries[0].table, 'board_climbs');
+    assert.ok(
+      !queries[0].orderBy.some((fragment) => STATS_PRESENCE_KEY_PATTERN.test(fragment)),
+      `standard-only query must not carry the stats-presence key; saw: ${queries[0].orderBy.join(' | ')}`,
     );
   });
 });

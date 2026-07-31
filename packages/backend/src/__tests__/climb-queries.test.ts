@@ -749,4 +749,110 @@ describe('Climb Query Functions', () => {
       });
     });
   });
+
+  // Issue #1971. The stats-driven search INNER JOINs board_climb_stats, so climbs
+  // with no stats row at the searched angle are invisible to it. It used to fall
+  // back to the unified LEFT JOIN search only on page 0, so a narrow filter went
+  // silent past its last stats-having climb — while countClimbs kept counting the
+  // stats-less ones, leaving the header count higher than the list and firing
+  // "no more climbs" early. This walks a seeded 5-climb result set to exhaustion
+  // against real Postgres, so it can't be satisfied by re-deriving the routing rule.
+  describe('stats-having boundary pagination (#1971)', () => {
+    const PREFIX = 'STATS-BOUNDARY-TEST-';
+    const id = (suffix: string) => PREFIX + suffix;
+    // Dedicated setter so `settername` narrows the search to exactly these climbs.
+    const BOUNDARY_SETTER = 'stats-boundary-setter';
+
+    const boundaryParams: ParsedBoardRouteParameters = {
+      board_name: 'kilter',
+      layout_id: 1,
+      size_id: 7,
+      set_ids: [1],
+      angle: 40,
+    };
+
+    // The order the unified list must come back in under ascents DESC:
+    // stats-having by ascensionist_count DESC NULLS LAST, then stats-less by uuid DESC.
+    const STATS_HAVING = [id('a-ascents-100'), id('b-ascents-50'), id('c-ascents-null')];
+    const STATS_LESS = [id('e-no-stats'), id('d-no-stats')];
+    const ALL_SEEDED = [...STATS_HAVING, ...STATS_LESS];
+
+    const boundarySearch = (page: number): ClimbSearchParams => ({
+      page,
+      pageSize: 2,
+      sortBy: 'ascents',
+      sortOrder: 'desc',
+      settername: [BOUNDARY_SETTER],
+    });
+
+    beforeAll(async () => {
+      await db.execute(sql`
+        INSERT INTO board_climbs (uuid, board_type, layout_id, setter_username, name, frames, frames_count, is_draft, is_listed, edge_left, edge_right, edge_bottom, edge_top, created_at, required_set_ids, compatible_size_ids)
+        VALUES
+          (${id('a-ascents-100')}, 'kilter', 1, ${BOUNDARY_SETTER}, 'Boundary A', 'p600r12', 1, false, true, 10, 100, 10, 150, '2024-01-01', ARRAY[1], ARRAY[7]),
+          (${id('b-ascents-50')}, 'kilter', 1, ${BOUNDARY_SETTER}, 'Boundary B', 'p601r12', 1, false, true, 10, 100, 10, 150, '2024-01-01', ARRAY[1], ARRAY[7]),
+          (${id('c-ascents-null')}, 'kilter', 1, ${BOUNDARY_SETTER}, 'Boundary C', 'p602r12', 1, false, true, 10, 100, 10, 150, '2024-01-01', ARRAY[1], ARRAY[7]),
+          (${id('d-no-stats')}, 'kilter', 1, ${BOUNDARY_SETTER}, 'Boundary D', 'p603r12', 1, false, true, 10, 100, 10, 150, '2024-01-01', ARRAY[1], ARRAY[7]),
+          (${id('e-no-stats')}, 'kilter', 1, ${BOUNDARY_SETTER}, 'Boundary E', 'p604r12', 1, false, true, 10, 100, 10, 150, '2024-01-01', ARRAY[1], ARRAY[7])
+        ON CONFLICT DO NOTHING
+      `);
+
+      // Only A, B and C have a stats row at angle 40. C's ascensionist_count is NULL
+      // so it sits in the NULLS-LAST tail — the exact spot where the fallback's
+      // ordering could otherwise interleave it with the stats-less climbs.
+      await db.execute(sql`
+        INSERT INTO board_climb_stats (board_type, climb_uuid, angle, display_difficulty, ascensionist_count, difficulty_average, quality_average)
+        VALUES
+          ('kilter', ${id('a-ascents-100')}, 40, 20.0, 100, 20.0, 4.0),
+          ('kilter', ${id('b-ascents-50')}, 40, 20.0, 50, 20.0, 3.0),
+          ('kilter', ${id('c-ascents-null')}, 40, 20.0, NULL, 20.0, NULL)
+        ON CONFLICT DO NOTHING
+      `);
+    });
+
+    afterAll(async () => {
+      await db.execute(sql`DELETE FROM board_climb_stats WHERE climb_uuid LIKE ${PREFIX + '%'}`);
+      await db.execute(sql`DELETE FROM board_climbs WHERE uuid LIKE ${PREFIX + '%'}`);
+    });
+
+    it('pages past the last stats-having climb instead of stopping there', async () => {
+      const collected: string[] = [];
+      let pagesWalked = 0;
+      let hasMore = true;
+      // Bounded so a hasMore that never clears fails loudly instead of hanging.
+      while (hasMore && pagesWalked < 10) {
+        const result = await searchClimbs(boundaryParams, boundarySearch(pagesWalked));
+        collected.push(...result.climbs.map((climb) => climb.uuid));
+        hasMore = result.hasMore;
+        pagesWalked += 1;
+      }
+
+      expect(pagesWalked).toBeLessThan(10);
+      // No climb served twice across the stats-having → stats-less boundary.
+      expect(new Set(collected).size).toBe(collected.length);
+      // Every seeded climb reachable by paging — the regression the issue reports.
+      expect([...collected].sort()).toEqual([...ALL_SEEDED].sort());
+
+      // The header badge and the visible list must finally agree.
+      const totalCount = await countClimbs(boundaryParams, boundarySearch(0));
+      expect(collected.length).toBe(totalCount);
+
+      // Stats-having climbs first, in ascents-DESC order with the NULL count last,
+      // then the stats-less climbs by uuid DESC.
+      expect(collected.slice(0, STATS_HAVING.length)).toEqual(STATS_HAVING);
+      expect(collected.slice(STATS_HAVING.length)).toEqual(STATS_LESS);
+    });
+
+    it('keeps stats filters on the stats-driven path (stats-less climbs stay excluded)', async () => {
+      // minAscents is a stats predicate, so countClimbs excludes stats-less climbs
+      // too — routing this through the fallback would only double the query count
+      // without surfacing anything new.
+      const statsFiltered: ClimbSearchParams = { ...boundarySearch(0), pageSize: 100, minAscents: 1 };
+      const result = await searchClimbs(boundaryParams, statsFiltered);
+      const uuids = result.climbs.map((climb) => climb.uuid).filter((uuid) => uuid.startsWith(PREFIX));
+
+      expect(uuids).toEqual([id('a-ascents-100'), id('b-ascents-50')]);
+      expect(await countClimbs(boundaryParams, statsFiltered)).toBe(2);
+    });
+  });
 });

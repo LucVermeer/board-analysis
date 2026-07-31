@@ -85,7 +85,10 @@ function _getCachedFn(boardName: BoardName, revalidate: number): CachedClimbSear
     // v6: onlyBenchmarks now included in buildClimbSearchParamsJson (was previously
     // omitted entirely, so the SSR path never forwarded it — see issue #2320). The key
     // rotates naturally since the JSON payload gains a field, but bumping documents intent.
-    fn = unstable_cache(_executeClimbSearch, [`climb-search-v6:${boardName}`], {
+    // v7: searches past the stats-having boundary now return stats-less climbs (issue
+    // #1971), and the stats-driven fallback orders stats-having climbs ahead of
+    // stats-less ones — cached truncated pages must not keep serving the old result.
+    fn = unstable_cache(_executeClimbSearch, [`climb-search-v7:${boardName}`], {
       revalidate,
       tags: ['climb-search', getBoardClimbSearchTag(boardName)],
     });

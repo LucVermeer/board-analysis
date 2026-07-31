@@ -271,6 +271,42 @@ if (!EXPLAIN_DB_URL) {
       },
     );
 
+    void it('page>0 fallback (#1971) runs SET LOCAL before its SELECT and stays serial', async () => {
+      // A setter nobody has: statsDrivenSearch exhausts its stats-having set
+      // immediately, so page 1 takes the fallback and we get a SECOND select —
+      // the LEFT JOIN query the page-0 gate used to prevent past page 0. The only
+      // invariant that matters here is that it can't allocate parallel-sort DSM
+      // segments (the #1969 / #3856 failure mode). Plan shape beyond that is
+      // statistics-dependent and deliberately not asserted.
+      const statements = await runSearch({
+        page: 1,
+        pageSize: 20,
+        sortBy: 'ascents',
+        sortOrder: 'desc',
+        settername: ['boardsesh-explain-harness-no-such-setter'],
+      });
+      const selects = tableSelects(statements);
+      assert.equal(selects.length, 2, 'an exhausted stats-driven page past page 0 must fall back');
+      assert.ok(/board_climbs/.test(selects[1].query), 'the fallback query is the unified LEFT JOIN');
+
+      // Every SELECT must be immediately preceded by its own SET LOCAL guard.
+      const kinds = statements.map((statement) =>
+        /SET LOCAL max_parallel_workers_per_gather\s*=\s*0/i.test(statement.query) ? 'guard' : 'select',
+      );
+      assert.deepEqual(kinds, ['guard', 'select', 'guard', 'select']);
+
+      // Smoke test only, and deliberately weak: the harness setter matches zero rows,
+      // so the planner picks a trivial serial plan whatever the GUC says. The
+      // statement-ordering assertion above is what actually guards #1969 / #3856.
+      const nodes = await explainNodes(selects[1].query, selects[1].params, GUARD);
+      assert.equal(
+        hasGatherNode(nodes),
+        false,
+        'the fallback must not produce a parallel Gather under the SET LOCAL guard',
+      );
+      if (RUN_ANALYZE) await logTiming('#1971 page-1 fallback', selects[1]);
+    });
+
     void it('random sort is deterministic per seed, reshuffles across seeds, and paginates without overlap', async () => {
       const uuidsFor = async (sortSeed: string, page = 0) =>
         (await searchClimbs(db, PARAMS, { page, pageSize: 15, sortBy: 'random', sortSeed })).climbs.map((c) => c.uuid);
