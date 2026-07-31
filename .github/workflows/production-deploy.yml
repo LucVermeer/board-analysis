@@ -543,9 +543,16 @@ jobs:
   # detect-changes. No inline Playwright smoke gate — a per-deploy expo-web boot
   # is too heavy here (this file has no such gate for web/backend either); the
   # expo-web-smoke suite stays the dispatch-only gate in e2e-tests.yml.
+  # Manual deploy freeze for app.boardsesh.com, the Cloudflare Pages analogue of
+  # check-rollback. deploy-web and deploy-production-backend both honour a pinned
+  # Vercel Instant Rollback; Pages has no equivalent signal here, so without this
+  # a dashboard rollback of the subdomain is silently clobbered by the next merge
+  # touching packages/mobile, packages/shared, packages/shared-schema, the export
+  # script, or deploy/app-subdomain. Set the repo variable APP_WEB_DEPLOY_HOLD to
+  # any non-empty value to hold the subdomain where it is; clear it to resume.
   deploy-app-web:
     needs: [detect-changes]
-    if: needs.detect-changes.outputs.app_changed == 'true'
+    if: needs.detect-changes.outputs.app_changed == 'true' && vars.APP_WEB_DEPLOY_HOLD == ''
     runs-on: ubuntu-latest
     environment: Production
     steps:
@@ -724,6 +731,34 @@ jobs:
   #         echo "Waiting for staging backend to be healthy..."
   #         sleep 5
   #         docker ps --filter "name=staging-backend" --format "table {{.Names}}\t{{.Status}}"
+
+  # Pings Discord when an app.boardsesh.com deploy was skipped by the freeze.
+  # Without this the hold is invisible: a skipped job just shows grey in the run
+  # summary, so a forgotten APP_WEB_DEPLOY_HOLD would quietly strand the
+  # subdomain on an old bundle. No-ops if DISCORD_DEPLOY_WEBHOOK is unset.
+  notify-app-web-held:
+    needs: [detect-changes]
+    if: needs.detect-changes.outputs.app_changed == 'true' && vars.APP_WEB_DEPLOY_HOLD != ''
+    runs-on: ubuntu-latest
+    environment: Production
+    steps:
+      - name: Notify Discord (app.boardsesh.com deploy held)
+        env:
+          DISCORD_DEPLOY_WEBHOOK: ${{ secrets.DISCORD_DEPLOY_WEBHOOK }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          if [ -z "$DISCORD_DEPLOY_WEBHOOK" ]; then
+            echo "DISCORD_DEPLOY_WEBHOOK not set — skipping notification"
+            exit 0
+          fi
+          # URL wrapped in <…> so Discord suppresses the inline preview embed.
+          CONTENT=$(printf '🧊 **app.boardsesh.com deploy held** on `%s`\nAPP_WEB_DEPLOY_HOLD is set, so this commit did NOT ship to the browser app. The subdomain stays on its current deployment.\nClear the `APP_WEB_DEPLOY_HOLD` repo variable and re-run to resume.\n<%s>' \
+            "${COMMIT_SHA:0:7}" "$RUN_URL")
+          # allowed_mentions.parse=[] blocks @everyone/@here/role/user pings.
+          jq -n --arg content "$CONTENT" '{content: $content, allowed_mentions: {parse: []}}' \
+            | curl -sS --fail-with-body -X POST -H "Content-Type: application/json" -d @- "$DISCORD_DEPLOY_WEBHOOK" || \
+              echo "::warning::Failed to post Discord notification (see status above)"
 
   # Pings Discord when a deploy ran during an active rollback: the release was
   # built and staged but NOT promoted, so production is still on the pinned
