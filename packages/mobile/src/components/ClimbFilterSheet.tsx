@@ -49,6 +49,7 @@ import { useTheme } from '../providers/theme-provider';
 import { useManagedSheet } from '../providers/sheet-presentation-provider';
 import { androidSafeSnapPoints } from './sheet-snap-points';
 import { useSheetColumnStyle } from './use-sheet-column-style';
+import { useSheetDetentProbe } from './sheet-detent-probe';
 import { useGrades, useSearchClimbsCount } from '../lib/graphql/hooks';
 import type { BoardName, HoldsFilter } from '@boardsesh/shared-schema';
 import { getTallWideScope } from '@boardsesh/board-constants';
@@ -264,6 +265,9 @@ export function ClimbFilterSheet({
   // (#3330). The shared hook pins the column to this single detent's height;
   // Android bounds the column natively, so it keeps flex:1.
   const sheetColumnStyle = useSheetColumnStyle(detentSnapPoints);
+  // Dev-only observers for #3922 — they feed a log line, never layout. This is
+  // the sheet #3776 was reported against, so it is the one to capture on an SE 3.
+  const { probeProps, sentinelProps, onColumnLayout } = useSheetDetentProbe(sheetColumnStyle, 'ClimbFilterSheet');
   // Tall/Wide apply on any board whose active size has a shorter/narrower sibling
   // in its family (getTallWideScope — the shared source of truth the chip row and
   // server filter use), not just Kilter. Each toggle renders only where it applies,
@@ -721,11 +725,17 @@ export function ClimbFilterSheet({
       onFullyDismissed={managed.onFullyDismissed}
       handleIndicatorStyle={[styles.indicator, { backgroundColor: systemColors.separator }]}
     >
+      {/* #3922 instrumentation, dev builds only. The sentinel is in-flow but
+          zero-height and the probe is absolutely positioned, so neither adds
+          anything to the wrapper's content size — the one-in-flow-child rule
+          below still holds. */}
+      {sentinelProps ? <View {...sentinelProps} /> : null}
+      {probeProps ? <View {...probeProps} /> : null}
       {/* One column child bounded to the detent height (JS-computed on iOS, see
           sheetColumnStyle) — the scroll body then actually scrolls and the
           footer pins. Handed multiple direct children, the native sheet sizes
           to content and the flex:1 ScrollView collapses (no scrolling). */}
-      <View style={sheetColumnStyle}>
+      <View style={sheetColumnStyle} onLayout={onColumnLayout}>
         <View style={styles.header}>
           <Text variant="title3">{t('mobile.filter.title')}</Text>
           <Pressable onPress={handleReset} hitSlop={8} accessibilityRole="button" disabled={!anyActive}>
