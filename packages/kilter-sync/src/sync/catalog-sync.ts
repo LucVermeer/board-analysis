@@ -291,6 +291,30 @@ function guardDifficulty(difficulty: number | null | undefined): number | null {
   return difficulty != null && difficulty > 1 ? difficulty : null;
 }
 
+/**
+ * Whether a per-(canonical, angle) accumulator carries no real information at
+ * all: zero ascents and nothing (grade, quality, first-ascent) to display.
+ * Grips reports a stat row for every angle a layout supports, including ones
+ * nobody has actually climbed — those rows are already guarded to NULL
+ * displayDifficulty/qualityAverage (see guardDifficulty / correctGripsQualityAverage),
+ * but without this check they'd still produce an all-null board_climb_stats
+ * INSERT: a phantom row for a (climb, angle) pair nobody has climbed (issue
+ * #3522). A row with a real grade but 0 ascents (freshly set, unclimbed) or
+ * real ascents but no grade yet is NOT empty and must still be written — only
+ * skip the case where every field is genuinely absent. Pure + exported for
+ * unit testing.
+ */
+export function shouldSkipEmptyCatalogStat(accum: StatAccum): boolean {
+  return (
+    accum.kilterCount === 0 &&
+    accum.displayDifficulty == null &&
+    accum.difficultyAverage == null &&
+    accum.qualityAverage == null &&
+    accum.faUsername == null &&
+    accum.faAt == null
+  );
+}
+
 export function foldCatalogStatOnce(
   accumByKey: Map<string, StatAccum>,
   seenSourceStats: Set<string>,
@@ -687,27 +711,29 @@ async function syncBoardLayoutGroup(
     }
   }
 
-  const statValues = [...statsByCanonicalAngle.values()].map((accum) => ({
-    boardType: KILTER,
-    climbUuid: accum.canonicalUuid,
-    angle: accum.angle,
-    displayDifficulty: accum.displayDifficulty,
-    difficultyAverage: accum.difficultyAverage,
-    qualityAverage: accum.qualityAverage,
-    // The manufacturer average also seeds upstream_quality_average (the blend's
-    // upstream term). On a fresh INSERT quality_average == this value because no
-    // Boardsesh votes exist yet; on conflict quality_average is re-blended below.
-    upstreamQualityAverage: accum.qualityAverage,
-    // qualityAverage is Grips' own 1-5 value, stored verbatim in the fold above
-    // (correctGripsQualityAverage only drops non-ratings).
-    qualityNormalized: true,
-    faUsername: accum.faUsername,
-    faAt: accum.faAt,
-    upstreamAscensionistCount: accum.kilterCount,
-    ascensionistCount: accum.kilterCount,
-    // Record that a Kilter Grips catalog sync last touched this row.
-    upstreamSyncedAt: new Date().toISOString(),
-  }));
+  const statValues = [...statsByCanonicalAngle.values()]
+    .filter((accum) => !shouldSkipEmptyCatalogStat(accum))
+    .map((accum) => ({
+      boardType: KILTER,
+      climbUuid: accum.canonicalUuid,
+      angle: accum.angle,
+      displayDifficulty: accum.displayDifficulty,
+      difficultyAverage: accum.difficultyAverage,
+      qualityAverage: accum.qualityAverage,
+      // The manufacturer average also seeds upstream_quality_average (the blend's
+      // upstream term). On a fresh INSERT quality_average == this value because no
+      // Boardsesh votes exist yet; on conflict quality_average is re-blended below.
+      upstreamQualityAverage: accum.qualityAverage,
+      // qualityAverage is Grips' own 1-5 value, stored verbatim in the fold above
+      // (correctGripsQualityAverage only drops non-ratings).
+      qualityNormalized: true,
+      faUsername: accum.faUsername,
+      faAt: accum.faAt,
+      upstreamAscensionistCount: accum.kilterCount,
+      ascensionistCount: accum.kilterCount,
+      // Record that a Kilter Grips catalog sync last touched this row.
+      upstreamSyncedAt: new Date().toISOString(),
+    }));
   if (statValues.length > 0) {
     // The NEW upstream count this upsert resolves to: GREATEST of stored and
     // incoming, so a stale/partial sync can never lower a climb. Defined ONCE and
