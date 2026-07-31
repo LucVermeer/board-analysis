@@ -69,9 +69,10 @@ object AtomicFileWrite {
             ?: throw IOException("Atomic destination has no parent: ${destination.absolutePath}")
         val tempFile = try {
             File.createTempFile(TEMP_PREFIX, TEMP_SUFFIX, parentDirectory)
-        } catch (failure: IOException) {
-            throw failure
         } catch (failure: Exception) {
+            // Keep a raw temp-creation I/O failure intact for recovery instead
+            // of wrapping it with the broader non-I/O normalization below.
+            if (failure is IOException) throw failure
             throw IOException(
                 "Failed to create an overlay temp file in ${parentDirectory.absolutePath}",
                 failure,
@@ -85,11 +86,10 @@ object AtomicFileWrite {
                 }
             }
             committer.commit(tempFile, destination)
-        } catch (failure: IOException) {
-            // Preserve the exact filesystem failure (and its suppressed close
-            // failure, if any) so recovery and diagnostics see the real cause.
-            throw failure
         } catch (failure: Exception) {
+            // Preserve an existing filesystem failure (and any suppressed close
+            // failure) rather than wrapping it inside another IOException.
+            if (failure is IOException) throw failure
             // SecurityException and any encoder/publisher exception still need
             // to enter CacheDirRecovery's IOException-only retry contract.
             throw IOException(
@@ -100,11 +100,7 @@ object AtomicFileWrite {
             // No-op after a successful rename. Cleanup must never replace the
             // original write/close/commit exception; an undeletable orphan is
             // picked up by CachePruner on the next module start.
-            try {
-                tempFile.delete()
-            } catch (_: SecurityException) {
-                // Best effort only; preserve the pipeline's primary result.
-            }
+            tempFile.delete()
         }
     }
 }

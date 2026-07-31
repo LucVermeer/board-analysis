@@ -135,6 +135,8 @@ class AtomicFileWriteTest {
     @Test
     fun `a close IOException is preserved and commit is never attempted`() {
         val destination = File(cacheDir, "climb.png")
+        val previousRender = byteArrayOf(9, 9, 9)
+        destination.writeBytes(previousRender)
         val closeFailure = IOException("simulated close failure")
         var commitCalled = false
         val neverCommit = AtomicFileCommitter { _, _ -> commitCalled = true }
@@ -162,7 +164,7 @@ class AtomicFileWriteTest {
 
         assertSame(closeFailure, thrown)
         assertFalse(commitCalled)
-        assertFalse(destination.exists())
+        assertArrayEquals(previousRender, destination.readBytes())
         assertTrue(managedTempFiles().isEmpty())
     }
 
@@ -354,8 +356,8 @@ class AtomicFileWriteTest {
         firstThread.join(5_000)
         secondThread.join(5_000)
 
-        assertFalse("first publisher completed", firstThread.isAlive)
-        assertFalse("second publisher completed", secondThread.isAlive)
+        assertFalse("first publisher thread timed out", firstThread.isAlive)
+        assertFalse("second publisher thread timed out", secondThread.isAlive)
         assertTrue("both atomic renames succeeded: $failures", failures.isEmpty())
         val publishedBytes = destination.readBytes()
         assertTrue(
