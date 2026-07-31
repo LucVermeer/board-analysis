@@ -78,7 +78,16 @@ class BoardRendererModule : Module() {
             // Android can reclaim context.cacheDir mid-session, which deletes
             // the directory out from under us and makes every later write fail
             // with FileNotFoundException. Re-create it and try once more.
-            CacheDirRecovery.retryOnceAfterRecreating(cacheDir) {
+            CacheDirRecovery.retryOnceAfterRecreating(
+                cacheDir,
+                onRecovered = { writeFailure ->
+                    android.util.Log.w(
+                        "BoardRenderer",
+                        "Cache dir ${cacheDir.absolutePath} was gone; re-created it and retrying the write",
+                        writeFailure
+                    )
+                },
+            ) {
                 FileOutputStream(outputFile).use { outputStream ->
                     val written = overlayBitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
                     if (!written) {

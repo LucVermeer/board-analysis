@@ -31,15 +31,24 @@ public class BoardRendererModule: Module {
   /// it's gone every later write throws and hold overlays silently stop drawing
   /// until the app relaunches. Re-create it and retry the write exactly once.
   ///
-  /// A failure with the directory still in place (out of disk space, a
-  /// protected volume) propagates immediately rather than being retried.
+  /// The gate is "is the directory there now" — same rule as the Android twin
+  /// in `CacheDirRecovery`. A path we can't turn into a directory (protected or
+  /// read-only volume) rethrows the original error, and the retry is bounded to
+  /// a single extra attempt, so a persistently broken filesystem still fails
+  /// fast instead of looping.
   private func retryOnceAfterRecreatingCacheDir<T>(_ action: () throws -> T) throws -> T {
     do {
       return try action()
     } catch {
-      guard !FileManager.default.fileExists(atPath: cacheDir.path) else { throw error }
-      NSLog("[BoardRenderer] Cache dir at \(cacheDir.path) had vanished; re-creating and retrying")
-      try FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
+      // `withIntermediateDirectories: true` is a no-op when the directory is
+      // already back, so this covers both "we restored it" and "something else
+      // restored it first".
+      try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
+      var isDirectory: ObjCBool = false
+      guard FileManager.default.fileExists(atPath: cacheDir.path, isDirectory: &isDirectory),
+        isDirectory.boolValue
+      else { throw error }
+      NSLog("[BoardRenderer] Cache dir at \(cacheDir.path) was gone; re-created it and retrying the write")
       return try action()
     }
   }

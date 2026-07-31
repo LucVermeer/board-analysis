@@ -42,14 +42,6 @@ android {
       path 'src/main/cpp/CMakeLists.txt'
     }
   }
-
-  testOptions {
-    // CacheDirRecovery logs through android.util.Log on the (tested) retry
-    // path, and the JVM stub android.jar throws on every un-mocked call. The
-    // recovery logic itself is plain java.io.File work, so returning defaults
-    // for the Android stubs is enough — no Robolectric needed.
-    unitTests.returnDefaultValues = true
-  }
 }
 
 dependencies {

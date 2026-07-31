@@ -12,27 +12,39 @@ import java.io.IOException
  * hold overlays silently stop drawing until the app is restarted.
  *
  * This re-creates the directory and retries the write exactly once.
+ *
+ * Pure `java.io` on purpose — no Android framework calls — so the JVM unit tests
+ * in `CacheDirRecoveryTest` need neither Robolectric nor a module-wide
+ * `unitTests.returnDefaultValues` escape hatch (which would silently no-op any
+ * Android API a future test touches). The diagnostic log lives at the call site
+ * in [BoardRendererModule], through the `onRecovered` callback.
  */
 object CacheDirRecovery {
     /**
-     * Runs [action]. If it fails with an [IOException] *and* [cacheDir] is
-     * missing, re-creates the directory and runs [action] one more time.
+     * Runs [action]. If it fails with an [IOException] and [cacheDir] is a
+     * directory again afterwards, invokes [onRecovered] and runs [action] one
+     * more time.
      *
-     * `mkdirs()` returns false when the directory already exists, so an
-     * IO failure with the directory still in place (out of disk space, a
-     * read-only volume) propagates immediately instead of being retried —
-     * the retry is bounded to a single extra attempt either way.
+     * The gate is "is the directory there now", not "did *this* call create
+     * it": `mkdirs()` returns false both when the directory is already back
+     * (something else restored it between the failure and here) and when it
+     * can't be created at all, and only the second case should give up. A path
+     * we genuinely can't turn into a directory — read-only volume, a regular
+     * file sitting on the path — rethrows the original failure. That matches
+     * the iOS twin's rule, and the retry is bounded to a single extra attempt
+     * either way, so a persistently broken filesystem still fails fast.
      */
-    fun <T> retryOnceAfterRecreating(cacheDir: File, action: () -> T): T {
+    fun <T> retryOnceAfterRecreating(
+        cacheDir: File,
+        onRecovered: (IOException) -> Unit = {},
+        action: () -> T,
+    ): T {
         return try {
             action()
         } catch (writeFailure: IOException) {
-            if (!cacheDir.mkdirs()) throw writeFailure
-            android.util.Log.w(
-                "BoardRenderer",
-                "Cache dir ${cacheDir.absolutePath} had vanished; re-created it and retrying the write",
-                writeFailure
-            )
+            cacheDir.mkdirs()
+            if (!cacheDir.isDirectory) throw writeFailure
+            onRecovered(writeFailure)
             action()
         }
     }
