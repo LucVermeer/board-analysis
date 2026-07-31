@@ -8,7 +8,7 @@ import {
 } from '@boardsesh/shared-schema';
 import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
-import { toConfidenceTier } from '@boardsesh/db/queries';
+import { toConfidenceTier, notAuroraTwinDuplicate } from '@boardsesh/db/queries';
 import { requireAuthenticated, applyRateLimit, validateInput, isNoMatchClimb } from '../shared/helpers';
 import {
   consensusDifficultyNameExpr,
@@ -92,6 +92,11 @@ function buildAscentTickConditions(validated: AscentFeedFilterInput, userId: str
 
   const conditions = [
     eq(dbSchema.boardseshTicks.userId, userId),
+    // Aurora's own duplicate ascents count once (#3535). Sits in the SHARED
+    // conditions so the page query, the count query and the grouped feed's
+    // per-group tick fetch all collapse the same twins — a feed that showed a
+    // send once but counted it four times would be its own bug.
+    notAuroraTwinDuplicate(dbSchema.boardseshTicks),
     ...(validated.boardType ? [eq(dbSchema.boardseshTicks.boardType, validated.boardType)] : []),
     ...(validated.boardTypes && validated.boardTypes.length > 0 && !validated.boardType
       ? [inArray(dbSchema.boardseshTicks.boardType, validated.boardTypes)]
@@ -221,6 +226,8 @@ export const tickQueries = {
     const conditions = [
       eq(dbSchema.boardseshTicks.userId, userId),
       eq(dbSchema.boardseshTicks.boardType, input.boardType),
+      // Aurora's own duplicate ascents show up once (#3535).
+      notAuroraTwinDuplicate(dbSchema.boardseshTicks),
     ];
 
     if (input.climbUuids && input.climbUuids.length > 0) {
@@ -341,7 +348,14 @@ export const tickQueries = {
   userTicks: async (_: unknown, { userId, boardType }: { userId: string; boardType: string }): Promise<unknown[]> => {
     validateInput(BoardNameSchema, boardType, 'boardType');
 
-    const conditions = [eq(dbSchema.boardseshTicks.userId, userId), eq(dbSchema.boardseshTicks.boardType, boardType)];
+    const conditions = [
+      eq(dbSchema.boardseshTicks.userId, userId),
+      eq(dbSchema.boardseshTicks.boardType, boardType),
+      // Aurora's own duplicate ascents count once (#3535). This resolver feeds
+      // the You page's send totals and grade charts via deriveProfileViewModel,
+      // so a twin left in here inflates every one of those numbers.
+      notAuroraTwinDuplicate(dbSchema.boardseshTicks),
+    ];
 
     // Fetch ticks with layoutId from unified board_climbs table. We surface
     // `difficulty` as the raw user override (preserving the field's pre-fix
@@ -443,7 +457,9 @@ export const tickQueries = {
     const rows = await db
       .select({ boardType: dbSchema.boardseshTicks.boardType, tickCount: count() })
       .from(dbSchema.boardseshTicks)
-      .where(eq(dbSchema.boardseshTicks.userId, userId))
+      // Aurora's own duplicate ascents count once (#3535), so the inferred
+      // default board matches what the logbook actually shows.
+      .where(and(eq(dbSchema.boardseshTicks.userId, userId), notAuroraTwinDuplicate(dbSchema.boardseshTicks)))
       .groupBy(dbSchema.boardseshTicks.boardType);
 
     return rows.map((row) => ({ boardType: row.boardType, count: Number(row.tickCount) }));

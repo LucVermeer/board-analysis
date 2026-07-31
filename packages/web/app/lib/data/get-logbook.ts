@@ -2,6 +2,7 @@ import { dbz } from '@/app/lib/db/db';
 import type { ClimbUuid } from '../types';
 import type { LogbookEntry, AuroraBoardName } from '../api-wrappers/aurora/types';
 import { boardseshTicks, boardClimbAliases } from '@/app/lib/db/schema';
+import { notAuroraTwinDuplicate } from '@boardsesh/db/queries';
 import { eq, and, inArray, desc, sql } from 'drizzle-orm';
 
 /**
@@ -15,7 +16,12 @@ export async function getLogbook(
   userId: string,
   climbUuids?: ClimbUuid[],
 ): Promise<LogbookEntry[]> {
-  const baseConditions = [eq(boardseshTicks.boardType, board), eq(boardseshTicks.userId, userId)];
+  const baseConditions = [
+    eq(boardseshTicks.boardType, board),
+    eq(boardseshTicks.userId, userId),
+    // Aurora's own duplicate ascents appear once (#3535).
+    notAuroraTwinDuplicate(boardseshTicks),
+  ];
 
   if (climbUuids && climbUuids.length > 0) {
     baseConditions.push(inArray(boardseshTicks.climbUuid, climbUuids));

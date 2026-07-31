@@ -14,4 +14,5 @@ export * from './gyms/index';
 export * from './recommendations/index';
 export * from './grade-model/index';
 export * from './sessions/index';
+export * from './ticks/index';
 export * from './util/rows';
