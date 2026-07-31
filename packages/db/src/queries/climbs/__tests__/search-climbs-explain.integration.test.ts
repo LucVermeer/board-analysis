@@ -295,6 +295,9 @@ if (!EXPLAIN_DB_URL) {
       );
       assert.deepEqual(kinds, ['guard', 'select', 'guard', 'select']);
 
+      // Smoke test only, and deliberately weak: the harness setter matches zero rows,
+      // so the planner picks a trivial serial plan whatever the GUC says. The
+      // statement-ordering assertion above is what actually guards #1969 / #3856.
       const nodes = await explainNodes(selects[1].query, selects[1].params, GUARD);
       assert.equal(
         hasGatherNode(nodes),

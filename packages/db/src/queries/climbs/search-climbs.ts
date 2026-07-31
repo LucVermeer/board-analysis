@@ -193,10 +193,15 @@ export const searchClimbs = async (
   // page-0 gate predates both guards (9acb8b913) and was protecting against a plan
   // shape that is now disabled by GUC — do not re-introduce it.
   //
-  // Cost: the fallback only fires once statsDriven is exhausted, so broad filters
-  // (hasMore=true) never reach it. Narrow filters pay one extra serial query on the
-  // boundary page and two queries per page past it, each bounded by
-  // OFFSET page*pageSize + LIMIT pageSize+1 with page clamped to MAX_SEARCH_PAGE.
+  // Cost: the fallback only fires once statsDriven is exhausted. Broad filters never
+  // reach it at shallow depth (hasMore stays true), but a deep enough page — one whose
+  // OFFSET lands past the stats-having count — reaches it on any filter, bounded by
+  // that filter's selectivity. The extra work is the countClimbs scan shape plus a
+  // top-N heapsort bounded by OFFSET + LIMIT, so per-page cost past the boundary is
+  // roughly constant and equal to today's page-0 fallback cost on the same filter.
+  // `page` is clamped to MAX_SEARCH_PAGE; `pageSize` is caller-supplied and is NOT
+  // clamped here (searchClimbs defaults it to 20), so the OFFSET bound is only as
+  // tight as whatever validates pageSize upstream.
   //
   // `orderStatsHavingFirst: true` makes the fallback's ordering a prefix-compatible
   // continuation of the stats-driven pages — see runStandardSearch.

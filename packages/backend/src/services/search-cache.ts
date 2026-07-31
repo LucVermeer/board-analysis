@@ -17,8 +17,11 @@ export const DEFAULT_SEARCH_CACHE_TTL = 86400;
  * of stats-less ones. Without the bump, already-cached truncated pages would keep
  * serving the bug for the full 24h TTL, and an old-ordering page 0 next to a
  * new-ordering page 1 would duplicate or skip rows at the boundary.
+ *
+ * Exported so search-cache.test.ts asserts the key layout against this constant
+ * instead of re-typing the version literal in every assertion.
  */
-const CACHE_VERSION = 'v5';
+export const CACHE_VERSION = 'v5';
 
 /**
  * Recursively sorts the keys of an object so that JSON.stringify produces

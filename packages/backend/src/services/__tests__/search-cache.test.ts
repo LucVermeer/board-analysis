@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
-import { SearchCacheService, DEFAULT_SEARCH_CACHE_TTL } from '../search-cache';
+import { SearchCacheService, DEFAULT_SEARCH_CACHE_TTL, CACHE_VERSION } from '../search-cache';
 import { redisClientManager } from '../../redis/client';
 import type { ClimbSearchParams, ParsedBoardRouteParameters } from '../../db/queries/climbs/index';
 import { logger } from '../../utils/logger';
@@ -77,7 +77,15 @@ describe('SearchCacheService', () => {
       const key = service.buildCacheKey(makeRouteParams(), {}, 'results');
 
       expect(key).toBeTruthy();
-      expect(key.startsWith('boardsesh:climb-search:v4:results:')).toBe(true);
+      expect(key.startsWith(`boardsesh:climb-search:${CACHE_VERSION}:results:`)).toBe(true);
+    });
+
+    it('pins the current cache version so a bump is a deliberate, reviewed edit', () => {
+      // The one place the version literal is written down in a test. Bumping
+      // CACHE_VERSION must land here too, which is the point: a content-changing
+      // search fix should not silently keep serving stale keys.
+      expect(CACHE_VERSION).toBe('v5');
+      expect(CACHE_VERSION).toMatch(/^v\d+$/);
     });
 
     it('matches expected key format', () => {
@@ -88,7 +96,7 @@ describe('SearchCacheService', () => {
       // boardsesh:climb-search:version:suffix:board:layout:size:sets:angle:hash
       expect(segments[0]).toBe('boardsesh');
       expect(segments[1]).toBe('climb-search');
-      expect(segments[2]).toBe('v4');
+      expect(segments[2]).toBe(CACHE_VERSION);
       expect(segments[3]).toBe('results');
       expect(segments[4]).toBe('kilter');
       expect(segments[5]).toBe('1');
