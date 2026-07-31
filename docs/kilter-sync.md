@@ -128,6 +128,8 @@ Kilter exposes ratings as a first-class resource at `POST /api/climb-rating/` �
 
 The conflict target on insert is the natural key `(board_type, climb_uuid, angle, user_id)`, not `kilter_id` — same reasoning as the ticks path. Kilter's per-rating payload doesn't carry `weight`, so kilter-origin rows leave that column NULL.
 
+Two timestamp invariants are easy to break by accident (issue #3524). **`created_at` comes from the upstream rating date** (`raw.created_at`, parsed by `parseKilterTimestamp`), not from the column default — without it every historical rating collapses onto the day our sync first saw it. It is deliberately absent from the `DO UPDATE` SET, so a Boardsesh-originated rating that a later sync adopts keeps its own original date rather than being re-stamped with Kilter's. **The `DO UPDATE` is change-guarded** by a row-wise `IS DISTINCT FROM` over `(rating, difficulty_grade_id, comment, kilter_id)`, comparing the existing row against the *effective* new value (`COALESCE(EXCLUDED.…, existing)` for the COALESCE'd columns, not bare `EXCLUDED`). PowerSync redelivers a full snapshot every cycle, so without the guard the update fires for every rating on every run and `updated_at` degrades into "when the sync last ran".
+
 ### Circuits → playlists
 
 Circuit rows upsert into `playlists` (`kilter_id` = `circuit_uuid`, `kilter_type = 'circuits'`). The climbs list is **full-replace per sync**: delete every `playlist_climbs` row for the playlist, re-insert from the snapshot, chunk inserts at 500 rows to stay under the 65535-parameter Postgres ceiling. Matches aurora-sync's circuit handling. Ownership is idempotent via `(playlist_id, user_id)` unique.

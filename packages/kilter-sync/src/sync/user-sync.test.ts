@@ -1052,7 +1052,34 @@ import {
  * connection, so query-shape assertions need no database.
  */
 const renderOnlyDb = drizzle({} as never);
-import { applyCircuits, applyClimbRatings, sanitizeKilterRating } from './user-sync';
+import { applyCircuits, applyClimbRatings, parseKilterTimestamp, sanitizeKilterRating } from './user-sync';
+
+describe('parseKilterTimestamp', () => {
+  it('keeps the instant of a Z-suffixed UTC string', () => {
+    expect(parseKilterTimestamp('2024-03-05T18:30:00.000Z')?.toISOString()).toBe('2024-03-05T18:30:00.000Z');
+  });
+
+  it('normalises an explicit offset to UTC', () => {
+    expect(parseKilterTimestamp('2024-03-05T18:30:00-02:00')?.toISOString()).toBe('2024-03-05T20:30:00.000Z');
+  });
+
+  it('reads a zone-less wall clock as UTC, not as the host process timezone', () => {
+    expect(parseKilterTimestamp('2024-03-05 18:30:00')?.toISOString()).toBe('2024-03-05T18:30:00.000Z');
+    expect(parseKilterTimestamp('2024-03-05T18:30:00')?.toISOString()).toBe('2024-03-05T18:30:00.000Z');
+  });
+
+  it('reads a date-only value as midnight UTC (the trailing -05 is a day, not an offset)', () => {
+    expect(parseKilterTimestamp('2024-03-05')?.toISOString()).toBe('2024-03-05T00:00:00.000Z');
+  });
+
+  it('returns undefined for missing, empty and unparseable values so the insert falls back to the default', () => {
+    expect(parseKilterTimestamp(null)).toBeUndefined();
+    expect(parseKilterTimestamp(undefined)).toBeUndefined();
+    expect(parseKilterTimestamp('')).toBeUndefined();
+    expect(parseKilterTimestamp('   ')).toBeUndefined();
+    expect(parseKilterTimestamp('not-a-date')).toBeUndefined();
+  });
+});
 
 describe('sanitizeKilterRating', () => {
   it('keeps valid 1-5 ratings', () => {
@@ -1213,6 +1240,9 @@ describe('applyClimbRatings — bulk upsert with COALESCE comment', () => {
       rating: 4,
       userId: 'user-1',
       boardType: 'kilter',
+      // The upstream rating date, not sync time. Dropping the createdAt
+      // mapping has to fail here too, not only in the real-Postgres test.
+      createdAt: new Date('2026-05-01T12:00:00.000Z'),
     });
     expect(insertValues[0][1]).toMatchObject({ kilterId: 'r-2', climbUuid: 'climb-B' });
     // No delete because there were no REMOVEs.

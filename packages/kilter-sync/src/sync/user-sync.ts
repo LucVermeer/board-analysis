@@ -992,6 +992,46 @@ export function sanitizeKilterRating(rating: number | null | undefined): number 
   return value;
 }
 
+// A trailing `Z`, or a `±HH:MM` / `±HHMM` / `±HH` offset that follows a clock
+// time (the clock-time prefix is what keeps a date-only `2024-03-05` from
+// reading its `-05` as an offset). Anything else is a bare wall clock with no
+// zone information.
+const TIMESTAMP_UTC_SUFFIX = /Z$/i;
+const TIMESTAMP_OFFSET_SUFFIX = /\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?\s*[+-]\d{2}(?::?\d{2})?$/;
+
+function hasZoneInfo(value: string): boolean {
+  return TIMESTAMP_UTC_SUFFIX.test(value) || TIMESTAMP_OFFSET_SUFFIX.test(value);
+}
+
+// Pin a zone-less value to UTC. A date-only value gets a full midnight time
+// component: `2024-03-05Z` is outside the ECMAScript date-time grammar, so
+// `Date.parse` would be free to reject it.
+function toUtcIsoString(value: string): string {
+  const withTimeSeparator = value.replace(/\s+/, 'T');
+  return withTimeSeparator.includes('T') ? `${withTimeSeparator}Z` : `${withTimeSeparator}T00:00:00Z`;
+}
+
+/**
+ * Kilter timestamps observed on the wire are `Z`-suffixed UTC ISO strings.
+ * A value that carries a `Z` or a `±HH:MM` offset is normalised to that
+ * instant. A bare wall clock with no zone (`"2024-03-05 18:30:00"`) is read as
+ * UTC rather than left to `Date.parse`, which would apply the *host process's*
+ * timezone and skew the stored date by the container's offset. Reading it as
+ * UTC matches `applyLogs`, which writes the upstream string straight into a
+ * `mode: 'string'` column where Postgres stores the wall clock verbatim.
+ * Returns undefined when the value is missing or unparseable, so the caller's
+ * insert falls back to the column default instead of writing an Invalid Date.
+ */
+export function parseKilterTimestamp(value: string | null | undefined): Date | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const normalized = hasZoneInfo(trimmed) ? trimmed : toUtcIsoString(trimmed);
+  const parsedMs = Date.parse(normalized);
+  if (!Number.isFinite(parsedMs)) return undefined;
+  return new Date(parsedMs);
+}
+
 export async function applyClimbRatings(
   tx: DrizzleDb,
   userId: string,
@@ -1060,6 +1100,16 @@ export async function applyClimbRatings(
       // itself. Leave null for kilter-origin rows.
       weight: null,
       kilterId: raw.climb_rating_uuid,
+      // When the user actually rated the climb upstream. Without this the
+      // insert falls through to the column's defaultNow(), so created_at
+      // recorded when OUR sync first saw the row — every historical rating
+      // collapsed onto the day the Kilter sync started. Kilter sends an ISO
+      // string with an offset; Date.parse normalises it to UTC, matching the
+      // ::timestamptz-on-both-sides treatment applyLogs gives created_at.
+      // Unparseable input falls back to the column default rather than
+      // writing an Invalid Date (which Postgres rejects and which would abort
+      // the whole ratings batch).
+      createdAt: parseKilterTimestamp(raw.created_at),
     });
   }
   const values = Array.from(valuesByConflictKey.values());
@@ -1090,6 +1140,23 @@ export async function applyClimbRatings(
         kilterId: sql`COALESCE(EXCLUDED.kilter_id, ${boardClimbRatings.kilterId})`,
         updatedAt: new Date(),
       },
+      // PowerSync redelivers a full snapshot every cycle, so without this
+      // guard the DO UPDATE fires for every rating on every sync and rewrites
+      // updated_at even when nothing about the rating changed — the column
+      // then tracks "when the sync last ran", not "when the user last touched
+      // this rating". Skip the UPDATE entirely when the row would not change.
+      //
+      // The right-hand side has to be the EFFECTIVE new value, not raw
+      // EXCLUDED: comment and kilter_id are written through COALESCE above, so
+      // comparing against bare EXCLUDED would call a no-op COALESCE fallback a
+      // "change" and bump updated_at anyway. Row-wise IS DISTINCT FROM handles
+      // the nullable columns (rating, difficulty_grade_id, kilter_id) without
+      // NULL-propagating to unknown. created_at is deliberately absent from
+      // both the SET and this predicate: an existing row keeps the first
+      // created_at it was stamped with.
+      setWhere: sql`(${boardClimbRatings.rating}, ${boardClimbRatings.difficultyGradeId}, ${boardClimbRatings.comment}, ${boardClimbRatings.kilterId})
+        IS DISTINCT FROM
+        (EXCLUDED.rating, EXCLUDED.difficulty_grade_id, COALESCE(EXCLUDED.comment, ${boardClimbRatings.comment}), COALESCE(EXCLUDED.kilter_id, ${boardClimbRatings.kilterId}))`,
     });
 }
 
