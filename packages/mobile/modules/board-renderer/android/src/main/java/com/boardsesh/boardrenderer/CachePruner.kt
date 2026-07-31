@@ -5,10 +5,10 @@ import java.io.File
 /**
  * Pure file-system bookkeeping for the overlay PNG cache directory:
  *
- * 1. Sweep any orphaned [AtomicFileWrite] temp file — a process kill between
- *    the compress and the rename (see #3748) leaves one of these behind. It's
- *    never a valid cache entry, so it's removed unconditionally rather than
- *    waiting for the size cap to evict it by LRU.
+ * 1. Sweep orphaned [AtomicFileWrite] temp files — a process kill between the
+ *    compress and rename (see #3748) leaves one behind. Only files carrying
+ *    that helper's private prefix *and* suffix are swept; unrelated `.tmp`
+ *    files are not ours to delete.
  * 2. Evict cache entries oldest-first by mtime until the directory is back
  *    under [pruneCacheIfNeeded]'s `maxBytes`.
  *
@@ -27,9 +27,7 @@ object CachePruner {
     fun pruneCacheIfNeeded(cacheDir: File, maxBytes: Long): Result {
         val files = cacheDir.listFiles()?.toList() ?: return Result(0, 0, 0)
 
-        val (staleTempFiles, cacheEntries) = files.partition {
-            it.name.endsWith(AtomicFileWrite.TEMP_SUFFIX)
-        }
+        val (staleTempFiles, cacheEntries) = files.partition(AtomicFileWrite::isManagedTempFile)
         var orphanedRemoved = 0
         for (tempFile in staleTempFiles) {
             if (tempFile.delete()) orphanedRemoved++

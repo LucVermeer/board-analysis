@@ -4,7 +4,6 @@ import android.graphics.Bitmap
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import java.io.File
-import java.io.FileOutputStream
 import java.nio.ByteBuffer
 
 class BoardRendererModule : Module() {
@@ -87,21 +86,16 @@ class BoardRendererModule : Module() {
                     )
                 },
             ) {
-                // Write to a temp file and rename into place so a thrown exception
-                // mid-compress (IO interruption, storage-full, process kill) can
-                // never leave a partial PNG at outputFile's path — it either lands
-                // whole or not at all (see AtomicFileWrite, #3748). The temp name is
-                // deterministic ("$cacheKey.png.tmp"), which is safe because Expo
-                // serialises every call into this module on a single modulesQueue
-                // (see #4041's PR body) — there's no concurrent renderOverlay call
-                // for the same cacheKey to collide with.
-                AtomicFileWrite.writeAtomically(outputFile) { tempFile ->
-                    FileOutputStream(tempFile).use { outputStream ->
-                        val written = overlayBitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
-                        if (!written) {
-                            throw Exception("PNG compression failed")
-                        }
-                    }
+                // Fresh same-directory temp creation, compression, stream close,
+                // and the atomic Os.rename publication all live inside this retry
+                // boundary. A reclaimed cache directory therefore retries the
+                // entire pipeline with a new unique temp file, while concurrent
+                // renders never share an in-flight path (AtomicFileWrite, #3748).
+                AtomicFileWrite.writeAtomically(
+                    destination = outputFile,
+                    committer = AndroidAtomicFileCommitter,
+                ) { outputStream ->
+                    overlayBitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
                 }
             }
         } finally {

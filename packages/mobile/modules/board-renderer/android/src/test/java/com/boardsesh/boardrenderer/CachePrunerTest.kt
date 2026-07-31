@@ -10,9 +10,10 @@ import org.junit.Test
 
 /**
  * Covers [CachePruner] in isolation: the orphaned-temp-file sweep (a process
- * kill between [AtomicFileWrite]'s compress and rename leaves a
- * "$cacheKey.png.tmp" behind — #3748) and the size-based LRU eviction it runs
- * alongside.
+ * kill between [AtomicFileWrite]'s compress and rename leaves a private
+ * ".bsov-*.tmp" behind — #3748) and the size-based LRU eviction it runs
+ * alongside. The private prefix is part of the safety contract: this helper
+ * must never sweep an unrelated component's `.tmp` file.
  */
 class CachePrunerTest {
     private lateinit var cacheDir: File
@@ -32,7 +33,7 @@ class CachePrunerTest {
 
     @Test
     fun `sweeps an orphaned temp file regardless of the size cap`() {
-        val orphan = File(cacheDir, "abc123.png${AtomicFileWrite.TEMP_SUFFIX}")
+        val orphan = File(cacheDir, "${AtomicFileWrite.TEMP_PREFIX}abc123${AtomicFileWrite.TEMP_SUFFIX}")
         orphan.writeBytes(byteArrayOf(1))
         val validEntry = File(cacheDir, "def456.png")
         validEntry.writeBytes(byteArrayOf(1, 2, 3))
@@ -46,6 +47,26 @@ class CachePrunerTest {
     }
 
     @Test
+    fun `sweeps only private-prefix temp files`() {
+        val managedOrphan = File(
+            cacheDir,
+            "${AtomicFileWrite.TEMP_PREFIX}managed${AtomicFileWrite.TEMP_SUFFIX}",
+        )
+        managedOrphan.writeBytes(byteArrayOf(1))
+        val unrelatedTemp = File(cacheDir, "download${AtomicFileWrite.TEMP_SUFFIX}")
+        unrelatedTemp.writeBytes(byteArrayOf(2))
+        val prefixOnly = File(cacheDir, "${AtomicFileWrite.TEMP_PREFIX}not-a-temp.png")
+        prefixOnly.writeBytes(byteArrayOf(3))
+
+        val result = CachePruner.pruneCacheIfNeeded(cacheDir, maxBytes = 1_000_000)
+
+        assertEquals(1, result.orphanedTempFilesRemoved)
+        assertFalse(managedOrphan.exists())
+        assertTrue("unowned .tmp file survives", unrelatedTemp.exists())
+        assertTrue("prefix without the private suffix survives", prefixOnly.exists())
+    }
+
+    @Test
     fun `does nothing when the cache is empty`() {
         val result = CachePruner.pruneCacheIfNeeded(cacheDir, maxBytes = 1_000_000)
 
@@ -56,7 +77,7 @@ class CachePrunerTest {
 
     @Test
     fun `evicts oldest-first once the cap is exceeded, on top of the temp sweep`() {
-        val orphan = File(cacheDir, "orphan.png${AtomicFileWrite.TEMP_SUFFIX}")
+        val orphan = File(cacheDir, "${AtomicFileWrite.TEMP_PREFIX}orphan${AtomicFileWrite.TEMP_SUFFIX}")
         orphan.writeBytes(ByteArray(10))
 
         val oldest = File(cacheDir, "oldest.png")
@@ -82,7 +103,7 @@ class CachePrunerTest {
         // Even a huge orphaned temp file must not push a well-under-cap real
         // entry into eviction — it's swept unconditionally, before the cap
         // check ever runs against the remaining entries.
-        val orphan = File(cacheDir, "huge.png${AtomicFileWrite.TEMP_SUFFIX}")
+        val orphan = File(cacheDir, "${AtomicFileWrite.TEMP_PREFIX}huge${AtomicFileWrite.TEMP_SUFFIX}")
         orphan.writeBytes(ByteArray(1_000))
         val validEntry = File(cacheDir, "small.png")
         validEntry.writeBytes(ByteArray(5))

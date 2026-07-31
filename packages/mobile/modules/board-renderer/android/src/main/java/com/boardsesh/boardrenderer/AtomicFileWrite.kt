@@ -1,7 +1,19 @@
 package com.boardsesh.boardrenderer
 
 import java.io.File
+import java.io.FileOutputStream
 import java.io.IOException
+import java.io.OutputStream
+
+/**
+ * Publishes [source] at [destination] with one atomic same-filesystem rename.
+ * Android supplies [AndroidAtomicFileCommitter]; tests inject a JVM implementation
+ * so the write/close/cleanup contract stays testable without Robolectric.
+ */
+fun interface AtomicFileCommitter {
+    @Throws(IOException::class)
+    fun commit(source: File, destination: File)
+}
 
 /**
  * Writes a file by writing to a temp file next to the destination first, then
@@ -11,9 +23,9 @@ import java.io.IOException
  * There is no window where a reader can observe a partially-written file at
  * [destination]'s path.
  *
- * `File.renameTo` is an atomic `rename(2)` when the source and destination are
- * on the same filesystem, which they are here — the temp file is created in
- * [destination]'s own parent directory.
+ * The injected [AtomicFileCommitter] performs the publication. Production uses
+ * `android.system.Os.rename`, and the unique temp file is created in
+ * [destination]'s own parent directory so the rename stays on one filesystem.
  *
  * Fixes #3748: `BoardRendererModule.renderOverlay` used to write the overlay
  * PNG directly to its final cache path via `FileOutputStream`, and only
@@ -23,31 +35,76 @@ import java.io.IOException
  * PNG on disk, and the cache's `exists()`-only fast path then served it as a
  * permanent "successful" render forever.
  *
- * Pure `java.io` on purpose — no Android framework calls — so
+ * This helper remains pure `java.io` — no Android framework calls — so
  * [AtomicFileWriteTest] needs neither Robolectric nor a real Bitmap, matching
  * [CacheDirRecovery]'s approach for its sibling helper.
  */
 object AtomicFileWrite {
     /**
-     * Temp-file suffix used for the in-flight write. Shared with
-     * [CachePruner], which sweeps any file ending in this suffix as an
-     * orphaned artifact of a crash between [write] and the rename.
+     * A short hidden prefix plus `.tmp` suffix keeps in-flight files private to
+     * this cache contract and distinguishable from unrelated temp files. The
+     * final `.png` name is deliberately absent: cache readers must never mistake
+     * an in-flight write for a renderable overlay.
      */
+    const val TEMP_PREFIX: String = ".bsov-"
     const val TEMP_SUFFIX: String = ".tmp"
 
-    fun writeAtomically(destination: File, write: (tempFile: File) -> Unit) {
-        val tempFile = File(destination.parentFile, "${destination.name}$TEMP_SUFFIX")
+    fun isManagedTempFile(file: File): Boolean =
+        file.name.startsWith(TEMP_PREFIX) && file.name.endsWith(TEMP_SUFFIX)
+
+    /**
+     * Creates a fresh same-directory temp file, lets [write] encode into a stream
+     * owned by this helper, closes it, then atomically publishes it. Every failure
+     * in that pipeline emerges as [IOException], which is the contract consumed
+     * by [CacheDirRecovery]. An existing destination is untouched unless commit
+     * succeeds.
+     */
+    fun writeAtomically(
+        destination: File,
+        committer: AtomicFileCommitter,
+        outputStreamFactory: (File) -> OutputStream = { tempFile -> FileOutputStream(tempFile) },
+        write: (OutputStream) -> Boolean,
+    ) {
+        val parentDirectory = destination.parentFile
+            ?: throw IOException("Atomic destination has no parent: ${destination.absolutePath}")
+        val tempFile = try {
+            File.createTempFile(TEMP_PREFIX, TEMP_SUFFIX, parentDirectory)
+        } catch (failure: IOException) {
+            throw failure
+        } catch (failure: Exception) {
+            throw IOException(
+                "Failed to create an overlay temp file in ${parentDirectory.absolutePath}",
+                failure,
+            )
+        }
+
         try {
-            write(tempFile)
-            if (!tempFile.renameTo(destination)) {
-                throw IOException(
-                    "Failed to move ${tempFile.absolutePath} into place at ${destination.absolutePath}"
-                )
+            outputStreamFactory(tempFile).use { outputStream ->
+                if (!write(outputStream)) {
+                    throw IOException("PNG compression failed for ${destination.absolutePath}")
+                }
             }
+            committer.commit(tempFile, destination)
+        } catch (failure: IOException) {
+            // Preserve the exact filesystem failure (and its suppressed close
+            // failure, if any) so recovery and diagnostics see the real cause.
+            throw failure
+        } catch (failure: Exception) {
+            // SecurityException and any encoder/publisher exception still need
+            // to enter CacheDirRecovery's IOException-only retry contract.
+            throw IOException(
+                "Failed to write overlay atomically at ${destination.absolutePath}",
+                failure,
+            )
         } finally {
-            // No-op if the rename already moved it away; cleans up any partial
-            // temp file left by a throw above (from `write` or the rename check).
-            tempFile.delete()
+            // No-op after a successful rename. Cleanup must never replace the
+            // original write/close/commit exception; an undeletable orphan is
+            // picked up by CachePruner on the next module start.
+            try {
+                tempFile.delete()
+            } catch (_: SecurityException) {
+                // Best effort only; preserve the pipeline's primary result.
+            }
         }
     }
 }
