@@ -98,6 +98,7 @@ const applyTx = db as unknown as ApplyTx;
 describe('applyClimbRatings REMOVE → soft-detach (real DB)', () => {
   afterEach(async () => {
     vi.unstubAllEnvs();
+    vi.useRealTimers();
     await db.execute(sql`DELETE FROM board_climb_ratings WHERE user_id = ${TEST_USER_ID}`);
     await db.execute(sql`DELETE FROM "users" WHERE id = ${TEST_USER_ID}`);
   });
@@ -161,6 +162,14 @@ describe('applyClimbRatings REMOVE → soft-detach (real DB)', () => {
     const detached = await readRating(climbUuid);
     expect(detached?.kilter_detached_at).not.toBeNull();
 
+    // Jump the clock so the re-adoption cannot land in the same millisecond as
+    // the detach. applyClimbRatings stamps updated_at from this process's
+    // `new Date()`, so faking Date alone is enough (and faking only Date keeps
+    // the postgres driver's real timers intact). Without this the assertion
+    // below is a coin flip: both writes routinely land in one millisecond.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(Date.now() + 60_000));
+
     // PowerSync sends REMOVE before PUT for every row in a re-delivered
     // snapshot, so the row has to come back fully live — a permanent marker
     // would hide it from the ascents feed forever.
@@ -176,9 +185,10 @@ describe('applyClimbRatings REMOVE → soft-detach (real DB)', () => {
     expect(row?.kilter_detached_at).toBeNull();
     expect(row?.rating).toBe(3);
     expect(Number(row?.weight)).toBe(1.5);
-    // The detach and the re-adoption both bump updated_at, so a cursor-based
-    // consumer can see the transition.
-    expect(new Date(row!.updated_at).getTime()).toBeGreaterThanOrEqual(new Date(detached!.updated_at).getTime());
+    // The re-adoption bumps updated_at past the detach, so a cursor-based
+    // consumer can see the transition. Strict `>`: if the upsert stopped
+    // writing updated_at the column would still hold the detach timestamp.
+    expect(new Date(row!.updated_at).getTime()).toBeGreaterThan(new Date(detached!.updated_at).getTime());
   });
 
   it('a REMOVE for a purely kilter-origin rating detaches it rather than deleting it', async () => {
