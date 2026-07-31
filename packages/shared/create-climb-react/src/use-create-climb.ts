@@ -9,10 +9,18 @@ type UseCreateClimbOptions = {
 // Drop holds whose state the board doesn't support (e.g. a colour-only / MoonBoard
 // product without FOOT), so a fork or draft seeded from another board never carries
 // an unpaintable hold.
+//
+// `stateToCode` is optional-chained because this runs inside the `useReducer` lazy
+// initialiser — i.e. DURING RENDER, where a throw is unrecoverable. A seeded map is
+// the only way to reach the read at all: for a new climb the map is empty, so the
+// filter callback never runs. That made an unknown `boardName` a remix/edit-only
+// render crash (#3804). Degrading to "no supported holds" matches
+// `accumulateFramesToMaps` in @boardsesh/board-constants, which already reads this
+// same table with `?.`.
 function filterSupportedHoldsMap(boardName: BoardName, holdsMap: LitUpHoldsMap): LitUpHoldsMap {
   const stateToCode = STATE_TO_PRIMARY_CODE[boardName];
   return Object.fromEntries(
-    Object.entries(holdsMap).filter(([, hold]) => hold.state !== 'OFF' && stateToCode[hold.state] !== undefined),
+    Object.entries(holdsMap).filter(([, hold]) => hold.state !== 'OFF' && stateToCode?.[hold.state] !== undefined),
   ) as LitUpHoldsMap;
 }
 
@@ -146,12 +154,15 @@ export function useCreateClimb(boardName: BoardName, options?: UseCreateClimbOpt
             if (finishCount >= 2) return prev;
           }
 
-          const stateCode = STATE_TO_PRIMARY_CODE[boardName][nextState];
+          // Optional-chained for the same reason as `filterSupportedHoldsMap`: an
+          // unknown board must not throw. Both reads already return `prev` when the
+          // lookup misses, so this only widens "missing role" to "missing board".
+          const stateCode = STATE_TO_PRIMARY_CODE[boardName]?.[nextState];
           if (stateCode === undefined) {
             return prev;
           }
 
-          const holdInfo = HOLD_STATE_MAP[boardName][stateCode];
+          const holdInfo = HOLD_STATE_MAP[boardName]?.[stateCode];
           if (!holdInfo) {
             return prev;
           }
@@ -177,7 +188,7 @@ export function useCreateClimb(boardName: BoardName, options?: UseCreateClimbOpt
     return Object.entries(litUpHoldsMap)
       .filter(([, hold]) => hold.state !== 'OFF')
       .flatMap(([holdId, hold]) => {
-        const code = stateToCode[hold.state];
+        const code = stateToCode?.[hold.state];
         return code === undefined ? [] : [`p${holdId}r${code}`];
       })
       .join('');

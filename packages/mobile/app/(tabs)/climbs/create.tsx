@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
+import { SUPPORTED_BOARDS } from '@boardsesh/board-config';
 import type { BoardName } from '@boardsesh/shared-schema';
 import { CreateClimbScreen } from '../../../src/components/create-climb/CreateClimbScreen';
 import { ActivityIndicator } from '../../../src/components/ActivityIndicator';
@@ -20,6 +21,21 @@ type CreateClimbParams = {
 };
 
 /**
+ * Narrow an untrusted board name to a supported one, or `undefined`.
+ *
+ * `useLocalSearchParams` is untrusted input on this route: the app's
+ * universal-link entry is a wildcard, so `…/climbs/create?boardName=<anything>`
+ * can open it cold from outside the app. The value used to be cast straight to
+ * `BoardName` and indexed into `STATE_TO_PRIMARY_CODE`, which throws during
+ * render on the remix/edit path (#3804). Treating an unsupported value as absent
+ * makes it fall back to the active board, exactly like a missing param.
+ */
+function supportedBoardName(candidate: string | undefined): BoardName | undefined {
+  if (candidate == null) return undefined;
+  return (SUPPORTED_BOARDS as readonly string[]).includes(candidate) ? (candidate as BoardName) : undefined;
+}
+
+/**
  * Create-climb route. Board config comes from route params (passed by the FAB,
  * fork/edit entry points); falls back to the user's active board when the
  * params are absent so the screen can be opened bare.
@@ -29,7 +45,7 @@ export default function CreateClimbRoute() {
   const { data: activeBoard } = useActiveBoard();
 
   const board = useMemo(() => {
-    const boardName = (params.boardName ?? activeBoard?.boardType) as BoardName | undefined;
+    const boardName = supportedBoardName(params.boardName) ?? supportedBoardName(activeBoard?.boardType);
     const layoutId = params.layoutId ? Number(params.layoutId) : activeBoard?.layoutId;
     const sizeId = params.sizeId ? Number(params.sizeId) : activeBoard?.sizeId;
     const setIds = params.setIds ?? activeBoard?.setIds;
