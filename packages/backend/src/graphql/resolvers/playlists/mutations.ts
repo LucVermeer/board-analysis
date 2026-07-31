@@ -290,62 +290,87 @@ export const playlistMutations = {
 
     const playlistId = ownership[0].id;
 
-    // Check if climb already exists in playlist
-    const existing = await db
-      .select()
-      .from(dbSchema.playlistClimbs)
-      .where(
-        and(
-          eq(dbSchema.playlistClimbs.playlistId, playlistId),
-          eq(dbSchema.playlistClimbs.climbUuid, validatedInput.climbUuid),
-        ),
-      )
-      .limit(1);
+    // Insert-or-noop + position assignment share one transaction: a plain
+    // pre-check SELECT followed by a separate INSERT leaves a window where
+    // two concurrent calls for the same (playlistId, climbUuid) both see no
+    // existing row and both reach the INSERT, so the second hits the
+    // unique_playlist_climb index as a raw 23505 instead of the intended
+    // idempotent no-op. onConflictDoNothing lets Postgres's index arbitrate;
+    // when our insert loses the race we re-select the winner's row and return
+    // it in the same "already in playlist" shape the old pre-check used.
+    //
+    // The re-select can legitimately come back empty: under READ COMMITTED
+    // every statement takes a fresh snapshot, so the row we conflicted with
+    // can be removed (a concurrent removeClimbFromPlaylist committing, or the
+    // racing inserter rolling back) between our INSERT and our SELECT. The
+    // conflicting row is gone by then, so a second insert attempt succeeds.
+    // Two attempts is enough for that hand-off; a third would only mean the
+    // caller is racing itself in a loop, which is worth failing loudly on.
+    // The isolation level is pinned rather than inherited: the retry only
+    // works because a re-select sees other transactions' committed deletes,
+    // which a stricter level (or a changed server default) would hide. Both
+    // attempts share one transaction so the position assignment and the
+    // insert stay atomic; the second attempt only runs in the rare
+    // vanished-row window.
+    const maxInsertAttempts = 2;
+    const playlistClimb = await db.transaction(
+      async (tx) => {
+        for (let attempt = 0; attempt < maxInsertAttempts; attempt += 1) {
+          const maxPosition = await tx
+            .select({ max: sql<number>`coalesce(max(${dbSchema.playlistClimbs.position}), -1)` })
+            .from(dbSchema.playlistClimbs)
+            .where(eq(dbSchema.playlistClimbs.playlistId, playlistId))
+            .limit(1);
 
-    if (existing.length > 0) {
-      // Already in playlist - return existing
-      return {
-        id: existing[0].id.toString(),
-        playlistId: validatedInput.playlistId,
-        climbUuid: existing[0].climbUuid,
-        angle: existing[0].angle,
-        position: existing[0].position,
-        addedAt: existing[0].addedAt.toISOString(),
-      };
-    }
+          const nextPosition = (maxPosition[0]?.max ?? -1) + 1;
 
-    // Use transaction to prevent race condition in position assignment
-    const playlistClimb = await db.transaction(async (tx) => {
-      // Get max position within transaction
-      const maxPosition = await tx
-        .select({ max: sql<number>`coalesce(max(${dbSchema.playlistClimbs.position}), -1)` })
-        .from(dbSchema.playlistClimbs)
-        .where(eq(dbSchema.playlistClimbs.playlistId, playlistId))
-        .limit(1);
+          const [insertedClimb] = await tx
+            .insert(dbSchema.playlistClimbs)
+            .values({
+              playlistId,
+              climbUuid: validatedInput.climbUuid,
+              angle: validatedInput.angle,
+              position: nextPosition,
+              addedAt: new Date(),
+            })
+            .onConflictDoNothing({
+              target: [dbSchema.playlistClimbs.playlistId, dbSchema.playlistClimbs.climbUuid],
+            })
+            .returning();
 
-      const nextPosition = (maxPosition[0]?.max ?? -1) + 1;
+          if (insertedClimb) {
+            const now = new Date();
+            await tx
+              .update(dbSchema.playlists)
+              .set({ updatedAt: now, lastAccessedAt: now })
+              .where(eq(dbSchema.playlists.id, playlistId));
 
-      // Add climb to playlist
-      const [newClimb] = await tx
-        .insert(dbSchema.playlistClimbs)
-        .values({
-          playlistId,
-          climbUuid: validatedInput.climbUuid,
-          angle: validatedInput.angle,
-          position: nextPosition,
-          addedAt: new Date(),
-        })
-        .returning();
+            return insertedClimb;
+          }
 
-      // Update playlist updatedAt and lastAccessedAt
-      const now = new Date();
-      await tx
-        .update(dbSchema.playlists)
-        .set({ updatedAt: now, lastAccessedAt: now })
-        .where(eq(dbSchema.playlists.id, playlistId));
+          // Conflict hit: a concurrent insert won the race. Re-select the
+          // winner's row and hand it back unchanged (no updatedAt bump), which
+          // is what the old pre-check branch did for an already-present climb.
+          const [existingClimb] = await tx
+            .select()
+            .from(dbSchema.playlistClimbs)
+            .where(
+              and(
+                eq(dbSchema.playlistClimbs.playlistId, playlistId),
+                eq(dbSchema.playlistClimbs.climbUuid, validatedInput.climbUuid),
+              ),
+            )
+            .limit(1);
 
-      return newClimb;
-    });
+          if (existingClimb) {
+            return existingClimb;
+          }
+        }
+
+        throw new Error('Failed to add climb to playlist: conflicting row kept vanishing between insert and re-select');
+      },
+      { isolationLevel: 'read committed' },
+    );
 
     return {
       id: playlistClimb.id.toString(),
