@@ -992,15 +992,34 @@ export function sanitizeKilterRating(rating: number | null | undefined): number 
   return value;
 }
 
+// A trailing `Z`, or a `±HH:MM` / `±HHMM` / `±HH` offset that follows a clock
+// time (the clock-time prefix is what keeps a date-only `2024-03-05` from
+// reading its `-05` as an offset). Anything else is a bare wall clock with no
+// zone information.
+const TIMESTAMP_UTC_SUFFIX = /Z$/i;
+const TIMESTAMP_OFFSET_SUFFIX = /\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?\s*[+-]\d{2}(?::?\d{2})?$/;
+
+function hasZoneInfo(value: string): boolean {
+  return TIMESTAMP_UTC_SUFFIX.test(value) || TIMESTAMP_OFFSET_SUFFIX.test(value);
+}
+
 /**
- * Kilter timestamps are ISO strings carrying an offset. Return a Date in UTC,
- * or undefined when the value is missing/unparseable so the caller's insert
- * falls back to the column default instead of writing an Invalid Date.
- * Exported for unit testing.
+ * Kilter timestamps observed on the wire are `Z`-suffixed UTC ISO strings.
+ * A value that carries a `Z` or a `±HH:MM` offset is normalised to that
+ * instant. A bare wall clock with no zone (`"2024-03-05 18:30:00"`) is read as
+ * UTC rather than left to `Date.parse`, which would apply the *host process's*
+ * timezone and skew the stored date by the container's offset. Reading it as
+ * UTC matches `applyLogs`, which writes the upstream string straight into a
+ * `mode: 'string'` column where Postgres stores the wall clock verbatim.
+ * Returns undefined when the value is missing or unparseable, so the caller's
+ * insert falls back to the column default instead of writing an Invalid Date.
  */
 export function parseKilterTimestamp(value: string | null | undefined): Date | undefined {
   if (!value) return undefined;
-  const parsedMs = Date.parse(value);
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const normalized = hasZoneInfo(trimmed) ? trimmed : `${trimmed.replace(' ', 'T')}Z`;
+  const parsedMs = Date.parse(normalized);
   if (!Number.isFinite(parsedMs)) return undefined;
   return new Date(parsedMs);
 }

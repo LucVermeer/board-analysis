@@ -4,7 +4,6 @@ export {
   // conflict clause (created_at from upstream + the setWhere change guard)
   // can only be verified against an actual database.
   applyClimbRatings,
-  parseKilterTimestamp,
   type SyncKilterUserDataArgs,
   type SyncKilterUserDataResult,
   type ApplyCircuitsResult,
