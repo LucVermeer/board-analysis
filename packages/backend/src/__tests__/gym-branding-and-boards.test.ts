@@ -281,9 +281,14 @@ describe('UserBoard.boardId', () => {
     expect(board!.boardId).toBe(pubBoard.id);
   });
 
-  it('is null for an anon viewer on a private board', async () => {
+  it('is moot for an anon viewer on a private board — the whole board is masked', async () => {
+    // Stronger than the contract this used to pin (board enriched, boardId
+    // nulled): since #3648 an anonymous caller cannot see the private board at
+    // all, so there is no payload left to leak a presence channel through.
+    // boardId nulling still governs the reads that DO return a private board —
+    // the gym-editor case below, and gymBoards.
     const board = await socialBoardQueries.board(null, { boardUuid: privBoard.uuid }, anonCtx());
-    expect(board!.boardId).toBeNull();
+    expect(board).toBeNull();
   });
 
   it('is the numeric channel id for the owner on their private board', async () => {
