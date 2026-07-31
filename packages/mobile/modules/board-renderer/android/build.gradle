@@ -42,4 +42,20 @@ android {
       path 'src/main/cpp/CMakeLists.txt'
     }
   }
+
+  testOptions {
+    // CacheDirRecovery logs through android.util.Log on the (tested) retry
+    // path, and the JVM stub android.jar throws on every un-mocked call. The
+    // recovery logic itself is plain java.io.File work, so returning defaults
+    // for the Android stubs is enough — no Robolectric needed.
+    unitTests.returnDefaultValues = true
+  }
+}
+
+dependencies {
+  // JVM unit tests for the cache-dir recovery helper (re-create a reclaimed
+  // overlay cache dir, retry the PNG write once). Run via
+  // :…:testDebugUnitTest from .github/workflows/android-pr-rn.yml; the repo's
+  // `vp` flow has no Kotlin test runner.
+  testImplementation 'junit:junit:4.13.2'
 }

@@ -75,11 +75,16 @@ class BoardRendererModule : Module() {
             overlayBitmap.setPremultiplied(true)
             overlayBitmap.copyPixelsFromBuffer(ByteBuffer.wrap(rgbaData))
 
-            FileOutputStream(outputFile).use { outputStream ->
-                val written = overlayBitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
-                if (!written) {
-                    outputFile.delete()
-                    throw Exception("PNG compression failed")
+            // Android can reclaim context.cacheDir mid-session, which deletes
+            // the directory out from under us and makes every later write fail
+            // with FileNotFoundException. Re-create it and try once more.
+            CacheDirRecovery.retryOnceAfterRecreating(cacheDir) {
+                FileOutputStream(outputFile).use { outputStream ->
+                    val written = overlayBitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
+                    if (!written) {
+                        outputFile.delete()
+                        throw Exception("PNG compression failed")
+                    }
                 }
             }
         } finally {

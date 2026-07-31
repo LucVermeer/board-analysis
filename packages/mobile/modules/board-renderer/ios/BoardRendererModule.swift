@@ -25,6 +25,25 @@ public class BoardRendererModule: Module {
     pruneCacheIfNeeded(maxBytes: BoardRendererModule.cacheCapBytes)
   }()
 
+  /// `Library/Caches` is reclaimable: iOS can delete our cache directory at any
+  /// point under storage pressure, including while the app is running. The
+  /// directory is only created once, when `cacheDir` is first touched, so once
+  /// it's gone every later write throws and hold overlays silently stop drawing
+  /// until the app relaunches. Re-create it and retry the write exactly once.
+  ///
+  /// A failure with the directory still in place (out of disk space, a
+  /// protected volume) propagates immediately rather than being retried.
+  private func retryOnceAfterRecreatingCacheDir<T>(_ action: () throws -> T) throws -> T {
+    do {
+      return try action()
+    } catch {
+      guard !FileManager.default.fileExists(atPath: cacheDir.path) else { throw error }
+      NSLog("[BoardRenderer] Cache dir at \(cacheDir.path) had vanished; re-creating and retrying")
+      try FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
+      return try action()
+    }
+  }
+
   private func pruneCacheIfNeeded(maxBytes: Int) {
     // Sort by modificationDate (not contentAccessDate) because that's what
     // we can reliably bump on a cache hit via setAttributes(.modificationDate:).
@@ -139,7 +158,9 @@ public class BoardRendererModule: Module {
         userInfo: [NSLocalizedDescriptionKey: "PNG encoding failed"])
     }
 
-    try pngData.write(to: outputUrl)
+    try retryOnceAfterRecreatingCacheDir {
+      try pngData.write(to: outputUrl)
+    }
     return outputUrl.absoluteString
   }
 
