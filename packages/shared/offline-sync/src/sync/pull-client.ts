@@ -24,7 +24,14 @@ import {
 } from './snapshot-bootstrap';
 import { parseSnapshotManifest, type SnapshotManifest } from './snapshot-manifest';
 import { findSnapshotEntry, isSnapshotEntryUsable } from './snapshot-estimate';
+import {
+  evaluateDeletionsCoverage,
+  getDeletionsCoverageAt,
+  setDeletionsCoverageAt,
+  resetUserDataForLostCoverage,
+} from './deletions-coverage';
 import { applyBusyTimeout } from '../db/pragmas';
+import { getPendingCount } from '../mutation-queue/queue';
 import { isSigningOut, getWipeEpoch, isBackgrounded } from '../mutation-queue/drainer';
 import { parseOfflineBoardKey, type OfflineBoardScope } from '../offline-board-key';
 
@@ -76,6 +83,27 @@ export type ScopeDownloadCompleteInfo = {
 };
 export type ScopeDownloadCompleteReporter = (info: ScopeDownloadCompleteInfo) => void;
 
+/**
+ * Fired when the deletions-coverage guard forced a from-scratch user-data
+ * resync (issue #3474) — the device went longer than the tombstone retention
+ * window without completing a deletions pull, so tombstones it never saw may
+ * already be pruned server-side.
+ *
+ * This is an EXPECTED operational event, not an error: its rate across the
+ * fleet is the only thing anyone will ask about, which is why the mobile
+ * adapter routes it to `track()` rather than Sentry. `markerAgeDays` is the age
+ * of the coverage marker that tripped the guard, `rowsCleared` the number of
+ * local user-data rows dropped, and `pendingMutations` the outbox depth at that
+ * moment (which the reset leaves untouched — a non-zero value here is normal,
+ * not a loss).
+ */
+export type CoverageResetInfo = {
+  markerAgeDays: number;
+  rowsCleared: number;
+  pendingMutations: number;
+};
+export type CoverageResetReporter = (info: CoverageResetInfo) => void;
+
 export type SyncOptions = {
   /** Encoded board scope keys ("boardType:layoutId:sizeId") to download offline. */
   enabledBoards?: string[];
@@ -91,6 +119,8 @@ export type SyncOptions = {
   onSnapshotBootstrapError?: SnapshotBootstrapErrorReporter;
   /** Telemetry for comparing the snapshot vs paged download paths. See ScopeDownloadCompleteInfo. */
   onScopeDownloadComplete?: ScopeDownloadCompleteReporter;
+  /** Telemetry for a forced deletions-coverage resync. See CoverageResetInfo. */
+  onCoverageReset?: CoverageResetReporter;
 };
 
 /** A per-board download target: the parsed scope plus its encoded key. */
@@ -344,7 +374,7 @@ async function processDeletions(
   /** The epoch pullSync captured at CYCLE start — see `cycleAborted` there. */
   cycleEpoch: number,
   onProgress?: (documentsProcessed: number) => void,
-): Promise<void> {
+): Promise<{ reachedTail: boolean }> {
   const checkpointKey = DELETIONS_CHECKPOINT_KEY;
   const checkpoint = await getCheckpoint(db, checkpointKey);
 
@@ -361,14 +391,14 @@ async function processDeletions(
   while (hasMore) {
     // Sign-out is wiping local data: stop before this page writes the old
     // user's rows back (mirrors the drainer's guard).
-    if (isSigningOut() || getWipeEpoch() !== cycleEpoch || isBackgrounded()) return;
+    if (isSigningOut() || getWipeEpoch() !== cycleEpoch || isBackgrounded()) return { reachedTail: false };
     const response = await graphqlFetch<{ syncDeletions: SyncDeletionsResult }>(SYNC_DELETIONS_QUERY, {
       cursor,
       limit: PAGE_LIMIT,
     });
     const result = response.syncDeletions;
 
-    if (isSigningOut() || getWipeEpoch() !== cycleEpoch || isBackgrounded()) return;
+    if (isSigningOut() || getWipeEpoch() !== cycleEpoch || isBackgrounded()) return { reachedTail: false };
 
     // Empty page can't advance the cursor; break to avoid an infinite loop if
     // the backend returns deletions:[] with hasMore:true (I2).
@@ -440,6 +470,13 @@ async function processDeletions(
   for (const serializedKey of invalidatedKeys) {
     queryClient.invalidateQueries({ queryKey: JSON.parse(serializedKey) as string[] });
   }
+
+  // Both loop exits mean the server has nothing more past this cursor:
+  // hasMore === false, or an empty page (the tail). Only THIS outcome licenses
+  // stamping the coverage marker — the aborts above return false, because a
+  // pull that was backgrounded on its first page has consumed nothing and must
+  // not claim a full retention window of coverage (mirrors syncTable).
+  return { reachedTail: true };
 }
 
 // The manifest is fetched at most once per pullSync run and its outcome cached
@@ -659,6 +696,113 @@ async function runBootstrapPhase(
   return skipPagedPull;
 }
 
+/**
+ * Deletions-coverage guard: force a from-scratch user-data resync when this
+ * device went longer than the tombstone retention window without completing a
+ * deletions pull, so tombstones it never saw are already pruned server-side
+ * (issue #3474).
+ *
+ * Three of the four verdicts do NOTHING AT ALL — no reset, and no stamp either.
+ * The marker is written in exactly one place, after the deletions pull below
+ * reaches its tail, because that is the only moment coverage is actually
+ * established. Claiming it here would be a lie a failed or backgrounded first
+ * pull could never take back:
+ *  - `unknown` (no marker, or one below the plausibility floor): the key is new,
+ *    so EVERY existing install lacks it on the first launch after the update,
+ *    and there is no persisted last-sync wall clock to seed from (mobile's
+ *    lastSyncedAt is an in-memory store that resets each launch). Treating
+ *    absence as "stale" would detonate a fleet-wide reset on the rollout. A
+ *    device that has ALREADY been away longer than the window therefore keeps
+ *    its stale rows — status quo, not a regression, and the only design that
+ *    cannot mass-wipe the fleet on rollout. It stays `unknown` until a pull
+ *    actually completes, so a device that can never finish one never claims a
+ *    window it did not have.
+ *  - `future` (marker dated after now): a clock corrected backwards. The
+ *    completed-pass stamp overwrites it with a real `now`, which unfreezes it
+ *    without inventing coverage on a cycle that failed.
+ *  - `fresh`: the common path — one sync_meta read and nothing else.
+ *
+ * A `stale` verdict PROBES the network before touching anything. pullSync runs
+ * on every foreground, including offline ones; wiping first and only then
+ * discovering there is no connection would leave the user staring at an empty
+ * app until connectivity returns. The probe is a one-row syncDeletions request
+ * whose result is discarded — it proves reachability AND the credential, so an
+ * expired-token device can't wipe itself either. A throw propagates to the
+ * scheduler's catch, which retries on the next trigger with local data intact.
+ *
+ * `beginLocalPurge()` is deliberately NOT called: it bumps the wipe epoch, which
+ * would abort the very cycle that is supposed to rebuild. It isn't needed here —
+ * the scheduler single-flights pullSync, so no other pull page is on the wire,
+ * and the drainer writes only to pending_mutations, which this reset never
+ * touches.
+ */
+async function enforceDeletionsCoverage(
+  db: OfflineDatabase,
+  queryClient: QueryInvalidator,
+  graphqlFetch: <T>(query: string, variables?: Record<string, unknown>) => Promise<T>,
+  cycleEpoch: number,
+  options?: SyncOptions,
+): Promise<void> {
+  // Sign-out is (or is about to be) wiping local user data on its own terms;
+  // don't write sync_meta into a DB mid-teardown, and don't spend a probe on an
+  // account that is going away. Its deleteUserCheckpoints drops the coverage
+  // marker and rewinds the deletions cursor to the epoch anyway, so the next
+  // signed-in pull re-reads the whole retained tombstone window and re-stamps.
+  if (isSigningOut()) return;
+
+  // One clock reading for the whole decision. The probe below is a network
+  // round-trip, so re-reading Date.now() after it would report a marker age
+  // that isn't the one the verdict was made on.
+  const evaluatedAt = Date.now();
+  const coverageAt = await getDeletionsCoverageAt(db);
+  const verdict = evaluateDeletionsCoverage(coverageAt, evaluatedAt);
+
+  // Only 'stale' does anything. Keeping the explicit `coverageAt === null`
+  // disjunct means an absent marker can never structurally reach the wipe below,
+  // whatever the classifier is later taught to return — and it narrows
+  // coverageAt to a number, so markerAgeDays needs no fallback for a case that
+  // cannot happen.
+  if (coverageAt === null || verdict !== 'stale') return;
+
+  // Reachability + auth probe. Its payload is irrelevant; only "did it resolve"
+  // matters, so it asks for a single row.
+  await graphqlFetch<{ syncDeletions: SyncDeletionsResult }>(SYNC_DELETIONS_QUERY, { cursor: undefined, limit: 1 });
+
+  // Re-check the teardown flags after the network await — the probe may have
+  // been in flight across a sign-out or a backgrounding, and neither wants a
+  // multi-table DELETE dispatched at it. The epoch check catches the third
+  // teardown: a board removal (or any beginLocalPurge) that landed while the
+  // probe was on the wire is about to abort this cycle at its first
+  // cycleAborted(), so a wipe here would clear user data with no rebuild behind it.
+  if (isSigningOut() || isBackgrounded() || getWipeEpoch() !== cycleEpoch) return;
+
+  const pendingMutations = await getPendingCount(db);
+  // The STAMP is read fresh — it claims coverage as of the wipe itself, which is
+  // after the probe. Only the reported age below uses the decision's clock.
+  const { rowsCleared } = await resetUserDataForLostCoverage(db, Date.now());
+
+  // Bust every user-data cache the wipe just invalidated. The rebuild below
+  // cannot be relied on to do it: syncTable only invalidates when it pulled at
+  // least one document and processDeletions only on arrivals, so a table the
+  // user had emptied server-side re-pulls nothing and a mounted screen would
+  // keep serving the pre-wipe react-query cache — the exact #3474 symptom
+  // surviving the fix. Deduped by serialized key, same shape as processDeletions.
+  const invalidatedKeys = new Set<string>();
+  for (const tableName of USER_DATA_TABLES) {
+    for (const key of TABLE_CONFIGS[tableName].invalidateKeys) {
+      invalidatedKeys.add(JSON.stringify(key));
+    }
+  }
+  for (const serializedKey of invalidatedKeys) {
+    queryClient.invalidateQueries({ queryKey: JSON.parse(serializedKey) as string[] });
+  }
+
+  // floor, not round: a 79.6-day marker must not be reported as 80 (the
+  // threshold value) when the decision was made on exact milliseconds.
+  const markerAgeDays = Math.floor((evaluatedAt - coverageAt) / 86_400_000);
+  options?.onCoverageReset?.({ markerAgeDays, rowsCleared, pendingMutations });
+}
+
 export async function pullSync(
   db: OfflineDatabase,
   queryClient: QueryInvalidator,
@@ -669,10 +813,6 @@ export async function pullSync(
   // bootstrap phase below (which runs before the first cycleAborted() check)
   // when the app is already backgrounded.
   if (isBackgrounded()) return;
-
-  const enabledBoards = options?.enabledBoards ?? [];
-  const onProgress = options?.onProgress;
-  let totalDocuments = 0;
 
   // Captured ONCE for the whole cycle and threaded into every phase, so a wipe or a
   // local purge aborts the entire pull rather than just whichever table is mid-flight.
@@ -687,10 +827,29 @@ export async function pullSync(
   //
   // Sign-out never hit this because `isSigningOut()` is a persistent flag that stays
   // true for every subsequent table; the epoch alone is not a substitute for it.
+  //
+  // Captured immediately after the entry guard and BEFORE the coverage phase's
+  // awaits: that phase can spend a network probe plus a multi-table wipe, and a
+  // purge landing inside that window must read as "not my epoch" rather than be
+  // adopted as this cycle's own baseline.
   const cycleEpoch = getWipeEpoch();
   // Unlike the other two checks, isBackgrounded() is live, not latched — a background
   // dip that clears before the next check runs won't abort a cycle it can no longer affect.
   const cycleAborted = (): boolean => isSigningOut() || getWipeEpoch() !== cycleEpoch || isBackgrounded();
+
+  // Phase -1: deletions-coverage guard (issue #3474). Runs BEFORE the bootstrap
+  // phase, so the reset and the rebuild that follows belong to the same cycle.
+  // See deletions-coverage.ts for the invariant and for exactly what the reset
+  // does (and does not) clear.
+  await enforceDeletionsCoverage(db, queryClient, graphqlFetch, cycleEpoch, options);
+  // The phase can spend a probe and a multi-table wipe; the bootstrap phase below
+  // starts downloading before the deletions phase's own cycleAborted(), so check
+  // here rather than let a teardown that landed during it kick off a download.
+  if (cycleAborted()) return;
+
+  const enabledBoards = options?.enabledBoards ?? [];
+  const onProgress = options?.onProgress;
+  let totalDocuments = 0;
 
   // Parse the enabled scope keys once; malformed keys are dropped (a stray value
   // can't crash the pull) so both the bootstrap phase and the paged board loop
@@ -737,10 +896,14 @@ export async function pullSync(
   // never fetch it again.
   if (cycleAborted()) return;
   onProgress?.({ phase: 'deletions', currentTable: null, documentsProcessed: 0 });
-  await processDeletions(db, queryClient, graphqlFetch, cycleEpoch, (deletionsProcessed) => {
+  const deletionsResult = await processDeletions(db, queryClient, graphqlFetch, cycleEpoch, (deletionsProcessed) => {
     totalDocuments = deletionsProcessed;
     onProgress?.({ phase: 'deletions', currentTable: null, documentsProcessed: totalDocuments });
   });
+  // The coverage marker advances ONLY on a completed pass. An aborted one (sign-out,
+  // purge, backgrounding) consumed an unknown prefix of the stream, so claiming a
+  // fresh retention window off it would hide a real gap. See deletions-coverage.ts.
+  if (deletionsResult.reachedTail) await setDeletionsCoverageAt(db, Date.now());
 
   for (const tableName of USER_DATA_TABLES) {
     if (cycleAborted()) return;
