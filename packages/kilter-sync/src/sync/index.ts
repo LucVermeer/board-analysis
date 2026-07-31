@@ -1,5 +1,10 @@
 export {
   syncKilterUserData,
+  // Exported for the real-Postgres test in packages/backend: the ratings
+  // conflict clause (created_at from upstream + the setWhere change guard)
+  // can only be verified against an actual database.
+  applyClimbRatings,
+  parseKilterTimestamp,
   type SyncKilterUserDataArgs,
   type SyncKilterUserDataResult,
   type ApplyCircuitsResult,

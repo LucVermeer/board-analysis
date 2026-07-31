@@ -992,6 +992,19 @@ export function sanitizeKilterRating(rating: number | null | undefined): number 
   return value;
 }
 
+/**
+ * Kilter timestamps are ISO strings carrying an offset. Return a Date in UTC,
+ * or undefined when the value is missing/unparseable so the caller's insert
+ * falls back to the column default instead of writing an Invalid Date.
+ * Exported for unit testing.
+ */
+export function parseKilterTimestamp(value: string | null | undefined): Date | undefined {
+  if (!value) return undefined;
+  const parsedMs = Date.parse(value);
+  if (!Number.isFinite(parsedMs)) return undefined;
+  return new Date(parsedMs);
+}
+
 export async function applyClimbRatings(
   tx: DrizzleDb,
   userId: string,
@@ -1060,6 +1073,16 @@ export async function applyClimbRatings(
       // itself. Leave null for kilter-origin rows.
       weight: null,
       kilterId: raw.climb_rating_uuid,
+      // When the user actually rated the climb upstream. Without this the
+      // insert falls through to the column's defaultNow(), so created_at
+      // recorded when OUR sync first saw the row — every historical rating
+      // collapsed onto the day the Kilter sync started. Kilter sends an ISO
+      // string with an offset; Date.parse normalises it to UTC, matching the
+      // ::timestamptz-on-both-sides treatment applyLogs gives created_at.
+      // Unparseable input falls back to the column default rather than
+      // writing an Invalid Date (which Postgres rejects and which would abort
+      // the whole ratings batch).
+      createdAt: parseKilterTimestamp(raw.created_at),
     });
   }
   const values = Array.from(valuesByConflictKey.values());
@@ -1090,6 +1113,23 @@ export async function applyClimbRatings(
         kilterId: sql`COALESCE(EXCLUDED.kilter_id, ${boardClimbRatings.kilterId})`,
         updatedAt: new Date(),
       },
+      // PowerSync redelivers a full snapshot every cycle, so without this
+      // guard the DO UPDATE fires for every rating on every sync and rewrites
+      // updated_at even when nothing about the rating changed — the column
+      // then tracks "when the sync last ran", not "when the user last touched
+      // this rating". Skip the UPDATE entirely when the row would not change.
+      //
+      // The right-hand side has to be the EFFECTIVE new value, not raw
+      // EXCLUDED: comment and kilter_id are written through COALESCE above, so
+      // comparing against bare EXCLUDED would call a no-op COALESCE fallback a
+      // "change" and bump updated_at anyway. Row-wise IS DISTINCT FROM handles
+      // the nullable columns (rating, difficulty_grade_id, kilter_id) without
+      // NULL-propagating to unknown. created_at is deliberately absent from
+      // both the SET and this predicate: an existing row keeps the first
+      // created_at it was stamped with.
+      setWhere: sql`(${boardClimbRatings.rating}, ${boardClimbRatings.difficultyGradeId}, ${boardClimbRatings.comment}, ${boardClimbRatings.kilterId})
+        IS DISTINCT FROM
+        (EXCLUDED.rating, EXCLUDED.difficulty_grade_id, COALESCE(EXCLUDED.comment, ${boardClimbRatings.comment}), COALESCE(EXCLUDED.kilter_id, ${boardClimbRatings.kilterId}))`,
     });
 }
 
