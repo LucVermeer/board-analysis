@@ -716,8 +716,8 @@ export const TotalAreaChart = memo(function TotalAreaChart({
             endOpacity={colorScheme === 'dark' ? 0.1 : 0.04}
             gradientDirection="vertical"
             thickness={2}
-            curved
-            curvature={0.2}
+            // Straight segments avoid gifted-charts' cardinal-spline overshoot (#3780).
+            curved={false}
             maxValue={model.maxValue}
             noOfSections={model.sections}
             yAxisLabelTexts={model.yAxisLabelTexts}
