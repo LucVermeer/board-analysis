@@ -1,6 +1,43 @@
 {
-  "generatedAt": "2026-07-31T09:31:33.284Z",
+  "generatedAt": "2026-07-31T20:48:07.488Z",
   "entries": [
+    {
+      "prNumber": 4048,
+      "category": "fixed",
+      "title": "Pick the app back up after months away and it now rebuilds your ticks, playlists and favourites from the server, instead of quietly hanging on to ones you deleted while you were gone. Your downloaded boards stay put — no surprise re-download — and anything you logged offline still goes up.",
+      "mergedAt": "2026-07-31T20:47:38Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4048"
+    },
+    {
+      "prNumber": 4050,
+      "category": "fixed",
+      "title": "Climbs you queue from the phone now show your name and avatar to everyone in the session instead of landing anonymous — and a phone in the session no longer wipes the \"added by\" avatars off the climbs your crew queued from the web.",
+      "mergedAt": "2026-07-31T20:47:18Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4050",
+      "body": "Fixes #3995"
+    },
+    {
+      "prNumber": 4053,
+      "category": "fixed",
+      "title": "Fixes #3382",
+      "mergedAt": "2026-07-31T20:46:58Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4053",
+      "body": "Fixes #3383\n#3383 is a near-duplicate of #3382 filed from the same #3372 review — it is the issue the removed `TODO(#3383)` marker named, and the only one of the pair that mentions mobile. Both are closed by this change; if you'd rather keep #3382 as the canonical one, close #3383 as a duplicate instead."
+    },
+    {
+      "prNumber": 4051,
+      "category": "fixed",
+      "title": "Fixes #3525",
+      "mergedAt": "2026-07-31T12:19:30Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4051"
+    },
+    {
+      "prNumber": 4063,
+      "category": "improved",
+      "title": "Refs #2863",
+      "mergedAt": "2026-07-31T12:18:35Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4063"
+    },
     {
       "prNumber": 4019,
       "category": "fixed",

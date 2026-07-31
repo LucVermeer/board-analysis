@@ -10,8 +10,19 @@ manual changes). See docs/mobile-ota-updates.md.
 
 A new version shipped to the App Store and Play Store.
 
+### Improved
+
+- Refs #2863 ([#4063](https://github.com/boardsesh/boardsesh/pull/4063))
+
 ### Fixed
 
+- Pick the app back up after months away and it now rebuilds your ticks, playlists and favourites from the server, instead of quietly hanging on to ones you deleted while you were gone. Your downloaded boards stay put — no surprise re-download — and anything you logged offline still goes up. ([#4048](https://github.com/boardsesh/boardsesh/pull/4048))
+- Climbs you queue from the phone now show your name and avatar to everyone in the session instead of landing anonymous — and a phone in the session no longer wipes the "added by" avatars off the climbs your crew queued from the web. ([#4050](https://github.com/boardsesh/boardsesh/pull/4050))
+  Fixes #3995
+- Fixes #3382 ([#4053](https://github.com/boardsesh/boardsesh/pull/4053))
+  Fixes #3383
+  #3383 is a near-duplicate of #3382 filed from the same #3372 review — it is the issue the removed `TODO(#3383)` marker named, and the only one of the pair that mentions mobile. Both are closed by this change; if you'd rather keep #3382 as the canonical one, close #3383 as a duplicate instead.
+- Fixes #3525 ([#4051](https://github.com/boardsesh/boardsesh/pull/4051))
 - Tap the queue too fast and the app now tells you so. Adding, removing, clearing or replacing climbs used to fail silently when the server asked you to slow down — the queue just quietly snapped back. Now you get the same "give it a second" nudge you already get when switching the current climb, and your queue still lands on whatever the server actually has. ([#4019](https://github.com/boardsesh/boardsesh/pull/4019))
 - Adding a climb to a playlist no longer errors out when the same climb gets added twice at once — a double-tap, or your phone syncing a queued add while another device adds the same climb, now quietly ends up with one entry instead of a failure. ([#4021](https://github.com/boardsesh/boardsesh/pull/4021))
 - Angles with no community rating no longer show an empty row of stars in the angle picker — the rating only appears when there's an actual rating behind it. ([#4024](https://github.com/boardsesh/boardsesh/pull/4024))
