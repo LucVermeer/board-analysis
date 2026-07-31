@@ -152,7 +152,7 @@ export function notAuroraTwinDuplicate(ticks: TicksTable = boardseshTicks): SQL 
           isLocallyEdited(twin),
           and(
             sql`COALESCE(${twin.isMirror}, false) = COALESCE(${ticks.isMirror}, false)`,
-            eq(twin.attemptCount, ticks.attemptCount),
+            sql`${twin.attemptCount} IS NOT DISTINCT FROM ${ticks.attemptCount}`,
             sql`${twin.quality} IS NOT DISTINCT FROM ${ticks.quality}`,
             sql`${twin.difficulty} IS NOT DISTINCT FROM ${ticks.difficulty}`,
             sql`COALESCE(${twin.isBenchmark}, false) = COALESCE(${ticks.isBenchmark}, false)`,

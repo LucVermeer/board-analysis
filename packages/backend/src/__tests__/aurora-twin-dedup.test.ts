@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, afterEach, describe, expect, it } from 'vite-plus/test';
-import { sql } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
 import { applyAuroraAscents } from '@boardsesh/aurora-sync/apply-user-logbook';
 import { db } from '../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
@@ -172,6 +172,21 @@ describe('#3535 Aurora-side duplicate ascents', () => {
     expect(counts).toEqual([{ boardType: BOARD, count: 1 }]);
   });
 
+  it('collapses the authenticated `ticks` query too', async () => {
+    await insertTick({ auroraId: 'aur-2' });
+    await insertTick({ auroraId: 'aur-1' });
+
+    // The mobile/web client read, keyed on the connection's own user.
+    const authenticatedContext = { userId: USER_ID, isAuthenticated: true } as unknown as Parameters<
+      typeof tickQueries.ticks
+    >[2];
+    const rows = (await tickQueries.ticks(null, { input: { boardType: BOARD } }, authenticatedContext)) as Array<{
+      auroraId: string | null;
+    }>;
+
+    expect(rows.map((row) => row.auroraId)).toEqual(['aur-1']);
+  });
+
   it('picks the same survivor whatever order the payload arrived in', async () => {
     await insertTick({ auroraId: 'aur-1' });
     await insertTick({ auroraId: 'aur-2' });
@@ -275,10 +290,10 @@ describe('#3535 Aurora-side duplicate ascents', () => {
    * them. `updateTick` writes in place and knows nothing about the group, so
    * the predicate has to absorb this itself.
    */
-  const localEdits: Array<[string, string]> = [
-    ['rated', `quality = 5`],
-    ['commented on', `comment = 'new beta'`],
-    ['re-graded', `difficulty = 24`],
+  const localEdits: Array<[string, SQL]> = [
+    ['rated', sql`quality = 5`],
+    ['commented on', sql`comment = 'new beta'`],
+    ['re-graded', sql`difficulty = 24`],
   ];
 
   for (const [action, assignment] of localEdits) {
@@ -290,9 +305,7 @@ describe('#3535 Aurora-side duplicate ascents', () => {
 
       // What updateTick does: writes the column and bumps updated_at past
       // aurora_synced_at.
-      await db.execute(
-        sql.raw(`UPDATE boardsesh_ticks SET ${assignment}, updated_at = now() WHERE aurora_id = 'aur-1'`),
-      );
+      await db.execute(sql`UPDATE boardsesh_ticks SET ${assignment}, updated_at = now() WHERE aurora_id = ${'aur-1'}`);
 
       expect(await visibleAuroraIds()).toEqual(['aur-1']);
       expect(await feedTotalCount()).toBe(1);
