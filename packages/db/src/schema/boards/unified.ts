@@ -617,7 +617,7 @@ export const boardClimbRatings = pgTable(
     auroraIdUnique: uniqueIndex('board_climb_ratings_aurora_id_unique')
       .on(table.auroraId)
       .where(sql`${table.auroraId} IS NOT NULL`),
-    // Compound index on the kilter-sync REMOVE delete path:
+    // Compound index on the kilter-sync REMOVE soft-detach path:
     // `WHERE user_id = $1 AND kilter_id IN (…)`. The partial unique
     // on kilter_id alone forces Postgres to filter on the surrogate
     // then re-check user_id row by row — fine at the current scale,
