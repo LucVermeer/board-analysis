@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-07-31T01:20:41.307Z",
+  "generatedAt": "2026-07-31T01:25:51.762Z",
   "entries": [
+    {
+      "prNumber": 3997,
+      "category": "fixed",
+      "title": "MoonBoard playlists work on the wall again: light up a climb from a playlist and swiping left/right now walks the rest of the circuit instead of stranding you on one climb.",
+      "mergedAt": "2026-07-31T01:21:00Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/3997",
+      "body": "If adding a climb to a playlist fails, you'll now hear about it — even if you've already swiped the sheet away — and the message names the playlist."
+    },
     {
       "prNumber": 4030,
       "category": "fixed",

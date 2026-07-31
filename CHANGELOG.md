@@ -12,6 +12,8 @@ A new version shipped to the App Store and Play Store.
 
 ### Fixed
 
+- MoonBoard playlists work on the wall again: light up a climb from a playlist and swiping left/right now walks the rest of the circuit instead of stranding you on one climb. ([#3997](https://github.com/boardsesh/boardsesh/pull/3997))
+  If adding a climb to a playlist fails, you'll now hear about it — even if you've already swiped the sheet away — and the message names the playlist.
 - Fixes #3527 ([#4030](https://github.com/boardsesh/boardsesh/pull/4030))
 
 ## 2026-07-30
