@@ -10,8 +10,6 @@ import {
   boardClimbAliases,
 } from '@boardsesh/db/schema';
 
-import { convertQualityToAurora } from '@boardsesh/shared-schema';
-
 import { KILTER_BOARD_TYPE } from '../api/types';
 import type {
   LogPushItem,
@@ -110,6 +108,33 @@ function resolveKilterPushUuid(map: Map<string, string>, canonicalUuid: string):
 }
 
 /**
+ * Builds the outgoing LogPushItem for a single pending tick. Exported (in
+ * addition to being used inline by pushPendingTicks) so tests can exercise
+ * the field mapping — most notably that `quality` passes through raw,
+ * unconverted — without standing up the full DB-backed pushPendingTicks
+ * flow, which bails out via pushNotWired() before any HTTP call today.
+ */
+export function buildLogPushItem(
+  tick: typeof boardseshTicks.$inferSelect,
+  pushUuidMap: Map<string, string>,
+): LogPushItem {
+  return {
+    clientReference: tick.uuid,
+    climbUuid: resolveKilterPushUuid(pushUuidMap, tick.climbUuid),
+    angle: tick.angle,
+    topped: tick.status === 'flash' || tick.status === 'send',
+    attemptCount: tick.attemptCount,
+    // Kilter Grips ticks are natively 1-5 (matching catalog-sync.ts/user-sync.ts),
+    // not Aurora's 1-3 — send tick.quality through unconverted.
+    quality: tick.quality ?? undefined,
+    difficulty: tick.difficulty ?? undefined,
+    isMirror: tick.isMirror ?? false,
+    comment: tick.comment ?? undefined,
+    climbedAt: tick.climbedAt,
+  };
+}
+
+/**
  * Placeholder thrown if the env gate is flipped on without a real REST
  * implementation behind these calls. The gate in pushKilterUserData
  * prevents these from running in normal operation; this exists so a
@@ -153,19 +178,7 @@ async function pushPendingTicks(db: DrizzleDb, userId: string, _accessToken: str
   // result (logs vs attempts) in JS — no need to recompute the CASE in SQL.
   const ticksByUuid = new Map(pending.map((tick) => [tick.uuid, tick]));
 
-  const items: LogPushItem[] = pending.map((tick) => ({
-    clientReference: tick.uuid,
-    climbUuid: resolveKilterPushUuid(pushUuidMap, tick.climbUuid),
-    angle: tick.angle,
-    topped: tick.status === 'flash' || tick.status === 'send',
-    attemptCount: tick.attemptCount,
-    // boardsesh_ticks.quality is 1-5; Kilter expects Aurora's 1-3.
-    quality: convertQualityToAurora(tick.quality) ?? undefined,
-    difficulty: tick.difficulty ?? undefined,
-    isMirror: tick.isMirror ?? false,
-    comment: tick.comment ?? undefined,
-    climbedAt: tick.climbedAt,
-  }));
+  const items: LogPushItem[] = pending.map((tick) => buildLogPushItem(tick, pushUuidMap));
 
   // Reaching here means the env gate is on but the wire implementation
   // hasn't been added yet — bail loudly so the daemon error log points
