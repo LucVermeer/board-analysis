@@ -82,11 +82,11 @@ export function scopeSyncMetaKeys(scopeKey: string): string[] {
  *
  * - A NULL compatible_size_ids row is in no scope (Postgres `NULL @> ARRAY[x]` is
  *   NULL/false, which the membership clause mirrors), so `NOT (...)` evaluates true
- *   and the row is deleted. That's correct and deliberate: connection.ts's
- *   loadOptionalSeed copies board rows UNFILTERED, so such rows exist and no read
- *   path can reach them.
+ *   and the row is deleted. That's defensive: no code path produces NULL-scope board
+ *   rows today (the bundled seed that copied rows UNFILTERED was removed in #3646),
+ *   and no read path could reach them, so reclaiming any that ever appear is right.
  * - This is therefore a "rows of layout (B, L) that nobody needs" sweep rather than
- *   strictly "scope S's rows" — it also takes seeded siblings the user never
+ *   strictly "scope S's rows" — it also takes sibling sizes the user never
  *   enabled. That's the feature (reclaim the space), and it's safe because
  *   isBoardDownloadedLocally gates on syncEnabledBoards + the scope-complete marker
  *   before any row probe, so those rows were never readable. It does mean a teardown
