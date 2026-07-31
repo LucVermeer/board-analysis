@@ -222,6 +222,15 @@ describe('isTransportNetworkError', () => {
     expect(isTransportNetworkError(new Error('The secure connection failed.'))).toBe(true);
   });
 
+  it('still matches the English-prose fallback even when a status resolves — the union contract is unconditional (#4027)', () => {
+    // isTransportNetworkError itself carries NO status-aware precedence — that
+    // logic lives only in isNetworkError. This pins the unchanged contract that
+    // error-reporting.ts's Sentry severity tagging depends on: a resolved status
+    // must NOT suppress this predicate, only isNetworkError's retry decision.
+    const error = Object.assign(new Error('The connection has timed out unexpectedly.'), { status: 400 });
+    expect(isTransportNetworkError(error)).toBe(true);
+  });
+
   it('does NOT match a programmer bug that merely mentions fetch/network/timed out', () => {
     // Narrow markers keep real bugs at error level rather than silently retrying them.
     expect(isTransportNetworkError(new TypeError("Cannot read property 'fetch' of undefined"))).toBe(false);
