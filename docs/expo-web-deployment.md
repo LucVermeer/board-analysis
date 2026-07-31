@@ -104,6 +104,60 @@ redirect allow-list accepts only the configured app origin and numbered app
 previews, and the shared `.boardsesh.com` session cookie is available when the
 Expo export reloads.
 
+### Telemetry (baked at build time)
+
+`deploy-app-web` builds the export with `EXPO_PUBLIC_SENTRY_DSN`,
+`EXPO_PUBLIC_POSTHOG_KEY` and `EXPO_PUBLIC_SENTRY_ENVIRONMENT=production-web`
+set in `production-deploy.yml`'s **workflow-level** `env:` block.
+
+These are not optional and they are not runtime config. `EXPO_PUBLIC_*` values
+are inlined into the JS bundle by `expo export`, and both SDKs decide whether
+they are enabled at module load from the baked value — `isSentryEnabled`
+(`packages/mobile/src/lib/sentry.ts`) and `isAnalyticsEnabled`
+(`packages/mobile/src/lib/posthog-client.ts`). Drop either key and the deploy
+still succeeds; it just publishes a production browser app with crash reporting
+or analytics silently off.
+
+Two constraints on where they live:
+
+- **Workflow level, not job level.** `scripts/mobile-ci-env-parity.test.ts`
+  extracts workflow-level `env:` at 2-space indent; a job-level block is
+  invisible to it, and the test guarding these three keys would pass over a
+  workflow that had quietly dropped them.
+- **`production-web`, not `production`.** `environment` is init-only in both
+  SDKs, so this build-time value is the only thing separating browser-app events
+  from the native fleet in Sentry and PostHog.
+
+The deploy greps the emitted bundles for both keys and the environment tag and
+fails if any is missing — `expo export` reuses Metro's transform cache across
+env changes, so "the workflow set it" and "the bundle contains it" are separate
+claims.
+
+Neither SDK has a `.web.ts` fork or a `WEB_SHIM_MODULES` entry, so the
+react-native builds run as-is under react-native-web. If either turns out not to
+initialise there, the fork target is `@sentry/browser` + `posthog-js-lite` — the
+pair the classic web app already uses.
+
+### Freezing the subdomain deploy
+
+`deploy-web` and `deploy-production-backend` honour `check-rollback`, which
+detects a pinned Vercel Instant Rollback and stages instead of promoting.
+Cloudflare Pages has no equivalent signal, so `deploy-app-web` gates on a repo
+variable instead:
+
+- Set **`APP_WEB_DEPLOY_HOLD`** to any non-empty value to hold
+  `app.boardsesh.com` at its current deployment. Without it, a Pages dashboard
+  rollback is clobbered by the next merge touching `packages/mobile`,
+  `packages/shared`, `packages/shared-schema`,
+  `scripts/build-expo-web-export.sh`, or `deploy/app-subdomain`.
+- Clear the variable to resume. Nothing queues while held — the next qualifying
+  merge deploys.
+- A held run posts to the Discord deploy channel, because a skipped job is only
+  grey in the run summary and a forgotten hold would otherwise strand the
+  browser app on an old bundle.
+- `notify-failure` fires on `failure`/`cancelled` only, so a held (skipped) job
+  raises no false alarm.
+
 ### Infra follow-ups (not provisioned here)
 
 These are DNS / hosting operations outside this repo's build:
