@@ -31,6 +31,7 @@ import {
   subscribeNativeBleConnected,
 } from './adapter-factory';
 import { requestBleRuntimePermissions } from './use-ble-permissions';
+import { describeBlePermissionDenial } from './android-location-permission';
 import { manufacturerCompanyId } from './advertisement';
 import type {
   BleDisconnectInfo,
@@ -868,6 +869,11 @@ export function useBoardBluetooth({
       try {
         const permissionsGranted = await requestBleRuntimePermissions({ requestNotificationPermission: true });
         if (!permissionsGranted) {
+          // The Alert is the only trace this path used to leave — an entire
+          // class of "Bluetooth doesn't work" was invisible in telemetry.
+          void describeBlePermissionDenial().then((denialContext) => {
+            track(SHARED_EVENTS.BluetoothPermissionDenied, { ...denialContext, surface: 'connect', boardName });
+          });
           Alert.alert(t('ble.permissionRequired'), t('ble.errorPermissionDenied'));
           return false;
         }

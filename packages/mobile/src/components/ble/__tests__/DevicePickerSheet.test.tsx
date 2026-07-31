@@ -9,6 +9,17 @@ import type { DiscoveredDevice } from '../../../lib/ble/types';
 // without hand-building device names that resolve through the real parser.
 const stats = vi.hoisted(() => ({ noneMatchedSelectedType: false }));
 
+// The Android 12+ location-suppression hint. Mocked at the hook boundary so the
+// sheet tests stay free of PermissionsAndroid plumbing; the
+// hook's own rules are covered by android-scan-location-gate.test.ts.
+const locationHint = vi.hoisted(() => ({
+  shouldOfferLocationGrant: false,
+  wasGranted: false,
+  isRequesting: false,
+  requestLocationPermission: vi.fn(async () => true),
+  lastActive: null as boolean | null,
+}));
+
 type ViewMockProps = { children?: ReactNode };
 vi.mock('react-native', () => ({
   Platform: { OS: 'ios', Version: '26.1' },
@@ -63,6 +74,13 @@ vi.mock('../../../lib/ble/picker-resolution-stats', () => ({
   noListedBoardMatchesSelectedType: () => stats.noneMatchedSelectedType,
 }));
 
+vi.mock('../../../lib/ble/use-android-scan-location-hint', () => ({
+  useAndroidScanLocationHint: (active: boolean) => {
+    locationHint.lastActive = active;
+    return locationHint;
+  },
+}));
+
 type TextMockProps = { children?: ReactNode };
 vi.mock('../../Text', () => ({
   Text: ({ children }: TextMockProps) => createElement('span', {}, children),
@@ -115,6 +133,11 @@ const hasText = (root: HTMLElement, text: string) => root.textContent?.includes(
 describe('DevicePickerSheet', () => {
   beforeEach(() => {
     stats.noneMatchedSelectedType = false;
+    locationHint.shouldOfferLocationGrant = false;
+    locationHint.wasGranted = false;
+    locationHint.isRequesting = false;
+    locationHint.lastActive = null;
+    locationHint.requestLocationPermission.mockClear();
   });
 
   it('shows the spinner and hides troubleshoot tips while the initial scan runs', () => {
@@ -160,5 +183,51 @@ describe('DevicePickerSheet', () => {
     expect(hasText(container, 'ble.differentBoardType')).toBe(false);
     expect(hasText(container, 'ble.troubleshootTitle')).toBe(false);
     expect(container.querySelector('[data-list]')?.getAttribute('data-count')).toBe('2');
+  });
+
+  it('replaces the hardware tips with the location hint when Android is suppressing results', () => {
+    // The reported bug: a user who declined the "boards near you" prompt gets an
+    // empty picker and is told to check their board's power. Blaming hardware for
+    // an OS permission gate is the thing this PR fixes.
+    locationHint.shouldOfferLocationGrant = true;
+    const { container } = render(<DevicePickerSheet {...makeProps({ isScanning: false, devices: [] })} />);
+
+    expect(hasText(container, 'ble.locationHintTitle')).toBe(true);
+    expect(hasText(container, 'ble.locationHintBody')).toBe(true);
+    expect(hasText(container, 'ble.troubleshootTitle')).toBe(false);
+    expect(hasText(container, 'ble.troubleshootTips')).toBe(false);
+  });
+
+  it('offers a grant button that fires the permission request', () => {
+    locationHint.shouldOfferLocationGrant = true;
+    const { container } = render(<DevicePickerSheet {...makeProps({ isScanning: false, devices: [] })} />);
+
+    const grantButton = container.querySelector('[data-button="ble.locationHintGrant"]');
+    expect(grantButton).not.toBeNull();
+    (grantButton as HTMLButtonElement).click();
+    expect(locationHint.requestLocationPermission).toHaveBeenCalledOnce();
+  });
+
+  it('swaps to the rescan prompt once location is granted, with no grant button left', () => {
+    locationHint.shouldOfferLocationGrant = false;
+    locationHint.wasGranted = true;
+    const { container } = render(<DevicePickerSheet {...makeProps({ isScanning: false, devices: [] })} />);
+
+    expect(hasText(container, 'ble.locationHintGranted')).toBe(true);
+    expect(hasText(container, 'ble.locationHintBody')).toBe(false);
+    expect(container.querySelector('[data-button="ble.locationHintGrant"]')).toBeNull();
+  });
+
+  it('asks the hint hook only about a scan that finished empty', () => {
+    // Guards the hint against firing a PermissionsAndroid.check on every scan
+    // tick, and against showing location copy while boards are listed.
+    render(<DevicePickerSheet {...makeProps({ isScanning: true, devices: [] })} />);
+    expect(locationHint.lastActive).toBe(false);
+
+    render(<DevicePickerSheet {...makeProps({ isScanning: false, devices: [device('a')] })} />);
+    expect(locationHint.lastActive).toBe(false);
+
+    render(<DevicePickerSheet {...makeProps({ isScanning: false, devices: [] })} />);
+    expect(locationHint.lastActive).toBe(true);
   });
 });

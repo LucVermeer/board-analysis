@@ -93,6 +93,10 @@ const resolvedBoards = vi.hoisted(() => ({
 
 vi.mock('react-native', () => ({
   Alert: { alert: alert.alert },
+  // The provider's picker-telemetry read (getAndroidLocationPermissionState)
+  // branches on Platform.OS; 'ios' short-circuits it to null without needing a
+  // PermissionsAndroid stub here.
+  Platform: { OS: 'ios', Version: 0 },
 }));
 
 vi.mock('@boardsesh/play-view', () => ({

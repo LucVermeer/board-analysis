@@ -34,6 +34,9 @@ vi.mock('react-native-ble-plx', () => ({
 
 vi.mock('../ble-manager', () => ({ bleManager: mockBleManager }));
 
+const analytics = vi.hoisted(() => ({ track: vi.fn() }));
+vi.mock('../../analytics', () => ({ track: analytics.track }));
+
 vi.mock('@boardsesh/ble-protocol', () => ({
   // board-device-filter (used by the real, unmocked filter below) reads these
   // service-UUID constants at module load; parseSerialNumber pulls the serial
@@ -186,6 +189,17 @@ describe('useBoardScan', () => {
     expect(result.current.status).toBe('unavailable');
     expect(mockBleManager.state).not.toHaveBeenCalled();
     expect(mockBleManager.startDeviceScan).not.toHaveBeenCalled();
+
+    // Before this, a denial left no trace at all — the sheet just said
+    // "unavailable" and PostHog saw nothing, so the whole class was invisible.
+    await vi.waitFor(() => {
+      expect(analytics.track).toHaveBeenCalledWith('Bluetooth Permission Denied', {
+        surface: 'quickstart_scan',
+        platform: 'android',
+        androidApiLevel: 31,
+        androidLocationPermissionGranted: false,
+      });
+    });
   });
 
   it('scans and deduplicates serials from discovered devices', async () => {

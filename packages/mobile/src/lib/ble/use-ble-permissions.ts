@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Platform, PermissionsAndroid } from 'react-native';
 import { State } from 'react-native-ble-plx';
 import { bleManager } from './ble-manager';
+import { androidApiLevel } from './android-location-permission';
 
 type AndroidPermission = (typeof PermissionsAndroid.PERMISSIONS)[keyof typeof PermissionsAndroid.PERMISSIONS];
 
@@ -14,15 +15,6 @@ type BlePermissionsResult = {
 type BleRuntimePermissionOptions = {
   requestNotificationPermission?: boolean;
 };
-
-function androidApiLevel(): number {
-  if (typeof Platform.Version === 'number') {
-    return Platform.Version;
-  }
-
-  const parsedVersion = Number.parseInt(String(Platform.Version), 10);
-  return Number.isNaN(parsedVersion) ? 0 : parsedVersion;
-}
 
 async function requestOptionalNotificationPermission(): Promise<void> {
   if (Platform.OS !== 'android' || androidApiLevel() < 33) return;
@@ -48,6 +40,11 @@ export async function requestBleRuntimePermissions({
     return true;
   }
 
+  // The API-31+ branch is only *complete* once BLUETOOTH_SCAN is declared with
+  // android:usesPermissionFlags="neverForLocation". Until then Android silently
+  // drops every scan result for a caller without location permission — no error,
+  // no callback, just an empty list. See android-scan-location-gate.ts.
+  // The API<31 branch genuinely needs fine location; there is no way around it.
   const requiredPermissions: AndroidPermission[] =
     androidApiLevel() >= 31
       ? [PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN, PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT]

@@ -25,6 +25,7 @@ import {
   type PickerSelectionDecision,
 } from '../lib/ble/board-config-match';
 import { summarizePickerResolution, type PickerResolutionStats } from '../lib/ble/picker-resolution-stats';
+import { getAndroidLocationPermissionState } from '../lib/ble/android-location-permission';
 import { useSetActiveBoard } from '../lib/graphql/use-active-board';
 import { getHttpClient } from '../lib/graphql/client';
 import { GET_BOARD } from '../lib/graphql/operations';
@@ -890,8 +891,27 @@ export function BluetoothProvider({
   // both stream in), then flush ONE summary event when it closes — per-device
   // or per-render events would massively overcount repeat advertisements.
   const pickerResolutionStatsRef = useRef<PickerResolutionStats | null>(null);
+  // Whether the app held a location permission when this picker session opened.
+  // Read once per session (PermissionsAndroid.check never prompts) so a
+  // devicesTotal=0 flush can be split into "the OS suppressed the results" vs
+  // "nothing was there" — see android-scan-location-gate.ts. null off Android,
+  // and also null if the user dismissed the picker before the async check landed
+  // (rare; PostHog's auto-captured $os separates that from a genuine iOS null).
+  const pickerLocationPermissionRef = useRef<boolean | null>(null);
+  // Monotonic id for the open picker session. A `check` that resolves after its
+  // own session was flushed must not write into the next session's answer.
+  const pickerSessionIdRef = useRef(0);
   useEffect(() => {
     if (pickerState) {
+      if (pickerResolutionStatsRef.current === null) {
+        const sessionId = pickerSessionIdRef.current + 1;
+        pickerSessionIdRef.current = sessionId;
+        pickerLocationPermissionRef.current = null;
+        void getAndroidLocationPermissionState().then((granted) => {
+          if (pickerSessionIdRef.current !== sessionId) return;
+          pickerLocationPermissionRef.current = granted;
+        });
+      }
       pickerResolutionStatsRef.current = summarizePickerResolution(
         pickerState.devices,
         resolvedPickerBoards,
@@ -902,7 +922,16 @@ export function BluetoothProvider({
     const finalStats = pickerResolutionStatsRef.current;
     if (!finalStats) return;
     pickerResolutionStatsRef.current = null;
-    track(SHARED_EVENTS.BlePickerDevicesResolved, { ...finalStats, boardName });
+    const androidLocationPermissionGranted = pickerLocationPermissionRef.current;
+    // Retire the session id as well as the value, so an in-flight check from the
+    // session we are flushing right now can no longer land anywhere.
+    pickerSessionIdRef.current += 1;
+    pickerLocationPermissionRef.current = null;
+    track(SHARED_EVENTS.BlePickerDevicesResolved, {
+      ...finalStats,
+      boardName,
+      androidLocationPermissionGranted,
+    });
   }, [pickerState, resolvedPickerBoards, currentBoardConfig, boardName]);
 
   const setActiveBoard = useSetActiveBoard();

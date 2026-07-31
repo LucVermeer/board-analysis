@@ -142,10 +142,24 @@ export const SHARED_EVENTS = {
   // connected (another device grabbed the last-connection-wins board).
   BluetoothScanStarted: 'Bluetooth Scan Started',
   BluetoothConnectionStolen: 'Bluetooth Connection Stolen',
+  // Mobile-only: the runtime BLE permission request came back denied, so the
+  // flow bailed before any radio work. Previously this path only raised an
+  // Alert (connect) or flipped the sheet to 'unavailable' (quickstart scan) and
+  // emitted nothing at all, leaving a whole class of "Bluetooth doesn't work"
+  // invisible in telemetry. Props: { surface: 'connect' | 'quickstart_scan',
+  // platform, androidApiLevel, androidLocationPermissionGranted }, plus
+  // `boardName` on the 'connect' surface only (the quickstart scan runs before
+  // any board is chosen, so it has none to report).
+  BluetoothPermissionDenied: 'Bluetooth Permission Denied',
   // Fired once per device-picker session (on close) with tallies of how each
   // listed device's board preview resolved: saved board, recorded serial
   // config, current-board fallback, or no preview at all. Measures how often
   // the serial→board resolution actually pays off in the picker UI.
+  // Also carries `androidLocationPermissionGranted` (null off Android): on
+  // Android 12+ binaries without the `neverForLocation` manifest flag, a
+  // devicesTotal=0 session with location denied is the OS suppressing results,
+  // not an absent board. Analyse it by USERS, not events — see
+  // posthog-empty-picker-oracle-is-weak.
   BlePickerDevicesResolved: 'BLE Picker Devices Resolved',
   // Consent-driven scan recon: fired once per discovered board when a user
   // submits a bug report with the "Bluetooth trouble" toggle on. Carries the raw
