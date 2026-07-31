@@ -692,6 +692,20 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     if (refreshed) showToast(t('mobile.queue.outOfSyncRefreshed'), 'error');
   }, [showToast, t]);
 
+  // Failure handler for the four queue-CONTENT mutations (add/remove/clear/setQueue).
+  // A throttled one shows TWO toasts by design (#3929): the pacing hint now, and
+  // `outOfSyncRefreshed` a round-trip later once reconciliation replaced the queue —
+  // same contract as setCurrentClimb ("Two toasts, deliberately" in the tests).
+  // Not showQueueMutationErrorToast: that also fires `actionFailed` on every
+  // non-throttle error, and these syncs must stay silent when offline (#2763).
+  const reconcileFailedContentMutation = useCallback(
+    (error: unknown) => {
+      if (sessionIdRef.current && isRateLimitedError(error)) showToast(t('mobile.queue.rateLimited'), 'error');
+      void resyncQueueAfterMutationFailure();
+    },
+    [resyncQueueAfterMutationFailure, showToast, t],
+  );
+
   const confirmClimbOnWall = useCallback((climbUuid: string) => mutations.confirmClimbOnWall(climbUuid), [mutations]);
   const setSessionBoardSerial = useCallback((serial: string) => mutations.setSessionBoardSerial(serial), [mutations]);
   // Broadcast that THIS phone's BLE link to the wall dropped. The shared mutation
@@ -757,12 +771,12 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         if (__DEV__) console.warn('[queue] addQueueItem sync failed', error);
         // In a party session the add never reached peers — reconcile against the
         // server so this client doesn't silently diverge. Solo is a true no-op.
-        void resyncQueueAfterMutationFailure();
+        reconcileFailedContentMutation(error);
       });
       // Surface the "Climb added to queue · Open" snackbar for every add path.
       showQueueAddedSnackbar();
     },
-    [mutations, resyncQueueAfterMutationFailure, showQueueAddedSnackbar],
+    [mutations, reconcileFailedContentMutation, showQueueAddedSnackbar],
   );
 
   const removeFromQueue = useCallback(
@@ -783,10 +797,10 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         if (__DEV__) console.warn('[queue] removeQueueItem sync failed', error);
         // The remove never reached peers in a party session — reconcile so the
         // dropped item doesn't linger on peers (or come back here). Solo no-ops.
-        void resyncQueueAfterMutationFailure();
+        reconcileFailedContentMutation(error);
       });
     },
-    [mutations, resyncQueueAfterMutationFailure],
+    [mutations, reconcileFailedContentMutation],
   );
 
   const reorderQueue = useCallback(
@@ -829,11 +843,17 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     // coalesces the burst) and tell the user we refreshed. Solo: the local
     // clear is authoritative, so resync no-ops and no toast fires.
     void Promise.allSettled(itemsToRemove.map((item) => mutations.removeQueueItem(item.uuid))).then((results) => {
-      if (results.some((result) => result.status === 'rejected')) {
-        void resyncQueueAfterMutationFailure();
-      }
+      const rejectedRemovals = results.filter(
+        (result): result is PromiseRejectedResult => result.status === 'rejected',
+      );
+      if (rejectedRemovals.length === 0) return;
+      // A clear fires N per-item removes and the limiter typically rejects only
+      // the tail, so prefer a throttled reason over the first one — otherwise an
+      // unrelated early failure would swallow the pacing hint.
+      const throttledRemoval = rejectedRemovals.find((rejected) => isRateLimitedError(rejected.reason));
+      reconcileFailedContentMutation((throttledRemoval ?? rejectedRemovals[0]).reason);
     });
-  }, [mutations, resyncQueueAfterMutationFailure]);
+  }, [mutations, reconcileFailedContentMutation]);
 
   // Replace the whole queue in one shot: optimistic local UPDATE_QUEUE (the
   // source of truth for the user's queue) + SET_QUEUE sync that no-ops in solo
@@ -856,10 +876,10 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         currentClimbQueueItem && isClimbResolved(currentClimbQueueItem.climb) ? currentClimbQueueItem : undefined;
       mutations.setQueue(syncableQueue, syncableCurrent).catch((error) => {
         if (__DEV__) console.warn('[queue] setQueue sync failed', error);
-        void resyncQueueAfterMutationFailure();
+        reconcileFailedContentMutation(error);
       });
     },
-    [mutations, resyncQueueAfterMutationFailure],
+    [mutations, reconcileFailedContentMutation],
   );
 
   // Stable live read of the queue + current climb (see QueueContextValue). Reads
