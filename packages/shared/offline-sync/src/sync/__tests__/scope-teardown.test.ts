@@ -26,7 +26,7 @@ async function insertClimb(params: {
   uuid: string;
   boardType?: string;
   layoutId?: number;
-  /** null models the bundled seed's unfiltered rows, which belong to no scope. */
+  /** null models a board row that belongs to no scope (the bundled seed that produced them was removed in #3646). */
   compatibleSizeIds: number[] | null;
 }): Promise<void> {
   await db.runAsync(
@@ -122,11 +122,12 @@ describe('removeBoardScopeData — which rows go', () => {
     expect(await climbUuids()).toEqual(['other-board', 'other-layout']);
   });
 
-  // The bundled seed (connection.ts's loadOptionalSeed) copies board rows with no
-  // scope predicate, so NULL-size rows exist. They belong to no scope and no read
-  // path reaches them, so reclaiming them is the point.
+  // Defensive: no code path produces NULL-size board rows today (the bundled seed
+  // that copied rows with no scope predicate was removed in #3646). If any ever
+  // appear they belong to no scope and no read path reaches them, so reclaiming
+  // them is the point.
   it('removes NULL compatible_size_ids rows, which belong to no scope', async () => {
-    await insertClimb({ uuid: 'seeded-null-size', compatibleSizeIds: null });
+    await insertClimb({ uuid: 'null-size', compatibleSizeIds: null });
 
     await removeBoardScopeData({ db, scope: KILTER_12X12, scopeKey: 'kilter:1:5', retainedScopes: [] });
 
