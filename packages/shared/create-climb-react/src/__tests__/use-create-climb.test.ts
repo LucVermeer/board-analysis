@@ -319,6 +319,24 @@ describe('useCreateClimb', () => {
       });
       expect(result.current.generateFramesString()).toBe('p100r42');
     });
+
+    // A seeded map is the only way to reach the role-table read at all: with an
+    // empty map the filter callback never runs. That made an unknown board a
+    // remix/edit-ONLY crash, thrown from the useReducer lazy initialiser — i.e.
+    // during render, where nothing can catch it (#3804). 'decoy' is a real
+    // BoardName that this file's STATE_TO_PRIMARY_CODE mock deliberately omits.
+    it('seeds no holds for a board missing from the role table instead of throwing', () => {
+      const initialHoldsMap = {
+        100: { state: 'STARTING' as const, color: '#00FF00', displayColor: '#00FF00' },
+        200: { state: 'HAND' as const, color: '#00FFFF', displayColor: '#00FFFF' },
+      };
+
+      const { result } = renderHook(() => useCreateClimb('decoy', { initialHoldsMap }));
+
+      expect(result.current.litUpHoldsMap).toEqual({});
+      expect(result.current.totalHolds).toBe(0);
+      expect(result.current.isValid).toBe(false);
+    });
   });
 
   describe('loadHolds', () => {

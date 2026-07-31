@@ -11,9 +11,12 @@ export type BrushRole = Extract<HoldState, 'STARTING' | 'HAND' | 'FINISH' | 'FOO
 
 export const PAINT_ROLES: ReadonlyArray<Exclude<BrushRole, 'OFF'>> = ['STARTING', 'HAND', 'FINISH', 'FOOT'];
 
+// Optional-chained for the same reason as `brushRoleColor` below: callers read this
+// during render (CreateDrawerActionBar, HoldRoleSheet), so an unknown `boardName`
+// would throw where nothing can catch it. An unknown board paints no roles.
 export function getPaintRoles(boardName: BoardName): ReadonlyArray<Exclude<BrushRole, 'OFF'>> {
   const supportedRoles = STATE_TO_PRIMARY_CODE[boardName];
-  return PAINT_ROLES.filter((role) => supportedRoles[role] !== undefined);
+  return PAINT_ROLES.filter((role) => supportedRoles?.[role] !== undefined);
 }
 
 /**

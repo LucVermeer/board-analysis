@@ -61,4 +61,41 @@ describe('BoardArtVisibilityProvider', () => {
     const { container } = renderWithin('climbs');
     expect(readVisible(container)).toBe('true');
   });
+
+  // The player paints its own opaque backing over the whole tab shell, so the tab's
+  // list thumbnails are occluded but still mounted — pinning their decoded bitmaps
+  // through the app's peak board-art moment (the player's own full-res board is live,
+  // and remixing from it opens the create board too). #3804.
+  it('hides tab board art on iPhone while the player is up', () => {
+    deviceLayout.isPad = false;
+    segments.value = ['play'];
+    const { container } = renderWithin('climbs');
+    expect(readVisible(container)).toBe('false');
+  });
+
+  // Over-blanking guards. Both of these are root/pushed surfaces that float over a
+  // still-VISIBLE list, so blanking under them would be a user-facing regression —
+  // which is why occlusion is an allowlist of opaque-backed routes rather than
+  // "no tab is active".
+  it('stays visible on iPhone under the user drawer', () => {
+    deviceLayout.isPad = false;
+    segments.value = ['user-drawer'];
+    const { container } = renderWithin('climbs');
+    expect(readVisible(container)).toBe('true');
+  });
+
+  it('stays visible on iPhone under the create drawer', () => {
+    deviceLayout.isPad = false;
+    segments.value = ['(tabs)', 'climbs', 'create'];
+    const { container } = renderWithin('climbs');
+    expect(readVisible(container)).toBe('true');
+  });
+
+  it('still blanks an inactive iPad tab under the user drawer', () => {
+    // iPad behaviour is unchanged: a root modal leaves no tab active, so every tab
+    // blanks via the iPad branch regardless of the new player check.
+    segments.value = ['user-drawer'];
+    const { container } = renderWithin('climbs');
+    expect(readVisible(container)).toBe('false');
+  });
 });
