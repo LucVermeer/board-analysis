@@ -16,6 +16,7 @@ A new version shipped to the App Store and Play Store.
 
 ### Fixed
 
+- Queue rows and climb rows now respond to VoiceOver and TalkBack. Double-tap a row to play the climb or select it in edit mode, and reach "Log ascent" on a history row or "More actions" on a climb row straight from the row's actions — no more tapping into dead ends. ([#4022](https://github.com/boardsesh/boardsesh/pull/4022))
 - Aurora sometimes filed the same ascent two to four times. Your logbook and your send totals now count it once — every real send is still there, nothing was deleted, and a repeat lap on the same climb still shows up as its own send. ([#4061](https://github.com/boardsesh/boardsesh/pull/4061))
   Fixes #3535
 - Fixed a data glitch where some Kilter climbs could show an impossible fraction-of-a-star rating. ([#4047](https://github.com/boardsesh/boardsesh/pull/4047))
