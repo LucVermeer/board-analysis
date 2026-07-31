@@ -16,6 +16,7 @@ A new version shipped to the App Store and Play Store.
 
 ### Fixed
 
+- Board hold overlays can no longer get stuck showing a corrupted image after a rare mid-save crash — a broken render clears itself out instead of sticking around forever. ([#4073](https://github.com/boardsesh/boardsesh/pull/4073))
 - Your V-Points progress line now connects the dots straight instead of curving — no more phantom dips or bumps between weeks making a session look better or worse than it was. ([#4066](https://github.com/boardsesh/boardsesh/pull/4066))
   Closes #3780
 - Offline ticks logged while your connection is spotty no longer get stuck waiting behind one bad request — a real server error now clears out of the queue (or retries on its own terms) instead of stalling every other queued tick behind it. ([#4067](https://github.com/boardsesh/boardsesh/pull/4067))

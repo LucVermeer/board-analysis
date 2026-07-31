@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-31T22:20:46.552Z",
+  "generatedAt": "2026-07-31T22:36:55.946Z",
   "entries": [
+    {
+      "prNumber": 4073,
+      "category": "fixed",
+      "title": "Board hold overlays can no longer get stuck showing a corrupted image after a rare mid-save crash — a broken render clears itself out instead of sticking around forever.",
+      "mergedAt": "2026-07-31T22:30:41Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4073"
+    },
     {
       "prNumber": 4066,
       "category": "fixed",
