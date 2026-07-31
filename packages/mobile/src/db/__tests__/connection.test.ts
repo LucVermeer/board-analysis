@@ -5,7 +5,7 @@
 // Also guards the #3646 retirement: no bundled-seed machinery may come back into
 // the DB lifecycle.
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -35,10 +35,6 @@ beforeEach(async () => {
   // real SQLiteDatabase; the node adapter satisfies the used surface.
   db = createTestDatabase() as unknown as TestSqliteDb & SQLiteDatabase;
   await runMigrations(db);
-});
-
-afterEach(() => {
-  vi.restoreAllMocks();
 });
 
 describe('clearUserData', () => {

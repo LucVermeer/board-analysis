@@ -26,7 +26,7 @@ async function insertClimb(params: {
   uuid: string;
   boardType?: string;
   layoutId?: number;
-  /** null models the bundled seed's unfiltered rows, which belong to no scope. */
+  /** null models a board row that belongs to no scope (the bundled seed that produced them was removed in #3646). */
   compatibleSizeIds: number[] | null;
 }): Promise<void> {
   await db.runAsync(

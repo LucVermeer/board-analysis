@@ -38,7 +38,7 @@ import type { SchemaDriftReporter } from './pull-client';
 /** The two reference tables a snapshot carries; import order is climbs → stats. */
 const SNAPSHOT_TABLES = ['board_climbs', 'board_climb_stats'] as const;
 
-/** The ATTACH alias for the artifact. Distinct from connection.ts's `seed`. */
+/** The ATTACH alias for the artifact; the only ATTACH the DB lifecycle performs. */
 const SNAPSHOT_ALIAS = 'bs_snapshot';
 
 /** Two bootstrap attempts, then a scope falls through to the normal paged crawl. */
