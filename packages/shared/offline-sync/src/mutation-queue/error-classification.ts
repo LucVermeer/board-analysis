@@ -92,6 +92,52 @@ const IOS_NSURL_ENGLISH_DESCRIPTIONS =
 const MAX_CAUSE_DEPTH = 3;
 
 /**
+ * Locale-independent half of the transport check: errno-style codes and the
+ * always-English fetch/polyfill wrapper strings / Java exception class names
+ * (never localized prose — see TRANSPORT_NETWORK_MARKERS above). Recurses into
+ * `.cause` because WinterCG/undici wrap the underlying error there. Split out
+ * from the English-prose heuristic below (rather than merged into one boolean)
+ * so `isNetworkError` can give this signal unconditional precedence over a
+ * resolved HTTP/GraphQL status while the prose fallback defers to one (#4027).
+ */
+function isLocaleIndependentTransportSignal(error: unknown, depth = 0): boolean {
+  if (error === null || typeof error !== 'object') return false;
+
+  const code = (error as { code?: unknown }).code;
+  if (typeof code === 'string' && TRANSPORT_NETWORK_CODES.has(code)) return true;
+
+  const message = (error as { message?: unknown }).message;
+  if (typeof message === 'string' && TRANSPORT_NETWORK_MARKERS.test(message)) return true;
+
+  if (depth < MAX_CAUSE_DEPTH) {
+    const cause = (error as { cause?: unknown }).cause;
+    if (cause !== undefined && cause !== error && isLocaleIndependentTransportSignal(cause, depth + 1)) return true;
+  }
+
+  return false;
+}
+
+/**
+ * English-prose half of the transport check: the best-effort, un-wrapped iOS
+ * NSURLError descriptions (see IOS_NSURL_ENGLISH_DESCRIPTIONS above). Recurses
+ * into `.cause` the same way the locale-independent half does. Kept separate so
+ * callers can require a resolved status to be absent before trusting it.
+ */
+function isEnglishProseTransportSignal(error: unknown, depth = 0): boolean {
+  if (error === null || typeof error !== 'object') return false;
+
+  const message = (error as { message?: unknown }).message;
+  if (typeof message === 'string' && IOS_NSURL_ENGLISH_DESCRIPTIONS.test(message)) return true;
+
+  if (depth < MAX_CAUSE_DEPTH) {
+    const cause = (error as { cause?: unknown }).cause;
+    if (cause !== undefined && cause !== error && isEnglishProseTransportSignal(cause, depth + 1)) return true;
+  }
+
+  return false;
+}
+
+/**
  * Pure, locale-independent predicate: is this a transport/reachability failure
  * (offline, DNS, reset, TLS, timeout) that never reached the server? Matches on
  * error name/code and stable message markers rather than localized prose, and
@@ -102,27 +148,16 @@ const MAX_CAUSE_DEPTH = 3;
  * `@boardsesh/offline-sync/error-classification` subpath) so both agree on what
  * "offline" means. Deliberately excludes AbortError — its cancel-vs-retry meaning
  * differs per call site, so each site handles it.
+ *
+ * NOTE: this is the union of BOTH halves above with no precedence between them —
+ * exactly the pre-#4027 behavior, preserved here unchanged because mobile's
+ * `reportHandledError` severity tagging (error-reporting.ts) consumes this
+ * function directly and doesn't need (or want) status-aware precedence for a
+ * "warning vs error" Sentry tag. `isNetworkError` below is where the two halves
+ * get different treatment.
  */
 export function isTransportNetworkError(error: unknown, depth = 0): boolean {
-  if (error === null || typeof error !== 'object') return false;
-
-  const code = (error as { code?: unknown }).code;
-  if (typeof code === 'string' && TRANSPORT_NETWORK_CODES.has(code)) return true;
-
-  const message = (error as { message?: unknown }).message;
-  if (
-    typeof message === 'string' &&
-    (TRANSPORT_NETWORK_MARKERS.test(message) || IOS_NSURL_ENGLISH_DESCRIPTIONS.test(message))
-  ) {
-    return true;
-  }
-
-  if (depth < MAX_CAUSE_DEPTH) {
-    const cause = (error as { cause?: unknown }).cause;
-    if (cause !== undefined && cause !== error && isTransportNetworkError(cause, depth + 1)) return true;
-  }
-
-  return false;
+  return isLocaleIndependentTransportSignal(error, depth) || isEnglishProseTransportSignal(error, depth);
 }
 
 /**
@@ -131,10 +166,23 @@ export function isTransportNetworkError(error: unknown, depth = 0): boolean {
  * a plain Error carrying the WinterCG "fetch failed: <cause>" wrapper, or a bare
  * NSURLError description. Distinct from a server that replied with an error status
  * — the drainer treats these two very differently (a network error must never
- * advance retry_count toward the dead-letter).
+ * advance retry_count toward the dead-letter; instead it halts the whole drain
+ * cycle to wait for reconnectivity — see drainer.ts's `networkStop`).
+ *
+ * The drainer calls this directly (drainer.ts) AND `isRetryable` below calls it
+ * first — so the precedence decided here applies to both call sites. Locale-
+ * independent signals (errno codes, stable markers, `.cause` chain) and a
+ * cancelled request always count as network regardless of any status that also
+ * resolves — those are trustworthy identifiers of a transport failure. The
+ * English-prose NSURL fallback is a best-effort LAST RESORT for un-wrapped iOS
+ * descriptions: when a real HTTP/GraphQL status ALSO resolves, the server verdict
+ * wins. Without this, a 400 (or any status) whose message happens to match the
+ * English prose would head-of-line-block the ENTIRE drain cycle waiting for a
+ * reconnect that, since the request demonstrably reached the server, will never
+ * come (#4027).
  */
 export function isNetworkError(error: unknown): boolean {
-  if (isTransportNetworkError(error)) return true;
+  if (isLocaleIndependentTransportSignal(error)) return true;
   // A cancelled request (app backgrounded mid-drain, AbortController timeout)
   // surfaces as an error NAMED AbortError — not a TypeError, and not reliably a
   // DOMException instance across RN runtimes, so match by name. The request
@@ -143,12 +191,23 @@ export function isNetworkError(error: unknown): boolean {
   if (error instanceof Error && error.name === 'AbortError') {
     return true;
   }
-  return false;
+  // A resolved HTTP/GraphQL status is a server verdict: the request reached the
+  // server, so this is not a transport/reachability failure no matter what the
+  // message says. Only fall through to the English-prose heuristic when no
+  // status resolves at all.
+  if (getErrorStatus(error) !== null) {
+    return false;
+  }
+  return isEnglishProseTransportSignal(error);
 }
 
 export function isRetryable(error: unknown): boolean {
   // Network failures always retry — the request never reached the server, so
-  // replaying it is safe.
+  // replaying it is safe. `isNetworkError` itself now defers to a resolved status
+  // for the English-prose-only case (#4027), so this check is already
+  // status-aware even though it textually runs before the `getErrorStatus` call
+  // below — see isNetworkError's doc comment for why the precedence lives there
+  // rather than being duplicated here.
   if (isNetworkError(error)) {
     return true;
   }

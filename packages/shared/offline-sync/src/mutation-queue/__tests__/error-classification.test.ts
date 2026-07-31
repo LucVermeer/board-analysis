@@ -222,6 +222,15 @@ describe('isTransportNetworkError', () => {
     expect(isTransportNetworkError(new Error('The secure connection failed.'))).toBe(true);
   });
 
+  it('still matches the English-prose fallback even when a status resolves — the union contract is unconditional (#4027)', () => {
+    // isTransportNetworkError itself carries NO status-aware precedence — that
+    // logic lives only in isNetworkError. This pins the unchanged contract that
+    // error-reporting.ts's Sentry severity tagging depends on: a resolved status
+    // must NOT suppress this predicate, only isNetworkError's retry decision.
+    const error = Object.assign(new Error('The connection has timed out unexpectedly.'), { status: 400 });
+    expect(isTransportNetworkError(error)).toBe(true);
+  });
+
   it('does NOT match a programmer bug that merely mentions fetch/network/timed out', () => {
     // Narrow markers keep real bugs at error level rather than silently retrying them.
     expect(isTransportNetworkError(new TypeError("Cannot read property 'fetch' of undefined"))).toBe(false);
@@ -251,5 +260,48 @@ describe('isNetworkError', () => {
   it('classifies the broadened transport shapes', () => {
     expect(isNetworkError(new Error('fetch failed: Could not connect to the server.'))).toBe(true);
     expect(isNetworkError(new TypeError('Network request failed'))).toBe(true);
+  });
+});
+
+describe('isNetworkError / isRetryable — resolved status beats the English-prose heuristic (#4027)', () => {
+  // A server that replies with a real HTTP/GraphQL status has, by definition,
+  // received the request — that's a server verdict, not a transport failure, no
+  // matter what its message happens to say. Without this, a status whose message
+  // matches IOS_NSURL_ENGLISH_DESCRIPTIONS would classify as `isNetworkError` and
+  // head-of-line-block the ENTIRE drain cycle (drainer.ts's `networkStop`) waiting
+  // for a reconnect that will never come, instead of dead-lettering/retrying that
+  // one mutation via the status-based rules.
+
+  it('400 + an NSURL-prose-matching message: status wins, NOT a network error, dead-letters', () => {
+    const error = Object.assign(new Error('The connection has timed out unexpectedly.'), { status: 400 });
+    expect(isNetworkError(error)).toBe(false);
+    expect(isRetryable(error)).toBe(false);
+  });
+
+  it('503 + an NSURL-prose-matching message: status wins, NOT a network error, but still retries (via status)', () => {
+    const error = Object.assign(new Error('The connection has timed out unexpectedly.'), { status: 503 });
+    expect(isNetworkError(error)).toBe(false);
+    expect(isRetryable(error)).toBe(true);
+  });
+
+  it('no status + an NSURL-prose-matching message: unchanged, still a network error and retryable', () => {
+    const error = new Error('The connection has timed out unexpectedly.');
+    expect(isNetworkError(error)).toBe(true);
+    expect(isRetryable(error)).toBe(true);
+  });
+
+  it('no status + a locale-independent code: unchanged, still a network error and retryable', () => {
+    const error = { code: 'ECONNREFUSED' };
+    expect(isNetworkError(error)).toBe(true);
+    expect(isRetryable(error)).toBe(true);
+  });
+
+  it('a resolved status + a locale-independent code: locale-independent signal keeps precedence, still a network error', () => {
+    // Pins the precedence contract: only the English-prose fallback defers to a
+    // resolved status. Locale-independent signals (errno codes, stable markers)
+    // are trustworthy regardless of what status also resolves.
+    const error = Object.assign(new Error('boom'), { status: 400, code: 'ECONNREFUSED' });
+    expect(isNetworkError(error)).toBe(true);
+    expect(isRetryable(error)).toBe(true);
   });
 });
