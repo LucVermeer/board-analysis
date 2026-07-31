@@ -35,6 +35,31 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: boardsesh-daemon
 
+  # --- Expo web export (deploy-app-web) -------------------------------------
+  # These are read only by the `expo export` in deploy-app-web, but they live at
+  # workflow level on purpose: scripts/mobile-ci-env-parity.test.ts extracts
+  # workflow-level `env:` (2-space indent) and would not see a job-level block.
+  # They are all public client values — `EXPO_PUBLIC_*` is inlined into the JS
+  # bundle at build time, so none of this is a secret.
+  #
+  # EXPO_PUBLIC_WEB_URL is the AUTH origin and is deliberately www.boardsesh.com,
+  # NOT app.boardsesh.com: the SPA does credentialed cross-origin auth against
+  # www. See docs/expo-web-deployment.md.
+  EXPO_PUBLIC_BACKEND_URL: https://ws.boardsesh.com
+  EXPO_PUBLIC_WS_URL: wss://ws.boardsesh.com/graphql
+  EXPO_PUBLIC_WEB_URL: https://www.boardsesh.com
+  # Same DSN and project as every other mobile workflow, so app.boardsesh.com
+  # reports alongside the native fleet. Until this landed the subdomain shipped
+  # with no client telemetry at all: both SDKs gate on these vars being present
+  # at BUILD time (sentry.ts `isSentryEnabled`, posthog-client.ts
+  # `isAnalyticsEnabled`), and deploy-app-web set neither.
+  EXPO_PUBLIC_SENTRY_DSN: https://f55e6626faf787ae5291ad75b010ea14@o4510644927660032.ingest.us.sentry.io/4510644930150400
+  EXPO_PUBLIC_POSTHOG_KEY: ${{ vars.NEXT_PUBLIC_POSTHOG_KEY }}
+  # Separates browser-app events from the native fleet in both SDKs. `environment`
+  # is init-only, so this build-time var is the only place it can be set
+  # (src/lib/app-environment.ts `resolveAppEnvironment`).
+  EXPO_PUBLIC_SENTRY_ENVIRONMENT: production-web
+
 jobs:
   detect-changes:
     runs-on: ubuntu-latest
@@ -518,9 +543,16 @@ jobs:
   # detect-changes. No inline Playwright smoke gate — a per-deploy expo-web boot
   # is too heavy here (this file has no such gate for web/backend either); the
   # expo-web-smoke suite stays the dispatch-only gate in e2e-tests.yml.
+  # Manual deploy freeze for app.boardsesh.com, the Cloudflare Pages analogue of
+  # check-rollback. deploy-web and deploy-production-backend both honour a pinned
+  # Vercel Instant Rollback; Pages has no equivalent signal here, so without this
+  # a dashboard rollback of the subdomain is silently clobbered by the next merge
+  # touching packages/mobile, packages/shared, packages/shared-schema, the export
+  # script, or deploy/app-subdomain. Set the repo variable APP_WEB_DEPLOY_HOLD to
+  # any non-empty value to hold the subdomain where it is; clear it to resume.
   deploy-app-web:
     needs: [detect-changes]
-    if: needs.detect-changes.outputs.app_changed == 'true'
+    if: needs.detect-changes.outputs.app_changed == 'true' && vars.APP_WEB_DEPLOY_HOLD == ''
     runs-on: ubuntu-latest
     environment: Production
     steps:
@@ -532,26 +564,31 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Build standalone Expo web export (production env baked in)
-        # EXPO_PUBLIC_WEB_URL is the AUTH origin and is deliberately
-        # www.boardsesh.com, NOT app.boardsesh.com: the SPA does credentialed
-        # cross-origin auth against www. See docs/expo-web-deployment.md.
+        # The EXPO_PUBLIC_* values come from the workflow-level `env:` block
+        # (see the header) so mobile-ci-env-parity can read them; the export
+        # inherits them, no per-step re-declaration needed.
         #
         # BOARDSESH_EXPORT_EXPECT_URLS is inert until sibling PR #3797 lands the
         # `--clear` + env-assertion support; once it does, it becomes the
         # in-export stale-env detector. The independent grep step below covers us
         # regardless of merge order.
         run: |
-          EXPO_PUBLIC_BACKEND_URL=https://ws.boardsesh.com \
-          EXPO_PUBLIC_WS_URL=wss://ws.boardsesh.com/graphql \
-          EXPO_PUBLIC_WEB_URL=https://www.boardsesh.com \
           BOARDSESH_EXPORT_EXPECT_URLS="https://ws.boardsesh.com https://www.boardsesh.com" \
           bash scripts/build-expo-web-export.sh --subdomain "$RUNNER_TEMP/app-standalone"
 
-      - name: Verify production origins are baked into the bundles
+      - name: Verify production origins and telemetry keys are baked into the bundles
         # Belt-and-braces stale-env guard, independent of #3797's
         # BOARDSESH_EXPORT_EXPECT_URLS. `expo export` reuses Metro's transform
         # cache even when EXPO_PUBLIC_* change, so an old env can silently ship;
-        # grep the emitted JS bundles for both prod origins and fail otherwise.
+        # grep the emitted JS bundles for each expected value and fail otherwise.
+        #
+        # The telemetry keys are checked here for the same reason the origins
+        # are: EXPO_PUBLIC_* are inlined at build time, so "the workflow set it"
+        # and "the bundle contains it" are different claims. This step asserts
+        # the second. It does NOT prove either SDK initialises under
+        # react-native-web — that needs the preview check in the PR body.
+        env:
+          POSTHOG_KEY: ${{ vars.NEXT_PUBLIC_POSTHOG_KEY }}
         run: |
           set -euo pipefail
           js_glob="$RUNNER_TEMP/app-standalone/_expo/static/js/web"
@@ -562,6 +599,30 @@ jobs:
             fi
             echo "ok: found '$origin' in the emitted bundles"
           done
+
+          # Sentry: match the DSN's ingest host, not the whole DSN, so the log
+          # never echoes the key portion.
+          if ! grep -rql "o4510644927660032.ingest.us.sentry.io" "$js_glob"/*.js; then
+            echo "::error::Sentry DSN not baked into the export — app.boardsesh.com would ship with no crash reporting." >&2
+            exit 1
+          fi
+          echo "ok: found the Sentry ingest host in the emitted bundles"
+
+          if [ -z "${POSTHOG_KEY:-}" ]; then
+            echo "::error::vars.NEXT_PUBLIC_POSTHOG_KEY is unset — the export would ship with analytics disabled." >&2
+            exit 1
+          fi
+          if ! grep -rql "$POSTHOG_KEY" "$js_glob"/*.js; then
+            echo "::error::PostHog key not baked into the export — app.boardsesh.com would ship with no analytics." >&2
+            exit 1
+          fi
+          echo "ok: found the PostHog key in the emitted bundles"
+
+          if ! grep -rql "production-web" "$js_glob"/*.js; then
+            echo "::error::EXPO_PUBLIC_SENTRY_ENVIRONMENT not baked in — app events would be indistinguishable from the native fleet." >&2
+            exit 1
+          fi
+          echo "ok: found the production-web environment tag in the emitted bundles"
 
       - name: Add Cloudflare Pages host config to the export
         # _redirects (SPA fallback) + _headers (noindex/caching/no-CSP) are host
@@ -670,6 +731,34 @@ jobs:
   #         echo "Waiting for staging backend to be healthy..."
   #         sleep 5
   #         docker ps --filter "name=staging-backend" --format "table {{.Names}}\t{{.Status}}"
+
+  # Pings Discord when an app.boardsesh.com deploy was skipped by the freeze.
+  # Without this the hold is invisible: a skipped job just shows grey in the run
+  # summary, so a forgotten APP_WEB_DEPLOY_HOLD would quietly strand the
+  # subdomain on an old bundle. No-ops if DISCORD_DEPLOY_WEBHOOK is unset.
+  notify-app-web-held:
+    needs: [detect-changes]
+    if: needs.detect-changes.outputs.app_changed == 'true' && vars.APP_WEB_DEPLOY_HOLD != ''
+    runs-on: ubuntu-latest
+    environment: Production
+    steps:
+      - name: Notify Discord (app.boardsesh.com deploy held)
+        env:
+          DISCORD_DEPLOY_WEBHOOK: ${{ secrets.DISCORD_DEPLOY_WEBHOOK }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          if [ -z "$DISCORD_DEPLOY_WEBHOOK" ]; then
+            echo "DISCORD_DEPLOY_WEBHOOK not set — skipping notification"
+            exit 0
+          fi
+          # URL wrapped in <…> so Discord suppresses the inline preview embed.
+          CONTENT=$(printf '🧊 **app.boardsesh.com deploy held** on `%s`\nAPP_WEB_DEPLOY_HOLD is set, so this commit did NOT ship to the browser app. The subdomain stays on its current deployment.\nClear the `APP_WEB_DEPLOY_HOLD` repo variable and re-run to resume.\n<%s>' \
+            "${COMMIT_SHA:0:7}" "$RUN_URL")
+          # allowed_mentions.parse=[] blocks @everyone/@here/role/user pings.
+          jq -n --arg content "$CONTENT" '{content: $content, allowed_mentions: {parse: []}}' \
+            | curl -sS --fail-with-body -X POST -H "Content-Type: application/json" -d @- "$DISCORD_DEPLOY_WEBHOOK" || \
+              echo "::warning::Failed to post Discord notification (see status above)"
 
   # Pings Discord when a deploy ran during an active rollback: the release was
   # built and staged but NOT promoted, so production is still on the pinned

@@ -85,6 +85,43 @@ function workflowEnvValue(source: string, key: string): string | null {
   return match ? match[1] : null;
 }
 
+// The standalone Expo web export (app.boardsesh.com) is deliberately NOT in the
+// fingerprint-parity list above: it is a browser bundle and never enters the
+// native fingerprint graph, so locking its env to the native builds would be
+// meaningless. It has its own, narrower contract — the telemetry keys must be
+// present at BUILD time, because `EXPO_PUBLIC_*` is inlined into the JS bundle
+// and both SDKs latch their enablement off these vars at module load
+// (src/lib/sentry.ts `isSentryEnabled`, src/lib/posthog-client.ts
+// `isAnalyticsEnabled`). Omitting them does not fail the deploy — it ships a
+// production browser app with crash reporting and analytics silently off, which
+// is exactly what happened until these were added.
+describe('Expo web export telemetry (app.boardsesh.com)', () => {
+  const PRODUCTION_DEPLOY = 'production-deploy.yml';
+
+  it.each(['EXPO_PUBLIC_SENTRY_DSN', 'EXPO_PUBLIC_POSTHOG_KEY', 'EXPO_PUBLIC_SENTRY_ENVIRONMENT'])(
+    'declares %s at workflow level in production-deploy.yml',
+    (key) => {
+      // Workflow level (2-space indent) specifically: a job-level block is
+      // invisible to workflowEnvValue, and moving these into deploy-app-web
+      // would silently blind this test.
+      expect(workflowEnvValue(readWorkflow(PRODUCTION_DEPLOY), key)).not.toBeNull();
+    },
+  );
+
+  it('tags the browser app with its own Sentry/PostHog environment', () => {
+    // `environment` is init-only in both SDKs, so this build-time value is the
+    // only thing separating browser-app events from the native fleet.
+    expect(workflowEnvValue(readWorkflow(PRODUCTION_DEPLOY), 'EXPO_PUBLIC_SENTRY_ENVIRONMENT')).toBe('production-web');
+  });
+
+  it('reports to the same Sentry project as the native workflows', () => {
+    // One project for all three SDKs (see docs) — a divergent DSN here would
+    // split the browser app off into its own project without anyone noticing.
+    const dsn = workflowEnvValue(readWorkflow(PRODUCTION_DEPLOY), 'EXPO_PUBLIC_SENTRY_DSN');
+    expect(dsn).toBe(workflowEnvValue(readWorkflow(NATIVE_ANDROID), 'EXPO_PUBLIC_SENTRY_DSN'));
+  });
+});
+
 describe('mobile CI env parity (OTA fingerprint invariant)', () => {
   // The PR-time OTA-compat check + the per-PR preview publish resolve the same
   // fingerprint as the native builds + OTA publish, so they must share the same
