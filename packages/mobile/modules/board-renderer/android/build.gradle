@@ -43,3 +43,11 @@ android {
     }
   }
 }
+
+dependencies {
+  // JVM unit tests for the cache-dir recovery helper (re-create a reclaimed
+  // overlay cache dir, retry the PNG write once). Run via
+  // :…:testDebugUnitTest from .github/workflows/android-pr-rn.yml; the repo's
+  // `vp` flow has no Kotlin test runner.
+  testImplementation 'junit:junit:4.13.2'
+}

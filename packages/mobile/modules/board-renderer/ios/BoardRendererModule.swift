@@ -25,6 +25,37 @@ public class BoardRendererModule: Module {
     pruneCacheIfNeeded(maxBytes: BoardRendererModule.cacheCapBytes)
   }()
 
+  /// `Library/Caches` is reclaimable: iOS can delete our cache directory at any
+  /// point under storage pressure, including while the app is running. The
+  /// directory is only created once, when `cacheDir` is first touched, so once
+  /// it's gone every later write throws and hold overlays silently stop drawing
+  /// until the app relaunches. Re-create it and retry the write exactly once.
+  ///
+  /// The gate is "is the directory there now" — same rule as the Android twin
+  /// in `CacheDirRecovery`. A path we can't turn into a directory (protected or
+  /// read-only volume) rethrows the original error, and the retry is bounded to
+  /// a single extra attempt, so a persistently broken filesystem still fails
+  /// fast instead of looping.
+  private func retryOnceAfterRecreatingCacheDir<T>(_ action: () throws -> T) throws -> T {
+    do {
+      return try action()
+    } catch {
+      // `withIntermediateDirectories: true` is a no-op when the directory is
+      // already back, so this covers both "we restored it" and "something else
+      // restored it first".
+      try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
+      var isDirectory: ObjCBool = false
+      guard FileManager.default.fileExists(atPath: cacheDir.path, isDirectory: &isDirectory),
+        isDirectory.boolValue
+      else { throw error }
+      // Deliberately not claiming the directory *had* vanished: `catch` here
+      // covers every thrown error, so a permissions or out-of-space failure
+      // reaches this line too, with the directory in place the whole time.
+      NSLog("[BoardRenderer] Overlay write failed (\(error)); cache dir at \(cacheDir.path) is in place, retrying once")
+      return try action()
+    }
+  }
+
   private func pruneCacheIfNeeded(maxBytes: Int) {
     // Sort by modificationDate (not contentAccessDate) because that's what
     // we can reliably bump on a cache hit via setAttributes(.modificationDate:).
@@ -139,7 +170,9 @@ public class BoardRendererModule: Module {
         userInfo: [NSLocalizedDescriptionKey: "PNG encoding failed"])
     }
 
-    try pngData.write(to: outputUrl)
+    try retryOnceAfterRecreatingCacheDir {
+      try pngData.write(to: outputUrl)
+    }
     return outputUrl.absoluteString
   }
 
