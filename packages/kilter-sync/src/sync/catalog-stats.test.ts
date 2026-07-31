@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
 
-import { foldCatalogStat, foldCatalogStatOnce, shouldRelistFoldedCanonical } from './catalog-sync';
+import {
+  foldCatalogStat,
+  foldCatalogStatOnce,
+  shouldRelistFoldedCanonical,
+  shouldSkipEmptyCatalogStat,
+} from './catalog-sync';
 import type { KilterCatalogStat } from '../api/kilter-rest';
 import type { StatAccum } from './catalog-sync';
 
@@ -326,6 +331,42 @@ describe('foldCatalogStat — kilter catalog stat accumulation', () => {
     });
     expect(merged.faUsername).toBe('mergefa');
     expect(merged.faAt).toBe('2023-01-01T00:00:00.000Z');
+  });
+});
+
+describe('shouldSkipEmptyCatalogStat — phantom (climb, angle) stat row guard (issue #3522)', () => {
+  function accum(over: Partial<StatAccum> = {}): StatAccum {
+    return {
+      canonicalUuid: CANON,
+      angle: 40,
+      kilterCount: 0,
+      displayDifficulty: null,
+      difficultyAverage: null,
+      qualityAverage: null,
+      faUsername: null,
+      faAt: null,
+      hasOwnRowStats: false,
+      ...over,
+    };
+  }
+
+  it('skips a fully empty stat: zero ascents and nothing to display', () => {
+    // e.g. Grips reporting {ascentCount: 0, difficulty: 0, quality: 0} for an
+    // angle nobody has climbed — the guards already null the display fields,
+    // but without this check it would still INSERT an all-null phantom row.
+    expect(shouldSkipEmptyCatalogStat(accum())).toBe(true);
+  });
+
+  it('keeps a zero-ascent stat that carries a real grade (freshly set, unclimbed angle)', () => {
+    expect(shouldSkipEmptyCatalogStat(accum({ kilterCount: 0, displayDifficulty: 20 }))).toBe(false);
+    expect(shouldSkipEmptyCatalogStat(accum({ kilterCount: 0, difficultyAverage: 20.4 }))).toBe(false);
+    expect(shouldSkipEmptyCatalogStat(accum({ kilterCount: 0, qualityAverage: 4.2 }))).toBe(false);
+    expect(shouldSkipEmptyCatalogStat(accum({ kilterCount: 0, faUsername: 'setter' }))).toBe(false);
+    expect(shouldSkipEmptyCatalogStat(accum({ kilterCount: 0, faAt: '2024-01-01T00:00:00.000Z' }))).toBe(false);
+  });
+
+  it('keeps a stat with real ascents but no grade/quality data yet', () => {
+    expect(shouldSkipEmptyCatalogStat(accum({ kilterCount: 12 }))).toBe(false);
   });
 });
 
