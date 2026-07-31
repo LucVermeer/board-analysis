@@ -4,6 +4,12 @@ User-facing changes to Boardsesh, newest first. Auto-generated from the "Release
 Notes" section of merged pull requests — do not edit by hand (a CI check rejects
 manual changes). See docs/mobile-ota-updates.md.
 
+## 2026-08-01
+
+### App update
+
+A new version shipped to the App Store and Play Store.
+
 ## 2026-07-31
 
 ### App update
@@ -16,6 +22,12 @@ A new version shipped to the App Store and Play Store.
 
 ### Fixed
 
+- Remixing a climb is lighter on your phone: opening the player now lets the climbs behind it release their artwork instead of holding it all in memory, so a long browse-and-remix session is less likely to end with the app disappearing. ([#4078](https://github.com/boardsesh/boardsesh/pull/4078))
+  A remix opened from a bad or shared link falls back to your own board instead of dying on a blank screen.
+- Your Activity, Grade Distribution, and Flash vs Redpoint charts on the You ([#4074](https://github.com/boardsesh/boardsesh/pull/4074))
+  page now stay inside their cards instead of spilling past the edge.
+- Boardsesh no longer creates phantom stat rows for angles nobody's climbed on Kilter — the bogus grade-0 and impossible sub-one-star entries some climbs picked up from empty upstream data stop appearing. ([#4070](https://github.com/boardsesh/boardsesh/pull/4070))
+  Closes #3522
 - Board hold overlays can no longer get stuck showing a corrupted image after a rare mid-save crash — a broken render clears itself out instead of sticking around forever. ([#4073](https://github.com/boardsesh/boardsesh/pull/4073))
 - Your V-Points progress line now connects the dots straight instead of curving — no more phantom dips or bumps between weeks making a session look better or worse than it was. ([#4066](https://github.com/boardsesh/boardsesh/pull/4066))
   Closes #3780

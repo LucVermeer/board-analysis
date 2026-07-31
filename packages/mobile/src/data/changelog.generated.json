@@ -1,6 +1,30 @@
 {
-  "generatedAt": "2026-07-31T22:36:55.946Z",
+  "generatedAt": "2026-07-31T23:28:50.508Z",
   "entries": [
+    {
+      "prNumber": 4078,
+      "category": "fixed",
+      "title": "Remixing a climb is lighter on your phone: opening the player now lets the climbs behind it release their artwork instead of holding it all in memory, so a long browse-and-remix session is less likely to end with the app disappearing.",
+      "mergedAt": "2026-07-31T23:28:02Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4078",
+      "body": "A remix opened from a bad or shared link falls back to your own board instead of dying on a blank screen."
+    },
+    {
+      "prNumber": 4074,
+      "category": "fixed",
+      "title": "Your Activity, Grade Distribution, and Flash vs Redpoint charts on the You",
+      "mergedAt": "2026-07-31T23:27:48Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4074",
+      "body": "page now stay inside their cards instead of spilling past the edge."
+    },
+    {
+      "prNumber": 4070,
+      "category": "fixed",
+      "title": "Boardsesh no longer creates phantom stat rows for angles nobody's climbed on Kilter — the bogus grade-0 and impossible sub-one-star entries some climbs picked up from empty upstream data stop appearing.",
+      "mergedAt": "2026-07-31T23:04:52Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4070",
+      "body": "Closes #3522"
+    },
     {
       "prNumber": 4073,
       "category": "fixed",
@@ -2610,6 +2634,28 @@
     }
   ],
   "nativeReleases": [
+    {
+      "kind": "native-release",
+      "date": "2026-08-01T08:44:33+10:00",
+      "sha": "f2bf15ab3acbe09fc6ff3498cb5cb835bf955f1f",
+      "platforms": [
+        "ios"
+      ],
+      "fingerprints": {
+        "ios": "f2fb048a9827d75f67f8939d6f56bb64d4eed434"
+      }
+    },
+    {
+      "kind": "native-release",
+      "date": "2026-08-01T08:30:40+10:00",
+      "sha": "6d3ad102e1507e08bd6b6a1a275024dd768261a3",
+      "platforms": [
+        "android"
+      ],
+      "fingerprints": {
+        "android": "d6148744d6bfe0b5de5fa13b6f039a7fc1b65d62"
+      }
+    },
     {
       "kind": "native-release",
       "date": "2026-07-31T11:41:16+10:00",
