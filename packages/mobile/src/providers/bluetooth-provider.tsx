@@ -919,7 +919,7 @@ export function BluetoothProvider({
     boardUuid,
     holdsData,
     analyticsBoardId: presenceBoardId,
-    analyticsInSession: sessionIdRef.current != null,
+    analyticsInSession: sessionId != null,
     ledColorOverrides: bluetoothColorOverrides,
     onConnectSuccess: handleConnectSuccess,
     onConnectionEnded: handleBluetoothConnectionEnded,
