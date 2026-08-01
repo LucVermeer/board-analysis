@@ -46,7 +46,7 @@ type AuthState = {
   isLoading: boolean;
   signInWithApple: (webAttemptId?: string, isRegistration?: boolean) => Promise<OAuthSignInResult>;
   signInWithGoogle: (webAttemptId?: string, isRegistration?: boolean) => Promise<OAuthSignInResult>;
-  // Browser-OAuth fallback for when native Google sign-in can't present (iOS 26.5.1).
+  // Browser-OAuth fallback for supported native Google presentation/config failures.
   signInWithGoogleWeb: (isRegistration?: boolean) => Promise<OAuthSignInResult>;
   // Browser-OAuth fallback for when native Sign in with Apple throws (code 1000).
   signInWithAppleWeb: (isRegistration?: boolean) => Promise<OAuthSignInResult>;
@@ -111,6 +111,11 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
   const remoteRevalidationRef = useRef<Promise<void> | null>(null);
   const nativeSessionDegradedRef = useRef(false);
   const reconnectAuthCheckRef = useRef<Promise<void> | null>(null);
+  // Android returns to `active` before Linking delivers the browser OAuth
+  // callback. Suppress only the provider's generic foreground read while a
+  // fallback owns that hand-off; each successful wrapper still runs its own
+  // explicit check after the transfer token has been exchanged.
+  const browserFallbackAuthChecksRef = useRef(0);
 
   const updateNativeSessionDegraded = useCallback((degraded: boolean) => {
     nativeSessionDegradedRef.current = degraded;
@@ -565,7 +570,7 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
-      if (nextAppState === 'active') {
+      if (nextAppState === 'active' && browserFallbackAuthChecksRef.current === 0) {
         void checkAuth();
       }
     });
@@ -611,16 +616,21 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
     return result;
   }, [checkAuth]);
 
-  // Browser-based Google fallback (native SDK can't present the OAuth browser on
-  // iOS 26.5.1). Same success contract as the native flow: re-run checkAuth so the
-  // provider flips to the authenticated UI.
+  // Browser-based Google fallback for supported iOS presentation and Android
+  // config failures. Same success contract as the native flow: re-run checkAuth
+  // so the provider flips to the authenticated UI.
   const signInWithGoogleWeb = useCallback(
     async (isRegistration = false): Promise<OAuthSignInResult> => {
-      const result = await authSignInWithGoogleWeb(isRegistration);
-      if (result.success) {
-        await checkAuth();
+      browserFallbackAuthChecksRef.current += 1;
+      try {
+        const result = await authSignInWithGoogleWeb(isRegistration);
+        if (result.success) {
+          await checkAuth();
+        }
+        return result;
+      } finally {
+        browserFallbackAuthChecksRef.current -= 1;
       }
-      return result;
     },
     [checkAuth],
   );
@@ -630,11 +640,16 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
   // provider flips to the authenticated UI.
   const signInWithAppleWeb = useCallback(
     async (isRegistration = false): Promise<OAuthSignInResult> => {
-      const result = await authSignInWithAppleWeb(isRegistration);
-      if (result.success) {
-        await checkAuth();
+      browserFallbackAuthChecksRef.current += 1;
+      try {
+        const result = await authSignInWithAppleWeb(isRegistration);
+        if (result.success) {
+          await checkAuth();
+        }
+        return result;
+      } finally {
+        browserFallbackAuthChecksRef.current -= 1;
       }
-      return result;
     },
     [checkAuth],
   );

@@ -138,6 +138,8 @@ beforeEach(() => {
   captureAuthCredentialGenerationMock.mockReset();
   captureAuthCredentialGenerationMock.mockReturnValue(1);
   authSignInWithCredentialsMock.mockReset();
+  authSignInWithGoogleWebMock.mockReset();
+  authSignInWithAppleWebMock.mockReset();
   clearStoredQueueSnapshotMock.mockReset();
   clearStoredQueueSnapshotMock.mockResolvedValue(undefined);
   clearAllCreateClimbDraftsMock.mockReset();
@@ -188,11 +190,13 @@ vi.mock('../../lib/oauth-return', () => ({
 const authSignOutMock = vi.fn();
 const authRegisterMock = vi.fn();
 const authSignInWithCredentialsMock = vi.fn();
+const authSignInWithGoogleWebMock = vi.fn();
+const authSignInWithAppleWebMock = vi.fn();
 vi.mock('../../lib/auth', () => ({
   signInWithApple: vi.fn(),
   signInWithGoogle: vi.fn(),
-  signInWithGoogleWeb: vi.fn(),
-  signInWithAppleWeb: vi.fn(),
+  signInWithGoogleWeb: (...args: unknown[]) => authSignInWithGoogleWebMock(...args),
+  signInWithAppleWeb: (...args: unknown[]) => authSignInWithAppleWebMock(...args),
   signOutForGeneration: (...args: unknown[]) => authSignOutMock(...args),
   signInWithCredentials: (...args: unknown[]) => authSignInWithCredentialsMock(...args),
   registerWithCredentials: (...args: unknown[]) => authRegisterMock(...args),
@@ -665,6 +669,112 @@ describe('AuthProvider.register', () => {
     });
 
     expect(getAuthTokenMock).toHaveBeenCalledTimes(authReadsBeforeRegistration);
+  });
+});
+
+describe('AuthProvider browser-fallback foreground checks', () => {
+  beforeEach(() => {
+    platformState.OS = 'android';
+    getAuthTokenMock.mockReset();
+    getAuthTokenMock.mockResolvedValue('jwt-token');
+    isTokenExpiringSoonMock.mockReset();
+    isTokenExpiringSoonMock.mockResolvedValue(false);
+  });
+
+  const createWrapper = (queryClient: QueryClient) =>
+    function Wrapper({ children }: { children: ReactNode }) {
+      return (
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider>{children}</AuthProvider>
+        </QueryClientProvider>
+      );
+    };
+
+  it('suppresses the generic active read while pending, then runs exactly the explicit success read', async () => {
+    let finishFallback!: (result: { success: true }) => void;
+    authSignInWithGoogleWebMock.mockReturnValue(
+      new Promise((resolve) => {
+        finishFallback = resolve;
+      }),
+    );
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { result } = renderHook(() => useAuth(), { wrapper: createWrapper(queryClient) });
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
+    const authReadsBeforeFallback = getAuthTokenMock.mock.calls.length;
+
+    const fallbackPromise = result.current.signInWithGoogleWeb();
+    await vi.waitFor(() => expect(authSignInWithGoogleWebMock).toHaveBeenCalledOnce());
+    act(() => appStateState.listener?.('active'));
+    await Promise.resolve();
+    expect(getAuthTokenMock).toHaveBeenCalledTimes(authReadsBeforeFallback);
+
+    await act(async () => {
+      finishFallback({ success: true });
+      await fallbackPromise;
+    });
+
+    expect(getAuthTokenMock).toHaveBeenCalledTimes(authReadsBeforeFallback + 1);
+  });
+
+  it('releases foreground checks after a cancelled fallback', async () => {
+    let finishFallback!: (result: { success: false; cancelled: true }) => void;
+    authSignInWithGoogleWebMock.mockReturnValue(
+      new Promise((resolve) => {
+        finishFallback = resolve;
+      }),
+    );
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { result } = renderHook(() => useAuth(), { wrapper: createWrapper(queryClient) });
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
+    const authReadsBeforeFallback = getAuthTokenMock.mock.calls.length;
+
+    const fallbackPromise = result.current.signInWithGoogleWeb();
+    act(() => appStateState.listener?.('active'));
+    await Promise.resolve();
+    expect(getAuthTokenMock).toHaveBeenCalledTimes(authReadsBeforeFallback);
+
+    await act(async () => {
+      finishFallback({ success: false, cancelled: true });
+      await fallbackPromise;
+    });
+    act(() => appStateState.listener?.('active'));
+    await waitFor(() => expect(getAuthTokenMock).toHaveBeenCalledTimes(authReadsBeforeFallback + 1));
+  });
+
+  it('keeps active checks suppressed until all overlapping fallbacks finish', async () => {
+    let finishGoogle!: (result: { success: false; cancelled: true }) => void;
+    let finishApple!: (result: { success: false; cancelled: true }) => void;
+    authSignInWithGoogleWebMock.mockReturnValue(
+      new Promise((resolve) => {
+        finishGoogle = resolve;
+      }),
+    );
+    authSignInWithAppleWebMock.mockReturnValue(
+      new Promise((resolve) => {
+        finishApple = resolve;
+      }),
+    );
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { result } = renderHook(() => useAuth(), { wrapper: createWrapper(queryClient) });
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
+    const authReadsBeforeFallbacks = getAuthTokenMock.mock.calls.length;
+
+    const googleFallback = result.current.signInWithGoogleWeb();
+    const appleFallback = result.current.signInWithAppleWeb();
+    await act(async () => {
+      finishGoogle({ success: false, cancelled: true });
+      await googleFallback;
+    });
+    act(() => appStateState.listener?.('active'));
+    await Promise.resolve();
+    expect(getAuthTokenMock).toHaveBeenCalledTimes(authReadsBeforeFallbacks);
+
+    await act(async () => {
+      finishApple({ success: false, cancelled: true });
+      await appleFallback;
+    });
+    act(() => appStateState.listener?.('active'));
+    await waitFor(() => expect(getAuthTokenMock).toHaveBeenCalledTimes(authReadsBeforeFallbacks + 1));
   });
 });
 
