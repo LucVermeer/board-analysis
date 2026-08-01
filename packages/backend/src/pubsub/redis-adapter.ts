@@ -349,6 +349,7 @@ export function createRedisPubSubAdapter(publisher: Redis, subscriber: Redis): R
       if (subscribedClimbStatsChannels.has(channel)) return;
       await subscriber.subscribe(channel);
       subscribedClimbStatsChannels.add(channel);
+      logger.info(`[Redis] Subscribed to climb stats channel: ${channelKey}`);
     },
 
     async unsubscribeNotificationChannel(userId: string): Promise<void> {
@@ -404,6 +405,7 @@ export function createRedisPubSubAdapter(publisher: Redis, subscriber: Redis): R
       if (!subscribedClimbStatsChannels.has(channel)) return;
       await subscriber.unsubscribe(channel);
       subscribedClimbStatsChannels.delete(channel);
+      logger.info(`[Redis] Unsubscribed from climb stats channel: ${channelKey}`);
     },
 
     onQueueMessage(callback: (sessionId: string, event: QueueEvent) => void): void {
