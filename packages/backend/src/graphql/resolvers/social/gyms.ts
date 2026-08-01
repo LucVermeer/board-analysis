@@ -471,6 +471,35 @@ async function requireGymGrantAccess(gymUuid: string, userId: string): Promise<t
 // Queries
 // ============================================
 
+/**
+ * Visibility gate shared by the `gym`/`gymBySlug` entity reads: a private gym is
+ * enriched only for a viewer who can edit it, and reads as `null` — the exact
+ * same response as a gym that doesn't exist — for everyone else, so holding a
+ * uuid or slug can't confirm a private gym exists or disclose its name, address,
+ * or contact details.
+ *
+ * Same `userCanEditGym` rule as `gymBoards` and `gymKiosk`, so all four gym
+ * reads agree. Unlike the board reads this masks AUTHENTICATED non-editors too,
+ * matching those two. `null` rather than a thrown NOT_FOUND because these fields
+ * are nullable in the SDL — `null` already means "no such gym" here, so it is the
+ * genuinely indistinguishable answer (see #3648).
+ *
+ * Runs AFTER canonical resolution: privacy belongs to the surviving gym, not the
+ * stale alias row a merged twin's uuid/slug points at.
+ */
+async function resolveViewableGym(
+  gym: typeof dbSchema.gyms.$inferSelect | null,
+  ctx: ConnectionContext,
+): Promise<Awaited<ReturnType<typeof enrichGym>> | null> {
+  if (!gym) return null;
+  const viewerId = ctx.isAuthenticated ? ctx.userId : undefined;
+  if (!gym.isPublic) {
+    const viewerCanEdit = viewerId ? await userCanEditGym(gym, viewerId) : false;
+    if (!viewerCanEdit) return null;
+  }
+  return enrichGym(gym, viewerId);
+}
+
 export const socialGymQueries = {
   gym: async (_: unknown, { gymUuid }: { gymUuid: string }, ctx: ConnectionContext) => {
     validateInput(UUIDSchema, gymUuid, 'gymUuid');
@@ -479,8 +508,7 @@ export const socialGymQueries = {
     // returns the survivor's slug/uuid so the client can canonicalize its URL).
     const gym = await resolveCanonicalGymByUuid(gymUuid);
 
-    if (!gym) return null;
-    return enrichGym(gym, ctx.isAuthenticated ? ctx.userId : undefined);
+    return resolveViewableGym(gym, ctx);
   },
 
   gymBySlug: async (_: unknown, { slug }: { slug: string }, ctx: ConnectionContext) => {
@@ -491,8 +519,7 @@ export const socialGymQueries = {
     // A merged twin's slug resolves to the canonical survivor instead of 404ing.
     const gym = await resolveCanonicalGymBySlug(slug);
 
-    if (!gym) return null;
-    return enrichGym(gym, ctx.isAuthenticated ? ctx.userId : undefined);
+    return resolveViewableGym(gym, ctx);
   },
 
   myGyms: async (_: unknown, { input }: { input?: unknown }, ctx: ConnectionContext) => {

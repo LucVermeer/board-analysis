@@ -24,7 +24,7 @@ import { generateUniqueGymSlug, userCanEditGym } from './gyms';
 import { findExactNameMatchesWithin, decideAutoGymAttachment, AUTO_GYM_MATCH_RADIUS_METERS } from './gym-matching';
 import { isGenericGymName } from '@boardsesh/db/queries';
 import { getUserCommunityRoles, hasAdminOrLeader, rolesGrantAdminOrLeader } from './roles';
-import { SYSTEM_BOARD_OWNER_ID, requireAnonReadableBoard } from '../board-presence/shared';
+import { SYSTEM_BOARD_OWNER_ID, isRowAnonReadable, requireAnonReadableBoard } from '../board-presence/shared';
 import { publishBoardQueuePreviewTombstoneForBoard } from '../../../services/board-queue-preview';
 import { logger } from '../../../utils/logger';
 import { redisClientManager } from '../../../redis/client';
@@ -765,7 +765,22 @@ export async function warmPopularConfigsCache(): Promise<void> {
 
 export const socialBoardQueries = {
   /**
-   * Get a board by UUID
+   * Get a board by UUID.
+   *
+   * Anonymous callers only reach boards that pass `isRowAnonReadable` (public,
+   * or system-owned). A private board reads as `null` — the exact same response
+   * as a board that doesn't exist, so a uuid holder can't confirm one exists.
+   * That closes the kiosk dereference: a kiosk's `layout` JSON deliberately
+   * carries slot boardUuids, and those must not resolve to a private board's
+   * name.
+   *
+   * Deliberately ANON-ONLY, unlike the gym reads. A logged-in caller keeps
+   * membership-free access to any active board, matching
+   * `requireAnonReadableBoard` and the rest of the board-presence family.
+   * Authenticated non-owner access is load-bearing: a climber connecting to a
+   * gym's private board over BLE resolves it by uuid through here, and
+   * `boardsBySerialNumbers` already serves private boards to any signed-in
+   * caller.
    */
   board: async (_: unknown, { boardUuid }: { boardUuid: string }, ctx: ConnectionContext) => {
     validateInput(UUIDSchema, boardUuid, 'boardUuid');
@@ -777,11 +792,24 @@ export const socialBoardQueries = {
       .limit(1);
 
     if (!board) return null;
-    return enrichBoard(board, ctx.isAuthenticated ? ctx.userId : undefined);
+    const viewerId = ctx.isAuthenticated ? ctx.userId : undefined;
+    // Gate before enrichment so a masked anonymous read never runs the
+    // owner/count/follow lookups for a board it isn't allowed to see.
+    if (!viewerId && !isRowAnonReadable(board)) return null;
+    return enrichBoard(board, viewerId);
   },
 
   /**
-   * Get a board by slug (for URL routing)
+   * Get a board by slug (for URL routing).
+   *
+   * INTENTIONALLY NOT anon-masked, unlike `board(boardUuid)` above. This read
+   * backs the entire `/b/{slug}/**` web surface through
+   * `packages/web/app/lib/board-slug-utils.ts`, whose fetch is anonymous by
+   * construction — no token path at all, and a cross-user `revalidate: 300`
+   * shared cache that could never hold a per-viewer result. Masking here would
+   * 404 every private board's own OWNER on their own board pages. Accepted
+   * residual exposure (a private board's name is disclosable to a slug holder)
+   * until the end-of-life web climbing surface goes away. See #3648.
    */
   boardBySlug: async (_: unknown, { slug }: { slug: string }, ctx: ConnectionContext) => {
     // Validate slug format: lowercase alphanumeric with hyphens, max 120 chars
@@ -829,11 +857,12 @@ export const socialBoardQueries = {
     const canEdit = gym && viewerId ? await userCanEditGym(gym, viewerId) : false;
 
     // Mask a missing gym, and a private gym from anyone who can't edit it, behind
-    // the shared NOT_FOUND convention. Note this query masks private gyms
-    // STRICTER than the legacy gym(gymUuid)/gymBySlug queries, which still return
-    // private gyms fully enriched to anon — aligning those is a tracked
-    // follow-up. The embed depends on this one being safe to call anonymously
-    // against any uuid.
+    // the shared NOT_FOUND convention. `gym(gymUuid)`/`gymBySlug` now apply the
+    // same `userCanEditGym` rule (#3648); they express it as `null` rather than a
+    // thrown NOT_FOUND because their SDL types are nullable, so `null` IS their
+    // missing-entity response. This query's `[UserBoard!]!` type leaves throwing
+    // as its only option. The embed depends on this one being safe to call
+    // anonymously against any uuid.
     if (!gym || (!gym.isPublic && !canEdit)) {
       throw new GraphQLError('Gym not found', { extensions: { code: 'NOT_FOUND' } });
     }

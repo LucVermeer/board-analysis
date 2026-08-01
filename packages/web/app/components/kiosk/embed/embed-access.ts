@@ -1,11 +1,14 @@
 // Pure access-control and param-parsing decisions for the /embed/** widgets.
 // Kept free of fetching/React so the security gates are unit-testable.
 //
-// THE gate everything else hangs off: the backend `board(boardUuid)` resolver
-// serves PRIVATE boards fully enriched to anonymous callers (see
-// packages/backend/.../social/boards.ts — a tracked follow-up), so the embed
-// layer MUST enforce visibility itself. Same for `gym(gymUuid)`, which returns
-// private gyms to anon.
+// As of #3648 the backend masks private entities from anonymous callers itself —
+// `board(boardUuid)` and `gym(gymUuid)` resolve to null instead of serving a
+// private board/gym to anon. These gates stay as defense in depth: the embed is
+// a cookieless surface pasted onto third-party sites, so it decides visibility
+// from the payload it actually received rather than trusting the resolver to
+// have masked. They also still do real work — `isPublic` additionally excludes
+// an UNLISTED-but-public board, which the resolver serves by design (unlisted is
+// link-only, not private).
 
 import type { Gym, UserBoard } from '@boardsesh/shared-schema';
 
@@ -15,9 +18,9 @@ export type EmbeddableBoard = UserBoard & { boardId: number };
 /**
  * SECURITY: decide whether `/embed/board/[board_uuid]` may render this board.
  *
- * - `board.isPublic` must be true — the `board(boardUuid)` resolver does NOT
- *   gate private boards for anonymous callers, so skipping this check would
- *   leak a private board's name/config/location to anyone who learns its uuid.
+ * - `board.isPublic` must be true — the resolver already masks private boards
+ *   from anon (#3648), but this also excludes an unlisted-but-public board,
+ *   which the resolver deliberately still serves by uuid.
  * - `board.boardId` must be a number — defense in depth: the resolver nulls
  *   the presence-channel id unless the board is public (or the viewer can
  *   edit), so a null here means the visibility rules disagree and we bail.
@@ -33,8 +36,9 @@ export function resolveEmbeddableBoard(board: UserBoard | null): EmbeddableBoard
 
 /**
  * SECURITY: a gym only contributes branding (name, logo, colours, /gym link)
- * to an embed when it is PUBLIC — `gym(gymUuid)` returns private gyms to
- * anonymous callers, and an embed must never render a private gym's identity.
+ * to an embed when it is PUBLIC — an embed must never render a private gym's
+ * identity. `gym(gymUuid)` masks private gyms from anon itself (#3648); this
+ * check stays as defense in depth on a cookieless third-party surface.
  * Private/absent gym → null → unbranded default-dark shell.
  */
 export function resolveEmbedBrandGym(gym: Gym | null): Gym | null {
