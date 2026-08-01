@@ -99,6 +99,29 @@ describe('self-hosted publish retries', () => {
     expect(sleeper).not.toHaveBeenCalled();
   });
 
+  it('preserves classified evidence when the retry sleeper rejects without exposing the thrown detail', async () => {
+    const runner = vi.fn<PublishCommandRunner>(async ({ onStderr }) => {
+      onStderr('HTTP 503 Service Unavailable\n');
+      return { exitCode: 1 };
+    });
+    const sleeper = vi.fn(async () => {
+      throw new Error('EOO_TOKEN=eoo_fixture_sleep_secret');
+    });
+    const stderr = outputCollector();
+
+    const outcome = await publishSelfHostedPlatformWithRetry(
+      { platform: 'ios', command: 'bunx', args: [], cwd: '/repo', env: {} },
+      { runner, sleeper, stdout: outputCollector().output, stderr: stderr.output },
+    );
+
+    expect(outcome).toEqual({ platform: 'ios', success: false, attempts: 1, failureKind: 'http-5xx' });
+    expect(runner).toHaveBeenCalledOnce();
+    expect(sleeper).toHaveBeenCalledOnce();
+    expect(sleeper).toHaveBeenCalledWith(SELF_HOSTED_PUBLISH_RETRY_DELAYS_MS[0]);
+    expect(stderr.read()).toContain('retry wait failed; not retrying');
+    expect(stderr.read()).not.toContain('eoo_fixture_sleep_secret');
+  });
+
   it('streams child output once without copying a raw token into diagnostics', async () => {
     const sensitiveOutput = 'server detail: EOO_TOKEN=eoo_fixture_secret\n';
     const runner: PublishCommandRunner = async ({ onStderr }) => {

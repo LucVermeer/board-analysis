@@ -10,8 +10,8 @@
 
 import { spawn } from 'node:child_process';
 
-export const SELF_HOSTED_PUBLISH_MAX_ATTEMPTS = 4;
 export const SELF_HOSTED_PUBLISH_RETRY_DELAYS_MS = [30_000, 60_000, 120_000] as const;
+export const SELF_HOSTED_PUBLISH_MAX_ATTEMPTS = SELF_HOSTED_PUBLISH_RETRY_DELAYS_MS.length + 1;
 
 export type OtaPublishPlatform = 'ios' | 'android';
 export type PublishFailureKind = 's3-slowdown' | 'http-5xx' | 'permanent' | 'unknown';
@@ -241,7 +241,7 @@ export async function publishSelfHostedPlatformWithRetry(
       await sleeper(delayMs);
     } catch {
       stderr.write(`[mobile:publish] ${label} retry wait failed; not retrying.\n`);
-      return { platform: invocation.platform, success: false, attempts: attempt, failureKind: 'unknown' };
+      return { platform: invocation.platform, success: false, attempts: attempt, failureKind };
     }
   }
 

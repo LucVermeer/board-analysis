@@ -306,6 +306,8 @@ jobs:
           if [ "$android_requested" = true ]; then
             [ "$ANDROID_OUTCOME" = success ] && any_success=true || all_success=false
           fi
+          # Keep these outputs before the failure exit below: downstream steps
+          # use them to distinguish full success from a partial publish.
           echo "all_success=$all_success" >> "$GITHUB_OUTPUT"
           echo "any_success=$any_success" >> "$GITHUB_OUTPUT"
           {

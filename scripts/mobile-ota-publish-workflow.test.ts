@@ -51,6 +51,20 @@ describe('production OTA workflow reliability', () => {
     expect(summary).toContain('all_success');
     expect(summary).toContain('any_success');
     expect(summary).toContain('no automatic rollback was attempted');
+    const allSuccessOutputIndex = summary.indexOf('echo "all_success=$all_success" >> "$GITHUB_OUTPUT"');
+    const anySuccessOutputIndex = summary.indexOf('echo "any_success=$any_success" >> "$GITHUB_OUTPUT"');
+    const failureGuardIndex = summary.indexOf('if [ "$all_success" != true ]; then');
+    const failureExitIndex = summary.indexOf('exit 1', failureGuardIndex);
+    const failureGuardEndIndex = summary.indexOf('\n          fi', failureGuardIndex);
+    expect(allSuccessOutputIndex).toBeGreaterThanOrEqual(0);
+    expect(anySuccessOutputIndex).toBeGreaterThanOrEqual(0);
+    expect(failureGuardIndex).toBeGreaterThanOrEqual(0);
+    expect(failureExitIndex).toBeGreaterThan(failureGuardIndex);
+    expect(failureGuardEndIndex).toBeGreaterThan(failureExitIndex);
+    expect(failureGuardIndex).toBeGreaterThan(allSuccessOutputIndex);
+    expect(failureGuardIndex).toBeGreaterThan(anySuccessOutputIndex);
+    expect(failureExitIndex).toBeGreaterThan(allSuccessOutputIndex);
+    expect(failureExitIndex).toBeGreaterThan(anySuccessOutputIndex);
   });
 
   it('pushes the changelog and announces success only after every requested platform succeeds', () => {
