@@ -647,7 +647,7 @@ jobs:
 
   test-location-sync-integration:
     needs: [changes, setup]
-    if: needs.changes.outputs.locationSync == 'true'
+    if: needs.changes.outputs.locationSync == 'true' || needs.changes.outputs.sharedDeps == 'true' || needs.changes.outputs.sharedSchema == 'true' || needs.changes.outputs.rootCi == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:

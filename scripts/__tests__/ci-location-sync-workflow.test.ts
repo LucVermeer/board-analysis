@@ -1,3 +1,5 @@
+/// <reference types="node" />
+
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
@@ -32,6 +34,13 @@ function mappingEntry(source: string, key: string, indentation: number): string 
   return lines.slice(startIndex, endIndex).join('\n');
 }
 
+function mappingLine(source: string, key: string, indentation: number): string {
+  const prefix = `${' '.repeat(indentation)}${key}:`;
+  const line = source.split('\n').find((candidate) => candidate.startsWith(prefix));
+  if (!line) throw new Error(`missing ${key} line at indentation ${indentation}`);
+  return line.trim();
+}
+
 describe('location-sync CI integration contract', () => {
   const changesJob = mappingEntry(workflowSource, 'changes', 2);
   const integrationJob = mappingEntry(workflowSource, 'test-location-sync-integration', 2);
@@ -50,8 +59,19 @@ describe('location-sync CI integration contract', () => {
     expect(locationSyncFilter).toContain("- '.github/workflows/ci.yml'");
   });
 
+  it('runs for direct changes, dependency changes, and shared CI changes', () => {
+    expect(mappingLine(integrationJob, 'if', 4)).toBe(
+      "if: needs.changes.outputs.locationSync == 'true' || needs.changes.outputs.sharedDeps == 'true' || needs.changes.outputs.sharedSchema == 'true' || needs.changes.outputs.rootCi == 'true'",
+    );
+
+    const runAny = mappingLine(changesJob, 'runAny', 6);
+    expect(runAny).toContain("steps.filter.outputs.locationSync == 'true'");
+    expect(runAny).toContain("steps.filter.outputs.sharedDeps == 'true'");
+    expect(runAny).toContain("steps.filter.outputs.sharedSchema == 'true'");
+    expect(runAny).toContain("steps.filter.outputs.rootCi == 'true'");
+  });
+
   it('runs the full project against the pinned migrated dev database', () => {
-    expect(integrationJob).toContain("if: needs.changes.outputs.locationSync == 'true'");
     expect(integrationJob).toContain(
       'image: ghcr.io/boardsesh/boardsesh-dev-db@sha256:ce32f2a70405112178f3b8b3e4b373175878539d8532f46dd313e04bbcb14cb4',
     );
