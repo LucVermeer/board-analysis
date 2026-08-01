@@ -243,7 +243,7 @@ jobs:
       # single `--platform all` publish with one env could only ever match one side.
       - name: Publish iOS OTA
         id: publish_ios
-        if: steps.gate.outputs.configured == 'true' && (env.INPUT_PLATFORM == 'all' || env.INPUT_PLATFORM == 'ios')
+        if: steps.gate.outputs.configured == 'true' && steps.generate.outcome == 'success' && (env.INPUT_PLATFORM == 'all' || env.INPUT_PLATFORM == 'ios')
         continue-on-error: true
         env:
           # V3 control-plane rejects Expo tokens; eoas publish authenticates with the

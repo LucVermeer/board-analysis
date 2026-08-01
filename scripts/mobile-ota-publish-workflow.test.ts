@@ -43,8 +43,10 @@ describe('production OTA workflow reliability', () => {
     const android = stepBlock(production, 'Publish Android OTA');
     const summary = stepBlock(production, 'Summarize platform publish results');
 
+    expect(ios).toContain("steps.generate.outcome == 'success'");
     expect(ios).toContain('continue-on-error: true');
     expect(android).toContain('if: always()');
+    expect(android).toContain("steps.generate.outcome == 'success'");
     expect(android).toContain('continue-on-error: true');
     expect(summary).toContain('all_success');
     expect(summary).toContain('any_success');
