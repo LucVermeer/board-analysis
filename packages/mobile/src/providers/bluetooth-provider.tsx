@@ -918,7 +918,7 @@ export function BluetoothProvider({
     setIds,
     boardUuid,
     holdsData,
-    analyticsBoardId: resolvedPresenceBoardIdRef.current ?? presenceBoardId,
+    analyticsBoardId: presenceBoardId,
     analyticsInSession: sessionIdRef.current != null,
     ledColorOverrides: bluetoothColorOverrides,
     onConnectSuccess: handleConnectSuccess,
