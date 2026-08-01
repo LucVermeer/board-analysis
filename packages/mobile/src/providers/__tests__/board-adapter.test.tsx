@@ -7,7 +7,7 @@ import type { BoardAdapter } from '@boardsesh/board-react';
 const wsMocks = vi.hoisted(() => ({
   getClient: vi.fn(),
   on: vi.fn(() => vi.fn()),
-  subscribe: vi.fn(() => vi.fn()),
+  subscribe: vi.fn((_request: unknown, _handlers: { complete: () => void }) => vi.fn()),
 }));
 wsMocks.getClient.mockReturnValue({ on: wsMocks.on, subscribe: wsMocks.subscribe });
 
@@ -91,6 +91,7 @@ vi.mock('../../hooks/use-offline-mutations', () => ({
 import { BoardAdapterWrapper } from '../board-adapter';
 
 beforeEach(() => {
+  vi.clearAllMocks();
   offlineEnabled = false;
   capturedAdapter = undefined;
 });
@@ -125,5 +126,24 @@ describe('BoardAdapterWrapper offline gating', () => {
       expect.objectContaining({ error: expect.any(Function) }),
     );
     expect(typeof unsubscribe).toBe('function');
+  });
+
+  it('cancels a scheduled stats retry when disposed before the timer fires', () => {
+    vi.useFakeTimers();
+    try {
+      render(<BoardAdapterWrapper>{null}</BoardAdapterWrapper>);
+      const handlers = { next: vi.fn(), connected: vi.fn(), error: vi.fn() };
+      const unsubscribe = capturedAdapter?.subscribeClimbStats?.('kilter', 1, handlers);
+      const subscriptionHandlers = wsMocks.subscribe.mock.calls.at(-1)?.[1] as { complete: () => void } | undefined;
+
+      expect(subscriptionHandlers).toBeDefined();
+      subscriptionHandlers?.complete();
+      unsubscribe?.();
+      vi.advanceTimersByTime(1_000);
+
+      expect(wsMocks.subscribe).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

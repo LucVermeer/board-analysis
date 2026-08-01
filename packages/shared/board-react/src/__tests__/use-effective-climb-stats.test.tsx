@@ -10,6 +10,7 @@ import {
 } from '../climb-stats-store';
 import {
   getClimbStatsReadCoordinatorStateForTests,
+  MAX_LAST_READ_ENTRIES,
   recordClimbStatsReadForTests,
   resetClimbStatsReadCoordinatorForTests,
   scheduleAcknowledgedClimbStatsRead,
@@ -155,10 +156,10 @@ describe('useEffectiveClimbStats', () => {
 
   it('TTL-prunes and LRU-bounds read timestamps', () => {
     const startingTime = 1_000_000;
-    for (let index = 0; index <= 500; index += 1) {
+    for (let index = 0; index <= MAX_LAST_READ_ENTRIES; index += 1) {
       recordClimbStatsReadForTests(`climb-${index}`, startingTime + index);
     }
-    expect(getClimbStatsReadCoordinatorStateForTests().timestamps).toBe(500);
+    expect(getClimbStatsReadCoordinatorStateForTests().timestamps).toBe(MAX_LAST_READ_ENTRIES);
 
     resetClimbStatsReadCoordinatorForTests();
     recordClimbStatsReadForTests('stale', startingTime);

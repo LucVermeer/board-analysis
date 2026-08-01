@@ -25,7 +25,8 @@ const queuedReads = new Map<string, QueuedRead>();
 const lastReadAt = new Map<string, number>();
 const READ_COOLDOWN_MS = 30_000;
 const LAST_READ_TTL_MS = 10 * 60_000;
-const MAX_LAST_READ_ENTRIES = 500;
+/** @internal Hard bound for the climb-stats read coordinator's LRU timestamps. */
+export const MAX_LAST_READ_ENTRIES = 500;
 const MAX_RECONNECT_READS = 50;
 const MAX_READ_CONCURRENCY = 4;
 const RECONCILIATION_INTERVAL_MS = 120_000;
@@ -59,7 +60,6 @@ function recentReadAt(serialized: string, now: number): number | undefined {
 }
 
 function recordReadAt(serialized: string, now: number): void {
-  pruneLastReadAt(now);
   lastReadAt.delete(serialized);
   lastReadAt.set(serialized, now);
   pruneLastReadAt(now);

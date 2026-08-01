@@ -115,6 +115,9 @@ export type DrainOptions = {
   onMutationStatus?: (event: MutationDeliveryEvent) => void;
 };
 
+// Intentionally mirrored by OfflineMutationDelivery in @boardsesh/board-react.
+// The dependency boundary prevents either package importing the other; keep
+// both event contracts in sync when fields change.
 export type MutationDeliveryEvent = {
   tableName: string;
   operation: string;

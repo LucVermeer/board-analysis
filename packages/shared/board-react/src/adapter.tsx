@@ -10,6 +10,9 @@ export type ClimbStatsSubscriptionHandlers = {
   error: (error: unknown) => void;
 };
 
+// Intentional structural mirror of MutationDeliveryEvent in
+// @boardsesh/offline-sync. board-react cannot depend on offline-sync; keep both
+// event contracts in sync when fields change.
 export type OfflineMutationDelivery = {
   tableName: string;
   operation: string;
