@@ -10,6 +10,10 @@ manual changes). See docs/mobile-ota-updates.md.
 
 A new version shipped to the App Store and Play Store.
 
+### Fixed
+
+- Board hold overlays recover cleanly after an interrupted render instead of staying blank or corrupted. ([#4081](https://github.com/boardsesh/boardsesh/pull/4081))
+
 ## 2026-07-31
 
 ### App update

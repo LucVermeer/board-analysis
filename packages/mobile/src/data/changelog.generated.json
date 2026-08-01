@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-07-31T23:28:50.508Z",
+  "generatedAt": "2026-08-01T00:07:50.340Z",
   "entries": [
+    {
+      "prNumber": 4081,
+      "category": "fixed",
+      "title": "Board hold overlays recover cleanly after an interrupted render instead of staying blank or corrupted.",
+      "mergedAt": "2026-08-01T00:06:49Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4081"
+    },
     {
       "prNumber": 4078,
       "category": "fixed",
@@ -2639,9 +2646,11 @@
       "date": "2026-08-01T08:44:33+10:00",
       "sha": "f2bf15ab3acbe09fc6ff3498cb5cb835bf955f1f",
       "platforms": [
+        "android",
         "ios"
       ],
       "fingerprints": {
+        "android": "3e18fa34928ab4190b27c11775353a626d677983",
         "ios": "f2fb048a9827d75f67f8939d6f56bb64d4eed434"
       }
     },
