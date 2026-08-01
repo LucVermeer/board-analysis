@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import type { ClimbQueueItem } from '@boardsesh/queue';
 import { parseSetIds, toBoardName } from '@boardsesh/board-config';
@@ -49,6 +49,8 @@ type UseLiveActivityOptions = {
   androidThumbnailOverlayPath?: string | null;
   /** Reload identity for same-path regenerated overlays. Never forwarded to native. */
   androidThumbnailOverlayLoadKey?: string | null;
+  /** Revalidate the generated file immediately before each native notification push. */
+  validateAndroidThumbnailOverlay?: (path: string | null, loadKey: string | null) => string | null;
   androidThumbnailBackgroundPaths?: string[];
 };
 
@@ -146,6 +148,7 @@ export function useLiveActivity({
   androidNotification,
   androidThumbnailOverlayPath,
   androidThumbnailOverlayLoadKey,
+  validateAndroidThumbnailOverlay,
   androidThumbnailBackgroundPaths,
 }: UseLiveActivityOptions): void {
   const isActiveRef = useRef(false);
@@ -182,12 +185,21 @@ export function useLiveActivity({
   holderDisplayNameRef.current = holderDisplayName;
   const overlayPathRef = useRef(androidThumbnailOverlayPath);
   overlayPathRef.current = androidThumbnailOverlayPath;
+  const overlayLoadKeyRef = useRef(androidThumbnailOverlayLoadKey);
+  overlayLoadKeyRef.current = androidThumbnailOverlayLoadKey;
+  const overlayValidatorRef = useRef(validateAndroidThumbnailOverlay);
+  overlayValidatorRef.current = validateAndroidThumbnailOverlay;
   const backgroundPathsRef = useRef(androidThumbnailBackgroundPaths);
   backgroundPathsRef.current = androidThumbnailBackgroundPaths;
   const queueRef = useRef(queue);
   queueRef.current = queue;
   const currentClimbRef = useRef(currentClimbQueueItem);
   currentClimbRef.current = currentClimbQueueItem;
+  const getCurrentAndroidOverlayPath = useCallback(() => {
+    const path = overlayPathRef.current ?? null;
+    const validator = overlayValidatorRef.current;
+    return validator ? validator(path, overlayLoadKeyRef.current ?? null) : path;
+  }, []);
 
   // Memoize queue serialization so it only recomputes when the queue array
   // changes, not on every currentClimbQueueItem navigation.
@@ -315,7 +327,7 @@ export function useLiveActivity({
             isPartySession: isPartySessionRef.current,
             boardConnection: boardConnectionRef.current,
             holderDisplayName: holderDisplayNameRef.current,
-            androidThumbnailOverlayPath: overlayPathRef.current,
+            androidThumbnailOverlayPath: getCurrentAndroidOverlayPath(),
             androidThumbnailBackgroundPaths: backgroundPathsRef.current,
           });
         })
@@ -412,7 +424,7 @@ export function useLiveActivity({
       isPartySession,
       boardConnection,
       holderDisplayName,
-      androidThumbnailOverlayPath,
+      androidThumbnailOverlayPath: getCurrentAndroidOverlayPath(),
       androidThumbnailBackgroundPaths,
     });
   }, [
@@ -423,6 +435,7 @@ export function useLiveActivity({
     // backgrounds arrive (the array is read at effect time).
     backgroundsKey,
     boardConnection,
+    getCurrentAndroidOverlayPath,
     holderDisplayName,
     isPartySession,
     serializedQueue,
@@ -454,7 +467,7 @@ export function useLiveActivity({
       isPartySession,
       boardConnection,
       holderDisplayName,
-      androidThumbnailOverlayPath,
+      androidThumbnailOverlayPath: getCurrentAndroidOverlayPath(),
       androidThumbnailBackgroundPaths,
     });
   }, [
@@ -464,6 +477,7 @@ export function useLiveActivity({
     backgroundsKey,
     boardConnection,
     currentClimbQueueItem,
+    getCurrentAndroidOverlayPath,
     holderDisplayName,
     isPartySession,
     queue,

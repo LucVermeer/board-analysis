@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Platform, View, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import type { ImageErrorEventData } from 'expo-image';
@@ -13,8 +13,8 @@ type LayeredClimbImageProps = {
    * reliably reload that case from recyclingKey alone.
    */
   overlayLoadKey?: string | null;
-  onOverlayLoad?: () => void;
-  onOverlayError?: (event: ImageErrorEventData) => void;
+  onOverlayLoad?: (loadKey: string | null) => void;
+  onOverlayError?: (event: ImageErrorEventData, loadKey: string | null) => void;
   backgroundPaths: string[];
   /**
    * Number of background layers the cache couldn't resolve. Each missing
@@ -88,6 +88,13 @@ const LayeredClimbImage = React.memo(function LayeredClimbImage({
   // blank drawer. Gating on onLoad makes the anchor mean "the lit board is on
   // screen".
   const [overlayPainted, setOverlayPainted] = useState(false);
+  // Native image events can already be queued when React replaces an overlay.
+  // Keep the currently rendered attempt in a ref so an old image cannot expose
+  // the screenshot anchor after the replacement reset it. The recovery owner
+  // still receives the captured key below and independently rejects stale cache
+  // events; this guard owns the component-local painted marker.
+  const latestOverlayAttemptRef = useRef({ uri: overlayUri, loadKey: overlayLoadKey ?? null });
+  latestOverlayAttemptRef.current = { uri: overlayUri, loadKey: overlayLoadKey ?? null };
 
   // Drop the decoded board-art bitmaps whenever this surface is hidden: render an
   // empty stack so expo-image releases their GPU textures + native-heap bitmaps
@@ -161,10 +168,14 @@ const LayeredClimbImage = React.memo(function LayeredClimbImage({
           // is needed — skip expo-image's resample.
           allowDownscaling={false}
           onLoad={() => {
-            if (overlayTestID) setOverlayPainted(true);
-            onOverlayLoad?.();
+            const emittingLoadKey = overlayLoadKey ?? null;
+            const latestAttempt = latestOverlayAttemptRef.current;
+            if (overlayTestID && latestAttempt.uri === overlayUri && latestAttempt.loadKey === emittingLoadKey) {
+              setOverlayPainted(true);
+            }
+            onOverlayLoad?.(emittingLoadKey);
           }}
-          onError={onOverlayError}
+          onError={(event) => onOverlayError?.(event, overlayLoadKey ?? null)}
         />
       )}
       {/* Screenshot/e2e anchor — see overlayPainted above. Transparent, full-bleed

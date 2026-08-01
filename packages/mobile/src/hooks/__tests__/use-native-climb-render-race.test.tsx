@@ -164,7 +164,7 @@ describe('useNativeClimbRender in-flight race', () => {
     const { result } = renderHook(() => useNativeClimbRender({ ...BASE, frames: FRAMES_CACHED }));
     const failedLoadKey = result.current.overlayLoadKey;
 
-    act(() => result.current.onOverlayError({ error: 'Failed to load resource' }));
+    act(() => result.current.onOverlayError({ error: 'Failed to load resource' }, failedLoadKey));
     await waitFor(() => expect(pendingRenders.has(cacheKey)).toBe(true));
     expect(result.current.overlayUri).toBeNull();
     expect(fakeNativeModule.renderHoldsOverlay).toHaveBeenCalledTimes(1);
@@ -199,16 +199,33 @@ describe('useNativeClimbRender in-flight race', () => {
     expect(fakeNativeModule.renderHoldsOverlay).toHaveBeenCalledTimes(1);
   });
 
+  it('revalidates an unchanged notification overlay after its verified file is evicted', async () => {
+    const cacheKey = cacheKeyFor(FRAMES_CACHED);
+    const overlayUri = 'file:///notification-evicted-later.png';
+    existingOverlayUris.add(overlayUri);
+    _cacheRenderedOverlayForTests(cacheKey, overlayUri);
+    const view = renderHook(() => useNativeClimbRender({ ...BASE, frames: FRAMES_CACHED, verifyOverlayFile: true }));
+    await waitFor(() => expect(view.result.current.overlayUri).toBe(overlayUri));
+
+    existingOverlayUris.delete(overlayUri);
+    view.rerender();
+
+    await waitFor(() => expect(view.result.current.overlayUri).toBeNull());
+    await waitFor(() => expect(pendingRenders.has(cacheKey)).toBe(true));
+  });
+
   it('deduplicates simultaneous repairs across mounted consumers', async () => {
     const cacheKey = cacheKeyFor(FRAMES_CACHED);
     const overlayUri = 'file:///shared.png';
     _cacheRenderedOverlayForTests(cacheKey, overlayUri);
     const first = renderHook(() => useNativeClimbRender({ ...BASE, frames: FRAMES_CACHED }));
     const second = renderHook(() => useNativeClimbRender({ ...BASE, frames: FRAMES_CACHED }));
+    const firstLoadKey = first.result.current.overlayLoadKey;
+    const secondLoadKey = second.result.current.overlayLoadKey;
 
     act(() => {
-      first.result.current.onOverlayError({ error: 'Failed to load resource' });
-      second.result.current.onOverlayError({ error: 'Failed to load resource' });
+      first.result.current.onOverlayError({ error: 'Failed to load resource' }, firstLoadKey);
+      second.result.current.onOverlayError({ error: 'Failed to load resource' }, secondLoadKey);
     });
     await waitFor(() => expect(pendingRenders.has(cacheKey)).toBe(true));
     expect(fakeNativeModule.renderHoldsOverlay).toHaveBeenCalledTimes(1);
@@ -221,6 +238,37 @@ describe('useNativeClimbRender in-flight race', () => {
     await waitFor(() => expect(second.result.current.overlayUri).toBe(overlayUri));
   });
 
+  it('lets a delayed second consumer adopt the generation committed by the first repair', async () => {
+    const cacheKey = cacheKeyFor(FRAMES_CACHED);
+    const overlayUri = 'file:///delayed-peer.png';
+    const failedEntry = _cacheRenderedOverlayForTests(cacheKey, overlayUri);
+    const first = renderHook(() => useNativeClimbRender({ ...BASE, frames: FRAMES_CACHED }));
+    const second = renderHook(() => useNativeClimbRender({ ...BASE, frames: FRAMES_CACHED }));
+    const delayedSecondError = second.result.current.onOverlayError;
+    const delayedSecondLoadKey = second.result.current.overlayLoadKey;
+
+    act(() =>
+      first.result.current.onOverlayError({ error: 'First consumer failed' }, first.result.current.overlayLoadKey),
+    );
+    await waitFor(() => expect(pendingRenders.has(cacheKey)).toBe(true));
+    await act(async () => {
+      resolveNextRender(cacheKey, overlayUri);
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(first.result.current.overlayUri).toBe(overlayUri));
+    const repairedEntry = _renderedOverlaysForTests.get(cacheKey);
+    expect(repairedEntry?.generation).not.toBe(failedEntry.generation);
+    const reportsBeforeDelayedError = reportErrorMock.mock.calls.length;
+
+    act(() => delayedSecondError({ error: 'Delayed second-consumer failure' }, delayedSecondLoadKey));
+
+    expect(_renderedOverlaysForTests.get(cacheKey)).toEqual(repairedEntry);
+    expect(second.result.current.overlayUri).toBe(overlayUri);
+    expect(second.result.current.overlayLoadKey).toBe(`${repairedEntry?.generation}:1`);
+    expect(fakeNativeModule.renderHoldsOverlay).toHaveBeenCalledTimes(1);
+    expect(reportErrorMock).toHaveBeenCalledTimes(reportsBeforeDelayedError);
+  });
+
   it('preserves a peer repair and remounts only the failed consumer', () => {
     const cacheKey = cacheKeyFor(FRAMES_CACHED);
     const overlayUri = 'file:///same-path.png';
@@ -229,7 +277,7 @@ describe('useNativeClimbRender in-flight race', () => {
     const failedLoadKey = result.current.overlayLoadKey;
     const peerReplacement = _cacheRenderedOverlayForTests(cacheKey, overlayUri);
 
-    act(() => result.current.onOverlayError({ error: 'Failed to load resource' }));
+    act(() => result.current.onOverlayError({ error: 'Failed to load resource' }, failedLoadKey));
 
     expect(_renderedOverlaysForTests.get(cacheKey)).toEqual(peerReplacement);
     expect(result.current.overlayUri).toBe(overlayUri);
@@ -251,7 +299,7 @@ describe('useNativeClimbRender in-flight race', () => {
     existingOverlayUris.add(overlayUri);
     expect(peerReplacement.generation).not.toBe(failedEntry.generation);
 
-    act(() => failedOnError({ error: 'Delayed generation A failure' }));
+    act(() => failedOnError({ error: 'Delayed generation A failure' }, failedLoadKey));
 
     expect(_renderedOverlaysForTests.get(cacheKey)).toEqual(peerReplacement);
     expect(result.current.overlayUri).toBe(overlayUri);
@@ -271,9 +319,10 @@ describe('useNativeClimbRender in-flight race', () => {
       { initialProps: { frames: FRAMES_SLOW } },
     );
     const staleOnError = result.current.onOverlayError;
+    const staleLoadKey = result.current.overlayLoadKey;
 
     rerender({ frames: FRAMES_CACHED });
-    act(() => staleOnError({ error: 'Failed to load resource' }));
+    act(() => staleOnError({ error: 'Failed to load resource' }, staleLoadKey));
 
     expect(result.current.overlayUri).toBe('file:///current.png');
     expect(_renderedOverlaysForTests.has(oldKey)).toBe(true);
@@ -281,13 +330,16 @@ describe('useNativeClimbRender in-flight race', () => {
     expect(fakeNativeModule.renderHoldsOverlay).not.toHaveBeenCalled();
   });
 
-  it('stops after one retry until the exact replacement reports onLoad', async () => {
+  it('keeps overlay callbacks stable while the current attempt changes', async () => {
     const cacheKey = cacheKeyFor(FRAMES_CACHED);
-    const overlayUri = 'file:///retry-budget.png';
+    const overlayUri = 'file:///stable-callbacks.png';
     _cacheRenderedOverlayForTests(cacheKey, overlayUri);
     const { result } = renderHook(() => useNativeClimbRender({ ...BASE, frames: FRAMES_CACHED }));
+    const initialOnLoad = result.current.onOverlayLoad;
+    const initialOnError = result.current.onOverlayError;
+    const initialLoadKey = result.current.overlayLoadKey;
 
-    act(() => result.current.onOverlayError({ error: 'Failed to load resource' }));
+    act(() => result.current.onOverlayError({ error: 'Failed to load resource' }, initialLoadKey));
     await waitFor(() => expect(pendingRenders.has(cacheKey)).toBe(true));
     await act(async () => {
       resolveNextRender(cacheKey, overlayUri);
@@ -295,7 +347,51 @@ describe('useNativeClimbRender in-flight race', () => {
     });
     await waitFor(() => expect(result.current.overlayUri).toBe(overlayUri));
 
-    act(() => result.current.onOverlayError({ error: 'Failed to load resource' }));
+    expect(result.current.onOverlayLoad).toBe(initialOnLoad);
+    expect(result.current.onOverlayError).toBe(initialOnError);
+  });
+
+  it('ignores a queued error from the prior generation of the same Image consumer', async () => {
+    const cacheKey = cacheKeyFor(FRAMES_CACHED);
+    const overlayUri = 'file:///stale-same-consumer.png';
+    _cacheRenderedOverlayForTests(cacheKey, overlayUri);
+    const { result } = renderHook(() => useNativeClimbRender({ ...BASE, frames: FRAMES_CACHED }));
+    const stableOnError = result.current.onOverlayError;
+    const staleLoadKey = result.current.overlayLoadKey;
+
+    act(() => stableOnError({ error: 'Generation one failed' }, staleLoadKey));
+    await waitFor(() => expect(pendingRenders.has(cacheKey)).toBe(true));
+    await act(async () => {
+      resolveNextRender(cacheKey, overlayUri);
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(result.current.overlayLoadKey).not.toBe(staleLoadKey));
+    const replacementLoadKey = result.current.overlayLoadKey;
+    existingOverlayUris.add(overlayUri);
+
+    act(() => stableOnError({ error: 'Queued generation-one failure' }, staleLoadKey));
+
+    expect(result.current.overlayUri).toBe(overlayUri);
+    expect(result.current.overlayLoadKey).toBe(replacementLoadKey);
+    expect(_renderedOverlaysForTests.has(cacheKey)).toBe(true);
+  });
+
+  it('stops after one retry until the exact replacement reports onLoad', async () => {
+    const cacheKey = cacheKeyFor(FRAMES_CACHED);
+    const overlayUri = 'file:///retry-budget.png';
+    _cacheRenderedOverlayForTests(cacheKey, overlayUri);
+    const { result } = renderHook(() => useNativeClimbRender({ ...BASE, frames: FRAMES_CACHED }));
+    const firstLoadKey = result.current.overlayLoadKey;
+
+    act(() => result.current.onOverlayError({ error: 'Failed to load resource' }, firstLoadKey));
+    await waitFor(() => expect(pendingRenders.has(cacheKey)).toBe(true));
+    await act(async () => {
+      resolveNextRender(cacheKey, overlayUri);
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(result.current.overlayUri).toBe(overlayUri));
+
+    act(() => result.current.onOverlayError({ error: 'Failed to load resource' }, result.current.overlayLoadKey));
     expect(result.current.overlayUri).toBeNull();
     expect(fakeNativeModule.renderHoldsOverlay).toHaveBeenCalledTimes(1);
   });
@@ -305,16 +401,17 @@ describe('useNativeClimbRender in-flight race', () => {
     const overlayUri = 'file:///retry-reset.png';
     _cacheRenderedOverlayForTests(cacheKey, overlayUri);
     const { result } = renderHook(() => useNativeClimbRender({ ...BASE, frames: FRAMES_CACHED }));
+    const firstLoadKey = result.current.overlayLoadKey;
 
-    act(() => result.current.onOverlayError({ error: 'Failed to load resource' }));
+    act(() => result.current.onOverlayError({ error: 'Failed to load resource' }, firstLoadKey));
     await waitFor(() => expect(pendingRenders.has(cacheKey)).toBe(true));
     await act(async () => {
       resolveNextRender(cacheKey, overlayUri);
       await Promise.resolve();
     });
     await waitFor(() => expect(result.current.overlayUri).toBe(overlayUri));
-    act(() => result.current.onOverlayLoad());
-    act(() => result.current.onOverlayError({ error: 'Failed to load resource' }));
+    act(() => result.current.onOverlayLoad(result.current.overlayLoadKey));
+    act(() => result.current.onOverlayError({ error: 'Failed to load resource' }, result.current.overlayLoadKey));
 
     await waitFor(() => expect(fakeNativeModule.renderHoldsOverlay).toHaveBeenCalledTimes(2));
   });
@@ -326,10 +423,12 @@ describe('useNativeClimbRender in-flight race', () => {
     _cacheRenderedOverlayForTests(cacheKey, overlayUri);
     const first = renderHook(() => useNativeClimbRender({ ...BASE, frames: FRAMES_CACHED }));
     const second = renderHook(() => useNativeClimbRender({ ...BASE, frames: FRAMES_CACHED }));
+    const firstLoadKey = first.result.current.overlayLoadKey;
+    const secondLoadKey = second.result.current.overlayLoadKey;
 
     act(() => {
-      first.result.current.onOverlayError({ error: `decode failed at ${overlayUri}` });
-      second.result.current.onOverlayError({ error: `decode failed at ${overlayUri}` });
+      first.result.current.onOverlayError({ error: `decode failed at ${overlayUri}` }, firstLoadKey);
+      second.result.current.onOverlayError({ error: `decode failed at ${overlayUri}` }, secondLoadKey);
     });
 
     expect(first.result.current.overlayUri).toBeNull();

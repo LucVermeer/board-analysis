@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render } from '@testing-library/react';
+import { act, fireEvent, render } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 
 type ViewMockProps = { children?: ReactNode; testID?: string };
 const platform = vi.hoisted(() => ({ os: 'ios' as 'ios' | 'web' }));
+const imageEvents = vi.hoisted(() => ({ loadCallbacks: [] as Array<() => void> }));
 
 vi.mock('react-native', () => ({
   Platform: {
@@ -31,15 +32,17 @@ vi.mock('expo-image', () => ({
     recyclingKey?: string;
     onLoad?: () => void;
     onError?: (event: { error: string }) => void;
-  }) =>
-    createElement('img', {
+  }) => {
+    if (onLoad) imageEvents.loadCallbacks.push(onLoad);
+    return createElement('img', {
       src: source.uri,
       'data-testid': testID ?? 'expo-image',
       'data-transition': transition,
       'data-recycling-key': recyclingKey,
       onLoad,
       onError: () => onError?.({ error: 'mock image failure' }),
-    }),
+    });
+  },
 }));
 
 // These tests exercise the foregrounded render path; the backgrounded blank is
@@ -166,7 +169,45 @@ describe('LayeredClimbImage', () => {
     fireEvent.load(overlay);
     fireEvent.error(overlay);
 
-    expect(onOverlayLoad).toHaveBeenCalledTimes(1);
-    expect(onOverlayError).toHaveBeenCalledWith({ error: 'mock image failure' });
+    expect(onOverlayLoad).toHaveBeenCalledExactlyOnceWith('1:0');
+    expect(onOverlayError).toHaveBeenCalledWith({ error: 'mock image failure' }, '1:0');
+  });
+
+  it('does not expose the painted anchor for a queued load from a replaced overlay generation', () => {
+    imageEvents.loadCallbacks.length = 0;
+    const onOverlayLoad = vi.fn();
+    const { container, rerender } = render(
+      createElement(LayeredClimbImage, {
+        overlayUri: 'file:///overlay.png',
+        overlayLoadKey: '1:0',
+        backgroundPaths: [],
+        overlayTestID: 'play-drawer-board-overlay',
+        onOverlayLoad,
+      }),
+    );
+    const staleOverlay = container.querySelector('img[src="file:///overlay.png"]');
+    if (!staleOverlay) throw new Error('Expected first-generation overlay image');
+
+    rerender(
+      createElement(LayeredClimbImage, {
+        overlayUri: 'file:///overlay.png',
+        overlayLoadKey: '2:0',
+        backgroundPaths: [],
+        overlayTestID: 'play-drawer-board-overlay',
+        onOverlayLoad,
+      }),
+    );
+    const currentOverlay = container.querySelector('img[src="file:///overlay.png"]');
+    if (!currentOverlay) throw new Error('Expected replacement overlay image');
+
+    act(() => imageEvents.loadCallbacks[0]?.());
+
+    expect(container.querySelector('[data-testid="play-drawer-board-overlay"]')).toBeNull();
+    expect(onOverlayLoad).toHaveBeenCalledExactlyOnceWith('1:0');
+
+    act(() => imageEvents.loadCallbacks[1]?.());
+
+    expect(container.querySelector('[data-testid="play-drawer-board-overlay"]')).toBeTruthy();
+    expect(onOverlayLoad).toHaveBeenLastCalledWith('2:0');
   });
 });

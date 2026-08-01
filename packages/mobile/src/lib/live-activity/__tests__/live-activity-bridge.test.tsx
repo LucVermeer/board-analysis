@@ -59,6 +59,7 @@ const climbRender = vi.hoisted(() => ({
   overlayUri: null as string | null,
   overlayLoadKey: null as string | null,
   backgroundPaths: [] as string[],
+  verifyOverlayForNativeUse: vi.fn((uri: string | null) => uri),
   useNativeClimbRender: vi.fn(),
 }));
 
@@ -98,6 +99,7 @@ vi.mock('../../../hooks/use-native-climb-render', () => ({
       overlayLoadKey: climbRender.overlayLoadKey,
       onOverlayLoad: vi.fn(),
       onOverlayError: vi.fn(),
+      verifyOverlayForNativeUse: climbRender.verifyOverlayForNativeUse,
       backgroundPaths: climbRender.backgroundPaths,
       missingBackgroundCount: 0,
     };

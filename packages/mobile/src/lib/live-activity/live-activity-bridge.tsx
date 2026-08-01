@@ -45,7 +45,7 @@ export function LiveActivityBridge({ boardName, layoutId, sizeId, setIds }: Live
   // frames — useNativeClimbRender then no-ops its render effect instead of doing
   // work iOS discards.
   const displayClimb = state.currentClimbQueueItem?.climb ?? state.queue[0]?.climb ?? null;
-  const { overlayUri, overlayLoadKey, backgroundPaths } = useNativeClimbRender({
+  const { overlayUri, overlayLoadKey, verifyOverlayForNativeUse, backgroundPaths } = useNativeClimbRender({
     frames: isAndroidSessionPresence ? (displayClimb?.frames ?? '') : '',
     boardName: toBoardName(boardName) ?? 'kilter',
     layoutId,
@@ -98,6 +98,7 @@ export function LiveActivityBridge({ boardName, layoutId, sizeId, setIds }: Live
     androidNotification,
     androidThumbnailOverlayPath: overlayUri,
     androidThumbnailOverlayLoadKey: overlayLoadKey,
+    validateAndroidThumbnailOverlay: verifyOverlayForNativeUse,
     androidThumbnailBackgroundPaths: backgroundPaths,
   });
 
