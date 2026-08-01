@@ -109,12 +109,10 @@ describe('buildCacheKey', () => {
     expect(small).not.toBe(full);
   });
 
-  it('uses RENDERER_VERSION v4 to invalidate stale overlay PNGs', () => {
-    // v4 (issue #2202) switches hold colors to each role's calibrated
-    // displayColor and boosts Grasshopper's default stroke width. The
-    // version prefix guarantees pre-fix v3 cache files (rendered with the
-    // raw, too-dark LED colors) cannot be reused.
-    expect(buildCacheKey('kilter', 1, 10, '24', 'p1r42')).toMatch(/^v4_/);
+  it('uses RENDERER_VERSION v5 to invalidate non-atomic v4 overlay PNGs', () => {
+    // v5 ensures a newly built native client never trusts a v4
+    // file that may have been truncated by the old direct-to-destination write.
+    expect(buildCacheKey('kilter', 1, 10, '24', 'p1r42')).toMatch(/^v5_/);
   });
 
   it('uses a distinct style token so filled (list) and stroke (play view) never collide', () => {
@@ -433,33 +431,32 @@ describe('renderedOverlays warm-up from disk cache', () => {
 
   it('exposes the populated map so a fresh hook init can hit it synchronously', () => {
     expect(_renderedOverlaysForTests).toBeInstanceOf(Map);
-    _renderedOverlaysForTests.set('v4_kilter_1_10_24_deadbeef', 'file:///prior/session.png');
-    expect(_renderedOverlaysForTests.get('v4_kilter_1_10_24_deadbeef')).toBe('file:///prior/session.png');
-    _renderedOverlaysForTests.delete('v4_kilter_1_10_24_deadbeef');
+    _renderedOverlaysForTests.set('v5_kilter_1_10_24_deadbeef', 'file:///prior/session.png');
+    expect(_renderedOverlaysForTests.get('v5_kilter_1_10_24_deadbeef')).toBe('file:///prior/session.png');
+    _renderedOverlaysForTests.delete('v5_kilter_1_10_24_deadbeef');
   });
 
   it('only loads PNGs whose name starts with the current RENDERER_VERSION prefix', () => {
-    // Mix of v1/v2/v3 leftovers from previous app sessions and current v4
-    // entries. The warm-up should only surface v4 keys; older keys would
-    // never match any cacheKey lookup (all current keys are v4_*) so
-    // loading them just bloats memory. v3 leftovers matter for issue #2202:
-    // they were rendered with the raw, too-dark LED colors and must not be
-    // reused post-fix.
+    // Mix older leftovers (including v4 files written before atomic publication) with
+    // current v5 entries. The warm-up must surface only v5 keys; all older
+    // files are invalid under the current atomic-publication cache contract.
     const v1Entry = makeMockEntry('v1_kilter_1_10_24_aaaaaaaa.png');
     const v2Entry = makeMockEntry('v2_kilter_1_10_24_bbbbbbbb.png');
     const v3Entry = makeMockEntry('v3_kilter_1_10_24_eeeeeeee.png');
-    const v4EntryA = makeMockEntry('v4_kilter_1_10_24_cccccccc.png');
-    const v4EntryB = makeMockEntry('v4_tension_2_8_15_dddddddd.png');
-    directoryListSpy.mockReturnValue([v1Entry, v2Entry, v3Entry, v4EntryA, v4EntryB]);
+    const v4Entry = makeMockEntry('v4_kilter_1_10_24_ffffffff.png');
+    const v5EntryA = makeMockEntry('v5_kilter_1_10_24_cccccccc.png');
+    const v5EntryB = makeMockEntry('v5_tension_2_8_15_dddddddd.png');
+    directoryListSpy.mockReturnValue([v1Entry, v2Entry, v3Entry, v4Entry, v5EntryA, v5EntryB]);
 
     _runWarmupForTests();
 
-    expect(_renderedOverlaysForTests.has('v4_kilter_1_10_24_cccccccc')).toBe(true);
-    expect(_renderedOverlaysForTests.has('v4_tension_2_8_15_dddddddd')).toBe(true);
+    expect(_renderedOverlaysForTests.has('v5_kilter_1_10_24_cccccccc')).toBe(true);
+    expect(_renderedOverlaysForTests.has('v5_tension_2_8_15_dddddddd')).toBe(true);
     expect(_renderedOverlaysForTests.has('v1_kilter_1_10_24_aaaaaaaa')).toBe(false);
     expect(_renderedOverlaysForTests.has('v2_kilter_1_10_24_bbbbbbbb')).toBe(false);
     expect(_renderedOverlaysForTests.has('v3_kilter_1_10_24_eeeeeeee')).toBe(false);
-    // Only the two v4 entries should be present — no stragglers from
+    expect(_renderedOverlaysForTests.has('v4_kilter_1_10_24_ffffffff')).toBe(false);
+    // Only the two v5 entries should be present — no stragglers from
     // future-version PNGs slipping in either.
     expect(_renderedOverlaysForTests.size).toBe(2);
   });
@@ -467,16 +464,18 @@ describe('renderedOverlays warm-up from disk cache', () => {
   it('opportunistically deletes stale-version PNG files to reclaim disk', () => {
     const v1Entry = makeMockEntry('v1_kilter_1_10_24_aaaaaaaa.png');
     const v2Entry = makeMockEntry('v2_kilter_1_10_24_bbbbbbbb.png');
-    const v4Entry = makeMockEntry('v4_kilter_1_10_24_cccccccc.png');
-    directoryListSpy.mockReturnValue([v1Entry, v2Entry, v4Entry]);
+    const v4Entry = makeMockEntry('v4_kilter_1_10_24_stale.png');
+    const v5Entry = makeMockEntry('v5_kilter_1_10_24_cccccccc.png');
+    directoryListSpy.mockReturnValue([v1Entry, v2Entry, v4Entry, v5Entry]);
 
     _runWarmupForTests();
 
     expect(v1Entry.delete).toHaveBeenCalledTimes(1);
     expect(v2Entry.delete).toHaveBeenCalledTimes(1);
+    expect(v4Entry.delete).toHaveBeenCalledTimes(1);
     // Current-version files must never be deleted — they're the cache hits
     // the warm-up exists to surface.
-    expect(v4Entry.delete).not.toHaveBeenCalled();
+    expect(v5Entry.delete).not.toHaveBeenCalled();
   });
 
   it('keeps loading remaining entries when a delete throws', () => {
@@ -486,10 +485,10 @@ describe('renderedOverlays warm-up from disk cache', () => {
     v1Entry.delete.mockImplementation(() => {
       throw new Error('EACCES');
     });
-    const v4Entry = makeMockEntry('v4_kilter_1_10_24_bbbbbbbb.png');
-    directoryListSpy.mockReturnValue([v1Entry, v4Entry]);
+    const v5Entry = makeMockEntry('v5_kilter_1_10_24_bbbbbbbb.png');
+    directoryListSpy.mockReturnValue([v1Entry, v5Entry]);
 
     expect(() => _runWarmupForTests()).not.toThrow();
-    expect(_renderedOverlaysForTests.has('v4_kilter_1_10_24_bbbbbbbb')).toBe(true);
+    expect(_renderedOverlaysForTests.has('v5_kilter_1_10_24_bbbbbbbb')).toBe(true);
   });
 });

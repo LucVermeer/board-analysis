@@ -157,7 +157,7 @@ let hydratePromise: Promise<void> | null = null;
  * synchronous warm-up can surface prior-session renders. Idempotent — the first
  * call kicks off the async hydration and later calls await the same promise.
  *
- * `currentVersionPrefix` (e.g. `v3_`) makes eviction deterministic and
+ * `currentVersionPrefix` (e.g. `v5_`) makes eviction deterministic and
  * store-owned rather than dependent on the hook's warm-up: any key whose
  * cacheKey doesn't carry the current renderer version is deleted here, so
  * stale-version PNGs never burn a hydrate slot and are always reclaimed —

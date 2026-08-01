@@ -8,14 +8,19 @@
  * binaries during rollout. v4 (issue #2202) switches hold colors to each role's
  * calibrated displayColor and boosts Grasshopper's default stroke width — both
  * change the rendered pixels for a config that otherwise hashes the same, so
- * stale v3 PNGs must not be reused.
+ * stale v3 PNGs must not be reused. v5 invalidates any v4 native
+ * PNG that may have been truncated before publication became atomic. This
+ * version is shared by native and Expo web, so the web Cache API intentionally
+ * performs the same one-time v4 flush. The accompanying native-module changes
+ * move Expo's fingerprint, keeping the v5 JS contract isolated to binaries that
+ * contain the atomic writer.
  *
  * Lives in its own module so both the hook (use-native-climb-render.ts) and the
  * web overlay warm-up (overlay-cache-warmup.web.ts) can read it without a
  * circular import — the hook imports the warm-up, so the warm-up must not import
  * back from the hook.
  */
-export const RENDERER_VERSION = 4;
+export const RENDERER_VERSION = 5;
 
 /** Cache-key prefix stamped on every overlay produced by the current renderer. */
 export const currentOverlayVersionPrefix = (): string => `v${RENDERER_VERSION}_`;
