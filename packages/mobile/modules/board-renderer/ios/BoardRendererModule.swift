@@ -97,7 +97,54 @@ public class BoardRendererModule: Module {
     }
   }
 
+  /// #4107: `retryOnceAfterRecreatingCacheDir` already retries the write once
+  /// if the cache directory vanishes mid-request, but under sustained storage
+  /// pressure that single retry can lose too — the recreated directory (or a
+  /// fresh temp file inside it) can vanish again before the retried write
+  /// lands, and that second file-not-found error was previously unguarded,
+  /// reaching JS as a rejected `renderHoldsOverlay` promise. This wraps the
+  /// *entire* pipeline — fast-path check, render, and write — in one more
+  /// bounded retry: on a vanished-file failure, treat the cache entry as
+  /// invalidated and re-run the whole thing exactly once from scratch.
+  ///
+  /// Deliberately narrow, mirroring the Android twin `CacheMissRecovery`:
+  /// only a file-not-found-shaped error is retried — `NSCocoaErrorDomain` /
+  /// `NSFileNoSuchFileError` (what `Data.write(to:options:.atomic)` throws
+  /// for a missing directory) or `NSPOSIXErrorDomain` / `ENOENT` (in case the
+  /// underlying implementation surfaces a lower-level POSIX error instead).
+  /// The exact domain/code Foundation uses here is unverified against a real
+  /// device or simulator — no Mac was available while writing this — so both
+  /// are checked defensively; narrow it further once confirmed. The three
+  /// `"BoardRenderer"`-domain `NSError`s below (Rust render failure, failed
+  /// `CGImage` wrap, failed PNG encoding) are a different domain entirely and
+  /// so are never matched here — retrying a genuine encoder or render bug
+  /// would waste work without fixing anything.
+  private func isFileVanishedError(_ error: Error) -> Bool {
+    let nsError = error as NSError
+    if nsError.domain == NSCocoaErrorDomain,
+      nsError.code == NSFileNoSuchFileError || nsError.code == NSFileReadNoSuchFileError
+    {
+      return true
+    }
+    if nsError.domain == NSPOSIXErrorDomain, nsError.code == Int(ENOENT) {
+      return true
+    }
+    return false
+  }
+
   private func renderOverlay(configJson: String, cacheKey: String) throws -> String {
+    do {
+      return try renderOverlayOnce(configJson: configJson, cacheKey: cacheKey)
+    } catch {
+      guard isFileVanishedError(error) else { throw error }
+      NSLog(
+        "[BoardRenderer] Overlay cache file vanished mid-request for \(cacheKey); invalidating and re-rendering once"
+      )
+      return try renderOverlayOnce(configJson: configJson, cacheKey: cacheKey)
+    }
+  }
+
+  private func renderOverlayOnce(configJson: String, cacheKey: String) throws -> String {
     _ = self.pruneOnce
     let outputUrl = self.cacheDir.appendingPathComponent("\(cacheKey).png")
 
