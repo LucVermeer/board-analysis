@@ -170,7 +170,7 @@ describe('api/og/playlist route', () => {
     expect(textContent).toContain(icon);
   });
 
-  it('retains ASCII identifiers before falling back to playlist initials', async () => {
+  it('retains ASCII identifiers in the playlist mark', async () => {
     playlistRouteState.getPlaylistOgSummaryMock.mockResolvedValue({
       name: 'Steep Projects',
       description: null,
@@ -184,7 +184,9 @@ describe('api/og/playlist route', () => {
 
     await GET(makeRequest({ uuid: 'ascii-playlist' }));
     expect(collectText(playlistRouteState.capturedElement)).toContain('ST');
+  });
 
+  it('falls back to playlist initials when the icon is empty', async () => {
     playlistRouteState.getPlaylistOgSummaryMock.mockResolvedValue({
       name: 'Steep Projects',
       description: null,
