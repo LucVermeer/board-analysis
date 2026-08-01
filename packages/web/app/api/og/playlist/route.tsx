@@ -11,7 +11,7 @@ export const runtime = 'nodejs';
 const PLAYLIST_NAME_MAX_LENGTH = 34;
 const PLAYLIST_DESCRIPTION_MAX_LENGTH = 120;
 const EMOJI_GRAPHEME_PATTERN = /\p{Extended_Pictographic}|\p{Regional_Indicator}|\u20E3/u;
-const GRAPHEME_SEGMENTER = new Intl.Segmenter('en', { granularity: 'grapheme' });
+const GRAPHEME_SEGMENTER = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 
 function truncateOgText(value: string, maxLength: number): string {
   const normalized = value.trim();
