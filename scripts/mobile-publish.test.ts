@@ -11,6 +11,8 @@ describe('mobile publish argument routing', () => {
     expect(args[args.indexOf('--branch') + 1]).toBe('production');
     expect(args).not.toContain('--channel');
     expect(args[args.indexOf('--platform') + 1]).toBe('ios');
+    expect(args).toContain('--nonInteractive');
+    expect(args[args.indexOf('--packageRunner') + 1]).toBe('bunx');
   });
 
   it('keeps the EAS preview command arguments unchanged', () => {

@@ -21,9 +21,10 @@ function jobBlock(workflow: string, jobName: string): string {
   return nextJobOffset >= 0 ? workflow.slice(start, start + 1 + nextJobOffset) : workflow.slice(start);
 }
 
-function stepBlock(workflow: string, stepName: string, nextStepName: string): string {
+function stepBlock(workflow: string, stepName: string): string {
   const start = workflow.indexOf(`      - name: ${stepName}`);
-  const end = workflow.indexOf(`      - name: ${nextStepName}`, start + 1);
+  const nextStepOffset = workflow.slice(start + 1).indexOf('\n      - name: ');
+  const end = nextStepOffset >= 0 ? start + 1 + nextStepOffset : workflow.length;
   expect(start).toBeGreaterThanOrEqual(0);
   expect(end).toBeGreaterThan(start);
   return workflow.slice(start, end);
@@ -38,9 +39,9 @@ describe('production OTA workflow reliability', () => {
   });
 
   it('attempts Android after iOS and records the aggregate result', () => {
-    const ios = stepBlock(production, 'Publish iOS OTA', 'Publish Android OTA');
-    const android = stepBlock(production, 'Publish Android OTA', 'Summarize platform publish results');
-    const summary = stepBlock(production, 'Summarize platform publish results', 'Push changelog to main');
+    const ios = stepBlock(production, 'Publish iOS OTA');
+    const android = stepBlock(production, 'Publish Android OTA');
+    const summary = stepBlock(production, 'Summarize platform publish results');
 
     expect(ios).toContain('continue-on-error: true');
     expect(android).toContain('if: always()');
@@ -51,8 +52,8 @@ describe('production OTA workflow reliability', () => {
   });
 
   it('pushes the changelog and announces success only after every requested platform succeeds', () => {
-    const push = stepBlock(production, 'Push changelog to main', 'Notify deployments channel');
-    const success = stepBlock(production, 'Notify deployments channel', 'Notify deployments channel of failure');
+    const push = stepBlock(production, 'Push changelog to main');
+    const success = stepBlock(production, 'Notify deployments channel');
 
     expect(push).toContain("steps.publish_summary.outputs.all_success == 'true'");
     expect(push).not.toContain('if: always()');
@@ -61,7 +62,7 @@ describe('production OTA workflow reliability', () => {
   });
 
   it('runs the health check after any successful platform, including partial success', () => {
-    const health = stepBlock(production, 'OTA health check (non-blocking)', 'Notify OTA health to Discord');
+    const health = stepBlock(production, 'OTA health check (non-blocking)');
 
     expect(health).toContain('if: always()');
     expect(health).toContain("steps.publish_ios.outcome == 'success' || steps.publish_android.outcome == 'success'");
@@ -85,6 +86,12 @@ describe('production OTA workflow reliability', () => {
 });
 
 describe('backport OTA workflow upload pressure', () => {
+  it('stays manual-only while publishing through the shared wrapper', () => {
+    expect(backport).toContain('on:\n  workflow_dispatch:');
+    expect(backport).not.toContain('on:\n  push:');
+    expect(backport).toContain('vp run mobile:publish -- --channel production');
+  });
+
   it('shares the production lane and limits the platform matrix to one publish', () => {
     expect(backport).toContain('group: mobile-ota-production');
     expect(backport).toContain('cancel-in-progress: false');
