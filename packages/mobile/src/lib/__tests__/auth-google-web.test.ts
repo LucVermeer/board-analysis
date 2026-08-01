@@ -179,25 +179,31 @@ describe('signInWithGoogleWeb', () => {
   });
 
   it('keeps the Android listener alive after opened and exchanges the callback after foregrounding', async () => {
-    platformState.OS = 'android';
-    const fetchMock = vi.spyOn(global, 'fetch').mockResolvedValue(okExchange());
+    vi.useFakeTimers();
+    try {
+      platformState.OS = 'android';
+      const fetchMock = vi.spyOn(global, 'fetch').mockResolvedValue(okExchange());
 
-    const racePromise = signInWithGoogleWeb();
-    resolveBrowserResult({ type: 'opened' });
-    await Promise.resolve();
-    expect(removeListenerMock).not.toHaveBeenCalled();
+      const racePromise = signInWithGoogleWeb();
+      resolveBrowserResult({ type: 'opened' });
+      await Promise.resolve();
+      expect(removeListenerMock).not.toHaveBeenCalled();
 
-    fireAppState('background');
-    fireAppState('active');
-    fireDeepLink(`${CALLBACK_SCHEME}?transferToken=android-tok`);
+      fireAppState('background');
+      fireAppState('active');
+      fireDeepLink(`${CALLBACK_SCHEME}?transferToken=android-tok`);
 
-    await expect(racePromise).resolves.toEqual({ success: true });
-    expect(fetchMock).toHaveBeenCalledWith(
-      'https://backend.test/auth/native/exchange',
-      expect.objectContaining({ body: JSON.stringify({ transferToken: 'android-tok' }) }),
-    );
-    expect(removeListenerMock).toHaveBeenCalledOnce();
-    expect(removeAppStateListenerMock).toHaveBeenCalledOnce();
+      await expect(racePromise).resolves.toEqual({ success: true });
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://backend.test/auth/native/exchange',
+        expect.objectContaining({ body: JSON.stringify({ transferToken: 'android-tok' }) }),
+      );
+      expect(removeListenerMock).toHaveBeenCalledOnce();
+      expect(removeAppStateListenerMock).toHaveBeenCalledOnce();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('maps an exhausted Android callback race to browser_timeout', async () => {

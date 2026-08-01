@@ -255,6 +255,33 @@ describe('raceBrowserSignIn — Android', () => {
     expect(harness.clearTimer).toHaveBeenCalledTimes(2);
   });
 
+  it('replaces an active cancel grace with the deadline timeout grace', async () => {
+    const harness = createIoHarness();
+    const racePromise = raceBrowserSignIn(harness.io, AUTH_URL, CALLBACK_PREFIX);
+    harness.resolveBrowser({ type: 'opened' });
+
+    await vi.advanceTimersByTimeAsync(AUTH_DEADLINE_MS - 500);
+    harness.fireAppState('background');
+    harness.fireAppState('active');
+    expect(harness.setTimer).toHaveBeenLastCalledWith(expect.any(Function), CALLBACK_GRACE_MS);
+
+    await vi.advanceTimersByTimeAsync(500);
+    await expectPending(racePromise);
+    expect(harness.clearTimer).toHaveBeenCalledOnce();
+
+    // The old cancel grace would have fired here. The deadline replaces it with
+    // a fresh timeout grace so a final Linking callback still gets a full turn.
+    await vi.advanceTimersByTimeAsync(500);
+    await expectPending(racePromise);
+    await vi.advanceTimersByTimeAsync(500);
+
+    await expect(racePromise).resolves.toEqual({ type: 'timeout' });
+    expect(harness.removeUrlListener).toHaveBeenCalledOnce();
+    expect(harness.removeAppStateListener).toHaveBeenCalledOnce();
+    expect(harness.clearTimer).toHaveBeenCalledTimes(3);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it('ignores unrelated URLs throughout the foreground grace', async () => {
     const harness = createIoHarness();
     const racePromise = raceBrowserSignIn(harness.io, AUTH_URL, CALLBACK_PREFIX);
