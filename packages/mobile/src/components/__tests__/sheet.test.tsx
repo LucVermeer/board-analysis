@@ -80,6 +80,8 @@ vi.mock('react-native', () => ({
   StyleSheet: {
     create: (styles: Record<string, unknown>) => styles,
     hairlineWidth: 1,
+    // Consumed by the #3922 detent probe (sheet-detent-probe.ts).
+    absoluteFill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
     // Faithful flatten (arrays merge left-to-right, falsy entries skipped) — the
     // footerless body composes its bottom inset through withSheetBottomInset.
     flatten: function flatten(style: unknown): Record<string, unknown> | undefined {

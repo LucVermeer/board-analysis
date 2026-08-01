@@ -25,6 +25,7 @@ import { useTheme } from '../providers/theme-provider';
 import { androidSafeSnapPoints } from './sheet-snap-points';
 import { useSheetBodyContentStyle } from './sheet-content-inset';
 import { useSheetColumnStyle } from './use-sheet-column-style';
+import { useSheetDetentProbe } from './sheet-detent-probe';
 import { useManagedSheet, type PresenterGroup } from '../providers/sheet-presentation-provider';
 
 type ModalSheetProps = {
@@ -92,6 +93,8 @@ export const ModalSheet = forwardRef<BottomSheetMethods, ModalSheetProps>(functi
   // Track the resting detent so the iOS column bound follows drags between detents.
   const [activeIndex, setActiveIndex] = useState(0);
   const columnStyle = useSheetColumnStyle(snapPoints, { enableDynamicSizing, activeIndex });
+  // Dev-only observers for #3922 — they feed a log line, never layout.
+  const { probeProps, sentinelProps, onColumnLayout } = useSheetDetentProbe(columnStyle, 'ModalSheet');
 
   const handleChange = useCallback(
     (index: number) => {
@@ -123,9 +126,13 @@ export const ModalSheet = forwardRef<BottomSheetMethods, ModalSheetProps>(functi
   // not pad content for it. With a footer the body scrolls above the footer, which
   // already carries `insets.bottom`.
   const bodyContentContainerStyle = useSheetBodyContentStyle(Boolean(footer), contentContainerStyle, insets.bottom);
+  // #3922: measure whichever view actually carries columnStyle — the body when
+  // there is no footer, the KeyboardAvoidingView below when there is.
+  const bodyLayout = footer ? undefined : onColumnLayout;
   const body = scrollable ? (
     <BottomSheetScrollView
       style={bodyStyle}
+      onLayout={bodyLayout}
       contentContainerStyle={bodyContentContainerStyle}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
@@ -134,9 +141,13 @@ export const ModalSheet = forwardRef<BottomSheetMethods, ModalSheetProps>(functi
       {children}
     </BottomSheetScrollView>
   ) : enableDynamicSizing && !footer && Platform.OS === 'web' ? (
+    // Web + dynamic sizing only, where the column is never bounded and the
+    // #3922 probe stays idle — so there is nothing to measure here.
     <BottomSheetView style={[bodyStyle, bodyContentContainerStyle]}>{children}</BottomSheetView>
   ) : (
-    <View style={[bodyStyle, bodyContentContainerStyle]}>{children}</View>
+    <View style={[bodyStyle, bodyContentContainerStyle]} onLayout={bodyLayout}>
+      {children}
+    </View>
   );
 
   const footerBar = footer ? (
@@ -166,13 +177,19 @@ export const ModalSheet = forwardRef<BottomSheetMethods, ModalSheetProps>(functi
       onFullyDismissed={managed.onFullyDismissed}
       style={styles.sheet}
     >
+      {/* #3922 instrumentation, dev builds only. The sentinel is in-flow but
+          zero-height and the probe is absolutely positioned, so neither adds
+          anything to the wrapper's content size in either of @expo/ui's layout
+          branches — the "single flex child" rule below still holds. */}
+      {sentinelProps ? <View {...sentinelProps} /> : null}
+      {probeProps ? <View {...probeProps} /> : null}
       {footer ? (
         // The single flex child of the native sheet: bound to the detent height on
         // iOS (see useSheetColumnStyle) so the pinned footer can't fall off-screen
         // (#3330); flex:1 on Android / fitToContents. `padding` on both platforms:
         // the Android Compose dialog window does not resize for the keyboard, so
         // without it the keyboard covers the footer's input (emulator-verified).
-        <KeyboardAvoidingView style={columnStyle} behavior="padding">
+        <KeyboardAvoidingView style={columnStyle} behavior="padding" onLayout={onColumnLayout}>
           {body}
           {footerBar}
         </KeyboardAvoidingView>
