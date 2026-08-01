@@ -239,7 +239,7 @@ describe('playlist ownership role matrix — real Postgres (#4016)', () => {
       },
       {
         operation: () => playlistMutations.updatePlaylistLastAccessed(null, { playlistId: PLAYLIST_UUID }, context),
-        expectedMessage: 'Playlist not found or access denied',
+        expectedMessage: 'Playlist not found or you do not have permission to edit it',
       },
     ];
 

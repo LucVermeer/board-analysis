@@ -553,7 +553,7 @@ export const playlistMutations = {
       .limit(1);
 
     if (ownership.length === 0) {
-      throw new Error('Playlist not found or access denied');
+      throw new Error('Playlist not found or you do not have permission to edit it');
     }
 
     await db
