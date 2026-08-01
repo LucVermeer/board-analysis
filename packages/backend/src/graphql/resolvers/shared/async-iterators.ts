@@ -14,6 +14,11 @@ function logOverflowDrop(label: string, droppedCount: number): void {
   }
 }
 
+export type CancellableAsyncIterator<T> = AsyncIterableIterator<T> & {
+  return: (value?: unknown) => Promise<IteratorResult<T>>;
+  throw: (error?: unknown) => Promise<IteratorResult<T>>;
+};
+
 /**
  * Helper to create an async iterator from an async callback-based subscription.
  * Used for GraphQL subscriptions.
@@ -30,47 +35,8 @@ function logOverflowDrop(label: string, droppedCount: number): void {
 export async function createAsyncIterator<T>(
   subscribe: (push: (value: T) => void) => Promise<() => void>,
   label = 'unknown',
-): Promise<AsyncIterable<T>> {
-  const queue: T[] = [];
-  const pending: Array<(value: IteratorResult<T>) => void> = [];
-  let done = false;
-  let droppedCount = 0;
-
-  // Subscribe and await Redis channel setup before returning iterator
-  const unsubscribe = await subscribe((value: T) => {
-    if (pending.length > 0) {
-      pending.shift()!({ value, done: false });
-    } else {
-      // Bounded queue: drop oldest events if queue is full
-      if (queue.length >= MAX_SUBSCRIPTION_QUEUE_SIZE) {
-        queue.shift(); // Drop oldest
-        droppedCount += 1;
-        logOverflowDrop(label, droppedCount);
-      }
-      queue.push(value);
-    }
-  });
-
-  return {
-    [Symbol.asyncIterator]() {
-      return {
-        async next(): Promise<IteratorResult<T>> {
-          if (queue.length > 0) {
-            return { value: queue.shift()!, done: false };
-          }
-          if (done) {
-            return { value: undefined as unknown as T, done: true };
-          }
-          return new Promise((resolve) => pending.push(resolve));
-        },
-        async return(): Promise<IteratorResult<T>> {
-          done = true;
-          unsubscribe();
-          return { value: undefined as unknown as T, done: true };
-        },
-      };
-    },
-  };
+): Promise<CancellableAsyncIterator<T>> {
+  return createCallbackAsyncIterator(subscribe, label);
 }
 
 /**
@@ -91,14 +57,22 @@ export async function createAsyncIterator<T>(
 export async function createEagerAsyncIterator<T>(
   subscribe: (push: (value: T) => void) => Promise<() => void>,
   label = 'unknown',
-): Promise<AsyncIterable<T>> {
+): Promise<CancellableAsyncIterator<T>> {
+  return createCallbackAsyncIterator(subscribe, label);
+}
+
+async function createCallbackAsyncIterator<T>(
+  subscribe: (push: (value: T) => void) => Promise<() => void>,
+  label: string,
+): Promise<CancellableAsyncIterator<T>> {
   const queue: T[] = [];
   const pending: Array<(value: IteratorResult<T>) => void> = [];
   let done = false;
   let droppedCount = 0;
 
-  // Subscribe IMMEDIATELY and await Redis channel setup
+  // Subscribe and await Redis channel setup before returning the iterator.
   const unsubscribe = await subscribe((value: T) => {
+    if (done) return;
     if (pending.length > 0) {
       pending.shift()!({ value, done: false });
     } else {
@@ -112,24 +86,36 @@ export async function createEagerAsyncIterator<T>(
     }
   });
 
-  return {
+  const completedResult = (): IteratorResult<T> => ({ value: undefined as unknown as T, done: true });
+  const close = (): void => {
+    if (done) return;
+    done = true;
+    queue.length = 0;
+    const result = completedResult();
+    for (const resolvePending of pending.splice(0)) resolvePending(result);
+    unsubscribe();
+  };
+
+  const iterator: CancellableAsyncIterator<T> = {
+    async next(): Promise<IteratorResult<T>> {
+      if (queue.length > 0) {
+        return { value: queue.shift()!, done: false };
+      }
+      if (done) return completedResult();
+      return new Promise((resolve) => pending.push(resolve));
+    },
+    async return(_value?: unknown): Promise<IteratorResult<T>> {
+      close();
+      return completedResult();
+    },
+    async throw(error?: unknown): Promise<IteratorResult<T>> {
+      close();
+      throw error;
+    },
     [Symbol.asyncIterator]() {
-      return {
-        async next(): Promise<IteratorResult<T>> {
-          if (queue.length > 0) {
-            return { value: queue.shift()!, done: false };
-          }
-          if (done) {
-            return { value: undefined as unknown as T, done: true };
-          }
-          return new Promise((resolve) => pending.push(resolve));
-        },
-        async return(): Promise<IteratorResult<T>> {
-          done = true;
-          unsubscribe();
-          return { value: undefined as unknown as T, done: true };
-        },
-      };
+      return iterator;
     },
   };
+
+  return iterator;
 }

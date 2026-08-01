@@ -55,37 +55,48 @@ describe('climbStatsUpdated subscription', () => {
   });
 
   it('requires authentication and validates the board/layout before subscribing', async () => {
-    const anonymous = climbStatsSubscriptions.climbStatsUpdated.subscribe(
-      undefined,
-      { boardType: 'kilter', layoutId: 1 },
-      context(false),
-    );
-    await expect(anonymous.next()).rejects.toThrow('Authentication required');
+    await expect(
+      climbStatsSubscriptions.climbStatsUpdated.subscribe(
+        undefined,
+        { boardType: 'kilter', layoutId: 1 },
+        context(false),
+      ),
+    ).rejects.toThrow('Authentication required');
 
-    const badBoard = climbStatsSubscriptions.climbStatsUpdated.subscribe(
-      undefined,
-      { boardType: 'notaboard', layoutId: 1 },
-      context(),
-    );
-    await expect(badBoard.next()).rejects.toThrow('Invalid board type');
+    await expect(
+      climbStatsSubscriptions.climbStatsUpdated.subscribe(
+        undefined,
+        { boardType: 'notaboard', layoutId: 1 },
+        context(),
+      ),
+    ).rejects.toThrow('Invalid board type');
 
-    const badLayout = climbStatsSubscriptions.climbStatsUpdated.subscribe(
-      undefined,
-      { boardType: 'kilter', layoutId: 0 },
-      context(),
-    );
-    await expect(badLayout.next()).rejects.toThrow('Invalid layout id');
+    await expect(
+      climbStatsSubscriptions.climbStatsUpdated.subscribe(undefined, { boardType: 'kilter', layoutId: 0 }, context()),
+    ).rejects.toThrow('Invalid layout id');
     expect(subscribeMock).not.toHaveBeenCalled();
+    expect(getClimbStatsSubscriptionCount('connection-1')).toBe(0);
   });
 
-  it('subscribes to the canonical layout channel and releases capacity on cleanup', async () => {
-    const iterator = climbStatsSubscriptions.climbStatsUpdated.subscribe(
+  it('releases capacity when pubsub setup fails', async () => {
+    subscribeMock.mockRejectedValueOnce(new Error('Redis unavailable'));
+
+    await expect(
+      climbStatsSubscriptions.climbStatsUpdated.subscribe(undefined, { boardType: 'kilter', layoutId: 1 }, context()),
+    ).rejects.toThrow('Redis unavailable');
+
+    expect(getClimbStatsSubscriptionCount('connection-1')).toBe(0);
+    expect(subscriptionState.unsubscribe).not.toHaveBeenCalled();
+  });
+
+  it('subscribes to the canonical layout channel and maps events', async () => {
+    const iterator = await climbStatsSubscriptions.climbStatsUpdated.subscribe(
       undefined,
       { boardType: 'kilter', layoutId: 1 },
       context(),
     );
     const next = iterator.next();
-    await vi.waitFor(() => expect(subscribeMock).toHaveBeenCalledWith('kilter:1', expect.any(Function)));
+    expect(subscribeMock).toHaveBeenCalledWith('kilter:1', expect.any(Function));
     expect(getClimbStatsSubscriptionCount('connection-1')).toBe(1);
     subscriptionState.push?.(event);
     await expect(next).resolves.toEqual({ done: false, value: { climbStatsUpdated: event } });
@@ -93,6 +104,30 @@ describe('climbStatsUpdated subscription', () => {
     await iterator.return?.(undefined);
     expect(subscriptionState.unsubscribe).toHaveBeenCalledTimes(1);
     expect(getClimbStatsSubscriptionCount('connection-1')).toBe(0);
+  });
+
+  it('completes an idle pending read immediately when graphql-ws returns the iterator', async () => {
+    const iterator = await climbStatsSubscriptions.climbStatsUpdated.subscribe(
+      undefined,
+      { boardType: 'kilter', layoutId: 1 },
+      context(),
+    );
+    const pendingNext = iterator.next();
+    expect(getClimbStatsSubscriptionCount('connection-1')).toBe(1);
+
+    const completion = iterator.return();
+    expect(subscriptionState.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(getClimbStatsSubscriptionCount('connection-1')).toBe(0);
+    await expect(pendingNext).resolves.toEqual({ done: true, value: undefined });
+    await expect(completion).resolves.toEqual({ done: true, value: undefined });
+
+    await expect(iterator.return()).resolves.toEqual({ done: true, value: undefined });
+    expect(subscriptionState.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(getClimbStatsSubscriptionCount('connection-1')).toBe(0);
+
+    subscriptionState.push?.(event);
+    await expect(iterator.next()).resolves.toEqual({ done: true, value: undefined });
+    expect(subscriptionState.unsubscribe).toHaveBeenCalledTimes(1);
   });
 
   it('caps subscriptions per connection without leaking rejected capacity', () => {

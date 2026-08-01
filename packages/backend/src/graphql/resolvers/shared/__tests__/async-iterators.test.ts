@@ -14,7 +14,17 @@ vi.mock('../../../../utils/logger', () => ({
   logger: { warn: warnMock, error: vi.fn(), info: vi.fn() },
 }));
 
-import { createAsyncIterator, createEagerAsyncIterator } from '../async-iterators';
+import { createAsyncIterator, createEagerAsyncIterator, type CancellableAsyncIterator } from '../async-iterators';
+
+const iteratorFactories: Array<{
+  name: string;
+  create: (
+    subscribe: (push: (value: number) => void) => Promise<() => void>,
+  ) => Promise<CancellableAsyncIterator<number>>;
+}> = [
+  { name: 'createAsyncIterator', create: createAsyncIterator<number> },
+  { name: 'createEagerAsyncIterator', create: createEagerAsyncIterator<number> },
+];
 
 describe('async-iterators overflow', () => {
   beforeEach(() => {
@@ -127,4 +137,29 @@ describe('async-iterators overflow', () => {
 
     expect(warnMock).not.toHaveBeenCalled();
   });
+
+  it.each(iteratorFactories)(
+    '$name: return settles an idle next, unsubscribes once, and ignores post-close pushes',
+    async ({ create }) => {
+      let push!: (value: number) => void;
+      const unsubscribe = vi.fn();
+      const iterator = await create(async (pushValue) => {
+        push = pushValue;
+        return unsubscribe;
+      });
+      const pendingNext = iterator.next();
+
+      const completion = iterator.return();
+      expect(unsubscribe).toHaveBeenCalledTimes(1);
+      await expect(pendingNext).resolves.toEqual({ value: undefined, done: true });
+      await expect(completion).resolves.toEqual({ value: undefined, done: true });
+
+      await expect(iterator.return()).resolves.toEqual({ value: undefined, done: true });
+      expect(unsubscribe).toHaveBeenCalledTimes(1);
+
+      push(42);
+      await expect(iterator.next()).resolves.toEqual({ value: undefined, done: true });
+      expect(unsubscribe).toHaveBeenCalledTimes(1);
+    },
+  );
 });
