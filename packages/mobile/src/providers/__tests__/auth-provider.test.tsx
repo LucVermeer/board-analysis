@@ -2,11 +2,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, render, screen, waitFor, act } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const redirectMock = vi.hoisted(() => vi.fn());
 const platformState = vi.hoisted(() => ({ OS: 'ios' }));
 const routerState = vi.hoisted(() => ({ segments: [] as string[] }));
+const appStateState = vi.hoisted(() => ({
+  listener: null as ((nextAppState: string) => void) | null,
+}));
 const authTokenEventsState = vi.hoisted(() => ({
   listener: null as
     | ((token: string | null, source: 'local' | 'remote' | 'remote-signout' | 'session' | 'hint') => void)
@@ -43,7 +46,14 @@ vi.mock('expo-router', () => ({
 vi.mock('react-native', () => ({
   Platform: platformState,
   AppState: {
-    addEventListener: vi.fn(() => ({ remove: vi.fn() })),
+    addEventListener: vi.fn((_event: string, listener: (nextAppState: string) => void) => {
+      appStateState.listener = listener;
+      return {
+        remove: vi.fn(() => {
+          if (appStateState.listener === listener) appStateState.listener = null;
+        }),
+      };
+    }),
   },
 }));
 
@@ -102,6 +112,7 @@ vi.mock('../../lib/auth-session', async (importOriginal) => {
 beforeEach(() => {
   platformState.OS = 'ios';
   routerState.segments = [];
+  appStateState.listener = null;
   redirectMock.mockReset();
   isAuthCredentialGenerationCurrentMock.mockReset();
   isAuthCredentialGenerationCurrentMock.mockReturnValue(true);
@@ -122,6 +133,8 @@ beforeEach(() => {
   consumeWebOAuthReturnProviderMock.mockReset();
   consumeWebOAuthReturnProviderMock.mockReturnValue(null);
   trackMock.mockReset();
+  reportHandledErrorMock.mockReset();
+  onlineManager.setOnline(true);
   captureAuthCredentialGenerationMock.mockReset();
   captureAuthCredentialGenerationMock.mockReturnValue(1);
   authSignInWithCredentialsMock.mockReset();
@@ -153,8 +166,10 @@ vi.mock('../../lib/auth-store', () => ({
 // checkAuth reports keychain read failures; record the calls so the
 // rejection test can assert the failure was surfaced (and is a no-op otherwise).
 const reportErrorMock = vi.fn();
+const reportHandledErrorMock = vi.fn();
 vi.mock('../../lib/error-reporting', () => ({
   reportError: (...args: unknown[]) => reportErrorMock(...args),
+  reportHandledError: (...args: unknown[]) => reportHandledErrorMock(...args),
 }));
 
 vi.mock('../../lib/analytics', () => ({
@@ -275,7 +290,7 @@ const ensureFreshTokenMock = vi.fn().mockResolvedValue(true);
 type MockRefreshResult =
   | { status: 'refreshed'; generation: number }
   | { status: 'rejected'; generation: number }
-  | { status: 'unavailable'; generation: number }
+  | { status: 'unavailable'; generation: number; error: unknown }
   | { status: 'superseded' };
 // resolveAuthSession refreshes an expiring token through the status-returning
 // deduplicatedRefresh (not the boolean ensureFreshToken), so the refresh-fail
@@ -1293,6 +1308,272 @@ describe('AuthProvider.checkAuth signed-out cleanup', () => {
   });
 });
 
+describe('AuthProvider native degraded sessions', () => {
+  const refreshUnavailableError = new Error('Network request failed');
+
+  beforeEach(() => {
+    getAuthTokenMock.mockReset();
+    getAuthTokenMock.mockResolvedValue('old-jwt');
+    isTokenExpiringSoonMock.mockReset();
+    isTokenExpiringSoonMock.mockResolvedValue(true);
+    deduplicatedRefreshMock.mockReset();
+    deduplicatedRefreshMock.mockResolvedValue({
+      status: 'unavailable',
+      generation: 1,
+      error: refreshUnavailableError,
+    });
+    clearStoredSessionIdMock.mockReset();
+    clearStoredSessionIdMock.mockResolvedValue(undefined);
+    clearStoredActiveBoardMock.mockReset();
+    clearStoredActiveBoardMock.mockResolvedValue(undefined);
+    resetHttpClientMock.mockReset();
+    disposeWsClientMock.mockReset();
+    redirectMock.mockReset();
+    reportErrorMock.mockReset();
+    reportHandledErrorMock.mockReset();
+  });
+
+  const createWrapper = (queryClient: QueryClient) =>
+    function NativeAuthWrapper({ children }: { children: ReactNode }) {
+      return (
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider>{children}</AuthProvider>
+        </QueryClientProvider>
+      );
+    };
+
+  it('keeps an expiring-token cold start authenticated when refresh is offline', async () => {
+    onlineManager.setOnline(false);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { result } = renderHook(() => useAuth(), { wrapper: createWrapper(queryClient) });
+
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
+
+    expect(deduplicatedRefreshMock).toHaveBeenCalledOnce();
+    expect(getAuthTokenMock).toHaveBeenCalledOnce();
+    expect(redirectMock).not.toHaveBeenCalledWith('/auth/login');
+    expect(redirectMock).not.toHaveBeenCalledWith('/auth/session-unavailable');
+    expect(clearStoredSessionIdMock).not.toHaveBeenCalled();
+    expect(clearStoredActiveBoardMock).not.toHaveBeenCalled();
+    // The interceptor owns refresh-unavailable reporting with the original
+    // transport error; the provider must not emit duplicate generic noise.
+    expect(reportErrorMock).not.toHaveBeenCalled();
+    expect(reportHandledErrorMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps screenshot-mode follow-up token-read failures on the native login path', async () => {
+    vi.stubEnv('EXPO_PUBLIC_SCREENSHOT_MODE', '1');
+    const keychainError = new Error('screenshot keychain relocked');
+    getAuthTokenMock.mockResolvedValueOnce(null).mockRejectedValueOnce(keychainError);
+    authSignInWithCredentialsMock.mockResolvedValue({ success: true });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>{null}</AuthProvider>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(redirectMock).toHaveBeenCalledWith('/auth/login'));
+    expect(redirectMock).not.toHaveBeenCalledWith('/auth/session-unavailable');
+    expect(reportHandledErrorMock).toHaveBeenCalledWith(keychainError, {
+      tags: { source: 'auth-session', auth_stage: 'token-read' },
+    });
+    expect(reportErrorMock).not.toHaveBeenCalled();
+    expect(clearStoredSessionIdMock).not.toHaveBeenCalled();
+    expect(clearStoredActiveBoardMock).not.toHaveBeenCalled();
+  });
+
+  it('preserves the authenticated foreground tree and caches during an unavailable refresh', async () => {
+    isTokenExpiringSoonMock.mockResolvedValue(false);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    queryClient.setQueryData(['userPlaylists'], [{ id: 'offline-playlist' }]);
+    const { result } = renderHook(() => useAuth(), { wrapper: createWrapper(queryClient) });
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
+
+    isTokenExpiringSoonMock.mockResolvedValue(true);
+    redirectMock.mockReset();
+    await act(async () => {
+      await result.current.refreshAuthState();
+    });
+
+    expect(result.current.isAuthenticated).toBe(true);
+    expect(redirectMock).not.toHaveBeenCalled();
+    expect(queryClient.getQueryData(['userPlaylists'])).toEqual([{ id: 'offline-playlist' }]);
+    expect(clearStoredSessionIdMock).not.toHaveBeenCalled();
+    expect(clearStoredActiveBoardMock).not.toHaveBeenCalled();
+    expect(resetHttpClientMock).not.toHaveBeenCalled();
+    expect(disposeWsClientMock).not.toHaveBeenCalled();
+  });
+
+  it('revalidates once on reconnect only while the native session is degraded', async () => {
+    onlineManager.setOnline(false);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { result } = renderHook(() => useAuth(), { wrapper: createWrapper(queryClient) });
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
+    expect(deduplicatedRefreshMock).toHaveBeenCalledOnce();
+
+    deduplicatedRefreshMock.mockResolvedValue({ status: 'refreshed', generation: 1 });
+    await act(async () => {
+      onlineManager.setOnline(true);
+      await vi.waitFor(() => expect(deduplicatedRefreshMock).toHaveBeenCalledTimes(2));
+    });
+
+    // A clean result removes the reconnect subscription. Later network changes
+    // must not create an auth refresh storm for an ordinary authenticated session.
+    await act(async () => {
+      onlineManager.setOnline(false);
+      onlineManager.setOnline(true);
+      await Promise.resolve();
+    });
+    expect(deduplicatedRefreshMock).toHaveBeenCalledTimes(2);
+    expect(result.current.isAuthenticated).toBe(true);
+  });
+
+  it('revalidates and upgrades a degraded native session when the app becomes active', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { result } = renderHook(() => useAuth(), { wrapper: createWrapper(queryClient) });
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
+    expect(deduplicatedRefreshMock).toHaveBeenCalledOnce();
+    expect(appStateState.listener).not.toBeNull();
+
+    deduplicatedRefreshMock.mockResolvedValue({ status: 'refreshed', generation: 1 });
+    await act(async () => {
+      appStateState.listener?.('active');
+      await vi.waitFor(() => expect(getAuthTokenMock).toHaveBeenCalledTimes(3));
+    });
+
+    expect(deduplicatedRefreshMock).toHaveBeenCalledTimes(2);
+    expect(result.current.isAuthenticated).toBe(true);
+    expect(clearStoredSessionIdMock).not.toHaveBeenCalled();
+    expect(clearStoredActiveBoardMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      onlineManager.setOnline(false);
+      onlineManager.setOnline(true);
+      await Promise.resolve();
+    });
+    expect(deduplicatedRefreshMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('coalesces connectivity flaps and unsubscribes after unmount', async () => {
+    onlineManager.setOnline(false);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { result, unmount } = renderHook(() => useAuth(), { wrapper: createWrapper(queryClient) });
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
+
+    let releaseReconnect!: (result: MockRefreshResult) => void;
+    deduplicatedRefreshMock.mockReturnValueOnce(
+      new Promise<MockRefreshResult>((resolve) => {
+        releaseReconnect = resolve;
+      }),
+    );
+    act(() => onlineManager.setOnline(true));
+    await vi.waitFor(() => expect(deduplicatedRefreshMock).toHaveBeenCalledTimes(2));
+
+    act(() => {
+      onlineManager.setOnline(false);
+      onlineManager.setOnline(true);
+    });
+    expect(deduplicatedRefreshMock).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      releaseReconnect({ status: 'unavailable', generation: 1, error: refreshUnavailableError });
+      await Promise.resolve();
+    });
+    unmount();
+    act(() => {
+      onlineManager.setOnline(false);
+      onlineManager.setOnline(true);
+    });
+    expect(deduplicatedRefreshMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries after consecutive reconnect failures and stops once the session is clean', async () => {
+    onlineManager.setOnline(false);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { result } = renderHook(() => useAuth(), { wrapper: createWrapper(queryClient) });
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
+    expect(deduplicatedRefreshMock).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      onlineManager.setOnline(true);
+      await vi.waitFor(() => expect(getAuthTokenMock).toHaveBeenCalledTimes(2));
+      await Promise.resolve();
+    });
+    expect(deduplicatedRefreshMock).toHaveBeenCalledTimes(2);
+    expect(result.current.isAuthenticated).toBe(true);
+
+    deduplicatedRefreshMock.mockResolvedValue({ status: 'refreshed', generation: 1 });
+    await act(async () => {
+      onlineManager.setOnline(false);
+      onlineManager.setOnline(true);
+      await vi.waitFor(() => expect(getAuthTokenMock).toHaveBeenCalledTimes(4));
+    });
+    expect(deduplicatedRefreshMock).toHaveBeenCalledTimes(3);
+    expect(result.current.isAuthenticated).toBe(true);
+
+    await act(async () => {
+      onlineManager.setOnline(false);
+      onlineManager.setOnline(true);
+      await Promise.resolve();
+    });
+    expect(deduplicatedRefreshMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('lets a rejected reconnect refresh run the normal signed-out cleanup', async () => {
+    onlineManager.setOnline(false);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    renderHook(() => useAuth(), { wrapper: createWrapper(queryClient) });
+    await waitFor(() => expect(deduplicatedRefreshMock).toHaveBeenCalledOnce());
+
+    deduplicatedRefreshMock.mockResolvedValue({ status: 'rejected', generation: 1 });
+    act(() => onlineManager.setOnline(true));
+
+    await waitFor(() => expect(clearStoredSessionIdMock).toHaveBeenCalledOnce());
+    expect(clearStoredActiveBoardMock).toHaveBeenCalledOnce();
+    expect(resetHttpClientMock).toHaveBeenCalledOnce();
+    expect(disposeWsClientMock).toHaveBeenCalledOnce();
+    expect(redirectMock).toHaveBeenCalledWith('/auth/login');
+  });
+
+  it('reports expiry-read degradation once through handled telemetry', async () => {
+    const expiryReadError = new Error('expiry keychain read failed');
+    isTokenExpiringSoonMock.mockRejectedValue(expiryReadError);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { result } = renderHook(() => useAuth(), { wrapper: createWrapper(queryClient) });
+
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
+    expect(reportHandledErrorMock).toHaveBeenCalledWith(expiryReadError, {
+      tags: { source: 'auth-session', auth_stage: 'expiry-read' },
+    });
+    expect(reportErrorMock).not.toHaveBeenCalled();
+  });
+
+  it('drops a resolved native session when its generation is stale at the provider boundary', async () => {
+    isTokenExpiringSoonMock.mockResolvedValue(false);
+    isAuthCredentialGenerationCurrentMock
+      .mockReturnValueOnce(true) // after the initial JWT read
+      .mockReturnValueOnce(true) // after the expiry read
+      .mockReturnValueOnce(true) // immediately before resolveAuthSession returns
+      .mockReturnValueOnce(false) // provider application boundary
+      .mockReturnValue(true);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>{null}</AuthProvider>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(redirectMock).toHaveBeenCalledWith('/auth/login'));
+    expect(clearStoredSessionIdMock).not.toHaveBeenCalled();
+    expect(clearStoredActiveBoardMock).not.toHaveBeenCalled();
+    expect(resetHttpClientMock).not.toHaveBeenCalled();
+    expect(disposeWsClientMock).not.toHaveBeenCalled();
+  });
+});
+
 describe('AuthProvider.checkAuth keychain read failure', () => {
   beforeEach(() => {
     getAuthTokenMock.mockReset();
@@ -1311,7 +1592,8 @@ describe('AuthProvider.checkAuth keychain read failure', () => {
   // failure and releases the native loading gate using the established
   // signed-out behavior.
   it('still resolves the loading gate (onReady fires) when the token read rejects', async () => {
-    getAuthTokenMock.mockRejectedValue(new Error('keychain locked'));
+    const keychainError = new Error('keychain locked');
+    getAuthTokenMock.mockRejectedValue(keychainError);
     const onReady = vi.fn();
 
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -1326,7 +1608,10 @@ describe('AuthProvider.checkAuth keychain read failure', () => {
     // The whole point: the splash gate must release even though the read threw.
     await waitFor(() => expect(onReady).toHaveBeenCalled());
     // The failure is surfaced rather than swallowed silently.
-    expect(reportErrorMock).toHaveBeenCalledTimes(1);
+    expect(reportHandledErrorMock).toHaveBeenCalledWith(keychainError, {
+      tags: { source: 'auth-session', auth_stage: 'token-read' },
+    });
+    expect(reportErrorMock).not.toHaveBeenCalled();
     expect(redirectMock).toHaveBeenCalledWith('/auth/login');
     expect(redirectMock).not.toHaveBeenCalledWith('/auth/session-unavailable');
   });
