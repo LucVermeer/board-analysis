@@ -32,21 +32,11 @@ const AXIS_LABEL_SIZE = 11;
 const STACK_BAR_RADIUS = 3;
 const MIN_ZOOM_SCALE = 1;
 const MAX_ZOOM_SCALE = 2.75;
-// gifted-charts does NOT lay its chart out inside the `width` prop we hand it.
-// BarAndLineChartsWrapper positions the plot ScrollView absolutely at
-// `marginLeft: yAxisLabelWidth + yAxisThickness` with `width: props.width`, and
-// renderHorizSections draws the rules/x-axis row as a `yAxisLabelWidth` spacer
-// followed by a `props.width + endSpacing` band. So the span the chart really
-// occupies is `yAxisLabelWidth + width + endSpacing` — all three have to come
-// out of the measured frame or the last bar and its label bleed past the
-// rounded card edge (#3778, #3050). We pin `endSpacing={0}` (it otherwise
-// defaults to `spacing`, and to 20 on the grouped chart, which passes spacing
-// per-datum), subtract the y-axis gutter below, and keep a small inset as slack.
+// gifted-charts offsets the gutter outside `width`, so keep both inside the measured frame with 8px slack.
 const CHART_WIDTH_INSET = 8;
-// Gutter reserved for the y-axis scale labels when `showYAxisScale` is set.
-// Passed straight to BarChart's `yAxisLabelWidth` so the number we budget for
-// and the number gifted-charts offsets the plot by can never drift apart.
+// Use this for both the width budget and BarChart prop so the visible gutter cannot drift.
 const Y_AXIS_LABEL_WIDTH = 32;
+const CHART_INITIAL_SPACING = 8;
 // Floor for grouped flash|redpoint bars so a dense V0-V17 axis keeps each bar
 // above the iOS 44pt / Android 48dp touch target instead of shrinking to 4px.
 const MIN_GROUPED_BAR = 6;
@@ -72,8 +62,7 @@ function downsampleLabel(index: number, total: number, label: string, max: numbe
 function fitBars(width: number, count: number, minBar = 3): { barWidth: number; spacing: number } {
   if (count <= 0 || width <= 0) return { barWidth: minBar, spacing: 2 };
   const spacing = count > 26 ? 2 : count > 12 ? 4 : 8;
-  const initial = 8;
-  const available = width - initial * 2 - spacing * (count - 1);
+  const available = width - CHART_INITIAL_SPACING - spacing * (count - 1);
   const barWidth = Math.max(minBar, Math.floor(available / count));
   return { barWidth, spacing };
 }
@@ -403,9 +392,12 @@ export const StackedBarChart = memo(function StackedBarChart({
           {(width, zoomScale, scrollEnabled) => {
             const axisGutter = showYAxisScale ? Y_AXIS_LABEL_WIDTH : 0;
             const chartWidth = width - CHART_WIDTH_INSET - axisGutter;
+            const initialSpacing = CHART_INITIAL_SPACING;
             const fitted = fitBars(chartWidth, stackData.length, minBarWidth);
             const barWidth = Math.max(minBarWidth, Math.round(fitted.barWidth * zoomScale));
             const spacing = Math.max(2, Math.round(fitted.spacing * zoomScale));
+            const contentWidth =
+              initialSpacing + stackData.length * barWidth + Math.max(0, stackData.length - 1) * spacing;
             // gifted sizes each x-axis label box to ~one bar by default, so a wide
             // week label ("W23 '24") on a 5px bar clips to "...". Give every KEPT
             // label the full downsample-step width so it renders in full; blanked
@@ -422,7 +414,7 @@ export const StackedBarChart = memo(function StackedBarChart({
                 height={height - 28}
                 barWidth={barWidth}
                 spacing={spacing}
-                initialSpacing={8}
+                initialSpacing={initialSpacing}
                 endSpacing={0}
                 hideRules={!showYAxisScale}
                 hideYAxisText={!showYAxisScale}
@@ -441,7 +433,7 @@ export const StackedBarChart = memo(function StackedBarChart({
                 lowlightOpacity={opacity.peek}
                 onBackgroundPress={interactive ? () => setSelectedIndex(null) : undefined}
                 isAnimated={false}
-                disableScroll={!scrollEnabled}
+                disableScroll={!(scrollEnabled || contentWidth > chartWidth)}
                 disablePress={!interactive}
               />
             );
@@ -534,6 +526,11 @@ export const GroupedBarChart = memo(function GroupedBarChart({
             const barWidth = Math.max(MIN_GROUPED_BAR, Math.round(baseBarWidth * zoomScale));
             const zoomedGroupGap = Math.max(groupGap, Math.round(groupGap * zoomScale));
             const zoomedInnerGap = Math.max(innerGap, Math.round(innerGap * zoomScale));
+            const contentWidth =
+              initial +
+              list.length * 2 * barWidth +
+              list.length * zoomedInnerGap +
+              Math.max(0, list.length - 1) * zoomedGroupGap;
             // A count may spill into the gap beside its bar; past that it turns
             // vertical rather than getting clipped (#3779).
             const labelLayout = computeBarTopLabelLayout(
@@ -582,10 +579,6 @@ export const GroupedBarChart = memo(function GroupedBarChart({
                 topLabelContainerStyle={{ width: labelLayout.width, left: labelLayout.left }}
                 hideRules
                 hideYAxisText
-                // `hideYAxisText` alone still reserves gifted-charts'
-                // `yAxisEmptyLabelWidth` (10px) to the left of the plot, which
-                // lands outside `width`. Pin it to 0 so `chartWidth` is the
-                // whole occupied span (#3778, #3050).
                 yAxisLabelWidth={0}
                 maxValue={yAxisMaxValue}
                 yAxisThickness={0}
@@ -598,7 +591,7 @@ export const GroupedBarChart = memo(function GroupedBarChart({
                 lowlightOpacity={CHART_LOWLIGHT_OPACITY}
                 onBackgroundPress={interactive ? () => setSelectedIndex(null) : undefined}
                 isAnimated={false}
-                disableScroll={!scrollEnabled}
+                disableScroll={!(scrollEnabled || contentWidth > chartWidth)}
                 disablePress={!interactive}
               />
             );
@@ -796,12 +789,6 @@ const styles = StyleSheet.create({
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
-    // Second layer behind the width budgeting above: if a future gifted-charts
-    // version reserves gutter we didn't account for, it gets clipped at the
-    // frame instead of bleeding past the rounded card edge (#3778, #3050). The
-    // reset-zoom button sits inside the frame and the tooltip overlay is a
-    // sibling on `chartShell`, so neither is affected.
-    overflow: 'hidden',
   },
   emptyState: {
     alignItems: 'center',
