@@ -10,8 +10,14 @@ manual changes). See docs/mobile-ota-updates.md.
 
 A new version shipped to the App Store and Play Store.
 
+### Improved
+
+- Dev-only instrumentation behind `__DEV__` — nothing reaches users, so there is ([#4082](https://github.com/boardsesh/boardsesh/pull/4082))
+  nothing for the "What's New" screen to show.
+
 ### Fixed
 
+- Private gyms and boards now stay private to anyone without access — someone who turns up with just a link can no longer see a private gym's name, address or contact details, or pull a private board's name out of a kiosk screen. ([#4086](https://github.com/boardsesh/boardsesh/pull/4086))
 - Board hold overlays recover cleanly after an interrupted render instead of staying blank or corrupted. ([#4081](https://github.com/boardsesh/boardsesh/pull/4081))
 
 ## 2026-07-31

@@ -1,6 +1,21 @@
 {
-  "generatedAt": "2026-08-01T00:07:50.340Z",
+  "generatedAt": "2026-08-01T00:24:07.794Z",
   "entries": [
+    {
+      "prNumber": 4082,
+      "category": "improved",
+      "title": "Dev-only instrumentation behind `__DEV__` — nothing reaches users, so there is",
+      "mergedAt": "2026-08-01T00:22:34Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4082",
+      "body": "nothing for the \"What's New\" screen to show."
+    },
+    {
+      "prNumber": 4086,
+      "category": "fixed",
+      "title": "Private gyms and boards now stay private to anyone without access — someone who turns up with just a link can no longer see a private gym's name, address or contact details, or pull a private board's name out of a kiosk screen.",
+      "mergedAt": "2026-08-01T00:22:30Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4086"
+    },
     {
       "prNumber": 4081,
       "category": "fixed",
