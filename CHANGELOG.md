@@ -17,6 +17,10 @@ A new version shipped to the App Store and Play Store.
 
 ### Fixed
 
+- Keep climbing from your downloaded boards when you open Boardsesh without a connection. ([#4083](https://github.com/boardsesh/boardsesh/pull/4083))
+- Your full Activity and Grade Distribution history stays reachable on narrow screens, even when every week or grade has data. ([#4090](https://github.com/boardsesh/boardsesh/pull/4090))
+  Fixes #3778
+  Fixes #3050
 - Private gyms and boards now stay private to anyone without access — someone who turns up with just a link can no longer see a private gym's name, address or contact details, or pull a private board's name out of a kiosk screen. ([#4086](https://github.com/boardsesh/boardsesh/pull/4086))
 - Board hold overlays recover cleanly after an interrupted render instead of staying blank or corrupted. ([#4081](https://github.com/boardsesh/boardsesh/pull/4081))
 

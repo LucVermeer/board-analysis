@@ -1,6 +1,21 @@
 {
-  "generatedAt": "2026-08-01T00:24:07.794Z",
+  "generatedAt": "2026-08-01T00:44:41.283Z",
   "entries": [
+    {
+      "prNumber": 4083,
+      "category": "fixed",
+      "title": "Keep climbing from your downloaded boards when you open Boardsesh without a connection.",
+      "mergedAt": "2026-08-01T00:44:12Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4083"
+    },
+    {
+      "prNumber": 4090,
+      "category": "fixed",
+      "title": "Your full Activity and Grade Distribution history stays reachable on narrow screens, even when every week or grade has data.",
+      "mergedAt": "2026-08-01T00:43:35Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4090",
+      "body": "Fixes #3778\nFixes #3050"
+    },
     {
       "prNumber": 4082,
       "category": "improved",
@@ -2656,6 +2671,17 @@
     }
   ],
   "nativeReleases": [
+    {
+      "kind": "native-release",
+      "date": "2026-08-01T10:06:49+10:00",
+      "sha": "e75013437f2a53fa5bb2e557d9fb08bb27d2c1a6",
+      "platforms": [
+        "android"
+      ],
+      "fingerprints": {
+        "android": "f2d60a8c61d201c5fdcb216fbc3296ba32c67cd0"
+      }
+    },
     {
       "kind": "native-release",
       "date": "2026-08-01T08:44:33+10:00",
