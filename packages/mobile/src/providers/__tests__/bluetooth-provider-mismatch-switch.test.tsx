@@ -6,11 +6,11 @@ import type { ClimbQueueItem } from '@boardsesh/queue';
 import type { BoardSerialConfig } from '@boardsesh/graphql/operations';
 import type { BoardPresenceClimb, UserBoard } from '@boardsesh/shared-schema';
 import type { ResolvedBoardEntry } from '../../lib/ble/resolve-serials';
-import type { PickerState } from '../../lib/ble/use-board-bluetooth';
+import type { BleConnectionHandle, PickerState } from '../../lib/ble/use-board-bluetooth';
 import type { BleDisconnectInfo } from '../../lib/ble/types';
 
 type BluetoothHookOptions = {
-  onConnectSuccess?: (serial: string | null) => void;
+  onConnectSuccess?: (serial: string | null, connection: BleConnectionHandle) => void;
   holdsData?: unknown;
 };
 
