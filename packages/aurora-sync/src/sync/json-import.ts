@@ -13,7 +13,12 @@ import { randomUUID, createHash } from 'crypto';
 import { fontGradeToDifficultyId } from '@boardsesh/board-config';
 import { LAYOUTS, HOLE_PLACEMENTS } from '@boardsesh/board-constants/product-sizes';
 import type { AuroraBoardName } from '@boardsesh/shared-schema';
-import { isNoMatchClimb, CLIMB_CHARACTERISTICS, convertQuality } from '@boardsesh/shared-schema';
+import {
+  isNoMatchClimb,
+  CLIMB_CHARACTERISTICS,
+  convertQuality,
+  normalizePlaylistColor,
+} from '@boardsesh/shared-schema';
 import {
   populateDenormalizedColumns,
   recomputeClimbStatsBulk,
@@ -1627,7 +1632,7 @@ export async function importJsonExportData(
     // (#3526) — cheap, and the only thing standing between a future
     // key-derivation change and a silent re-run of the 2026-03 incident.
     const circuitAuroraId = generateJsonImportCircuitAuroraId(userId, boardType, circuit.name, circuit.created_at);
-    const formattedColor = circuit.color ? `#${circuit.color}` : null;
+    const formattedColor = normalizePlaylistColor(circuit.color);
     const circuitNow = new Date();
 
     try {

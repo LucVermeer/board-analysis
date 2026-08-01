@@ -96,11 +96,37 @@ export function convertQualityToAurora(quality: number | null | undefined): numb
 }
 
 /**
- * Whether a playlist colour is a renderable six-digit CSS hex value.
+ * Whether a playlist colour already uses the canonical six-digit CSS hex form.
  *
  * This intentionally rejects the empty string: mutation inputs use `''` as a
- * separate clear signal, while renderers must only consume concrete colours.
+ * separate clear signal. Renderers that need to support persisted legacy
+ * shorthand should use {@link normalizePlaylistColor} instead.
  */
 export function isValidPlaylistColor(color: string): boolean {
   return /^#[0-9A-Fa-f]{6}$/.test(color);
+}
+
+/**
+ * Convert a playlist colour from a persisted legacy or upstream representation
+ * into the canonical `#RRGGBB` form used by renderers and new writes.
+ *
+ * The leading `#` is optional because Aurora's circuit payloads omit it while
+ * Kilter payloads may include it. Three-digit shorthand is expanded one
+ * channel at a time. Anything other than three or six hexadecimal digits is
+ * rejected so callers can safely fall back instead of passing arbitrary text
+ * to a renderer or persisting it.
+ */
+export function normalizePlaylistColor(color: string | null | undefined): string | null {
+  if (color == null) return null;
+
+  const match = /^#?([0-9A-Fa-f]{3}(?:[0-9A-Fa-f]{3})?)$/.exec(color);
+  if (!match) return null;
+
+  const hexDigits = match[1].toUpperCase();
+  const expandedHexDigits =
+    hexDigits.length === 3
+      ? `${hexDigits[0]}${hexDigits[0]}${hexDigits[1]}${hexDigits[1]}${hexDigits[2]}${hexDigits[2]}`
+      : hexDigits;
+
+  return `#${expandedHexDigits}`;
 }

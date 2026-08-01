@@ -356,7 +356,7 @@ export const mutationsTypeDefs = /* GraphQL */ `
     removeClimbFromPlaylist(input: RemoveClimbFromPlaylistInput!): Boolean!
 
     """
-    Reorder a climb within a playlist by moving it to a new index (owner/editor).
+    Reorder a climb within a playlist by moving it to a new index (owner only).
     """
     reorderPlaylistClimb(input: ReorderPlaylistClimbInput!): Boolean!
 

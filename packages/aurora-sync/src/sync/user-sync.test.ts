@@ -80,12 +80,12 @@ type ShimDb = Parameters<typeof upsertTableData>[0];
  */
 type CircuitFixture = Parameters<typeof upsertTableData>[5][number];
 
-const circuit = (uuid: string, name: string, climbs?: Array<{ climb_uuid: string }>): CircuitFixture =>
+const circuit = (uuid: string, name: string, climbs?: Array<{ climb_uuid: string }>, color = ''): CircuitFixture =>
   ({
     uuid,
     name,
     description: '',
-    color: '',
+    color,
     is_public: '',
     created_at: '2026-01-01T00:00:00Z',
     updated_at: '2026-01-01T00:00:00Z',
@@ -182,6 +182,29 @@ describe('upsertTableData circuits — foreign-owner guard (#3526)', () => {
     expect(insertsInto(playlistOwnership)).toHaveLength(1);
     expect(result.skipped).toBe(0);
     expect(result.skippedReason).toBeUndefined();
+  });
+
+  it.each([
+    ['aB3', '#AABB33'],
+    ['#aB3', '#AABB33'],
+    ['not-a-colour', null],
+  ])('canonicalizes Aurora circuit colour %s before writing a playlist', async (upstreamColor, expectedColor) => {
+    const { db, insertsInto } = createDbShim({
+      selectResults: [[]],
+      returningRows: [[{ id: BigInt(7) }]],
+    });
+
+    await upsertTableData(
+      db as unknown as ShimDb,
+      'tension',
+      'circuits',
+      144574,
+      'user-1',
+      [circuit('circuit-1', 'Mine', undefined, upstreamColor)],
+      () => {},
+    );
+
+    expect(insertsInto(playlists)[0]?.args[0]).toMatchObject({ color: expectedColor });
   });
 
   it('claims a brand-new circuit and an orphaned playlist with no owner edge', async () => {

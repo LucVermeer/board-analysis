@@ -1,4 +1,4 @@
-import { isValidPlaylistColor } from '@boardsesh/shared-schema';
+import { isValidPlaylistColor, normalizePlaylistColor } from '@boardsesh/shared-schema';
 
 // Cycling swatch palette for playlists. Used as the preview tint when a playlist
 // has no valid `color`, and as the swatch options in the create/edit form. Leads
@@ -20,4 +20,4 @@ export const PLAYLIST_COLORS = [
   '#1F2937', // near-black
 ] as const;
 
-export { isValidPlaylistColor };
+export { isValidPlaylistColor, normalizePlaylistColor };

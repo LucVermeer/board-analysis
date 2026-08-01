@@ -1,3 +1,5 @@
+import { normalizePlaylistColor } from '@boardsesh/shared-schema';
+
 export const NAME_MAX = 100;
 export const DESCRIPTION_MAX = 500;
 
@@ -37,20 +39,21 @@ export function buildPlaylistFormValues(mode: 'create' | 'edit', fields: Playlis
 
   const trimmedDescription = fields.description.trim();
   if (trimmedDescription.length > DESCRIPTION_MAX) return { ok: false, error: 'description-too-long' };
+  const normalizedColor = normalizePlaylistColor(fields.color);
 
   const values: PlaylistFormValues =
     mode === 'edit'
       ? {
           name: trimmedName,
           description: trimmedDescription,
-          color: fields.color ?? '',
+          color: normalizedColor ?? '',
           icon: fields.icon ?? '',
           isPublic: fields.isPublic,
         }
       : {
           name: trimmedName,
           description: trimmedDescription || undefined,
-          color: fields.color,
+          color: normalizedColor ?? undefined,
           icon: fields.icon,
         };
   return { ok: true, values };

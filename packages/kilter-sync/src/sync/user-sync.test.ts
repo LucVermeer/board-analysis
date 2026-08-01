@@ -1359,7 +1359,12 @@ describe('applyClimbRatings — bulk upsert with COALESCE comment', () => {
   });
 });
 
-function makeCircuitPutOp(args: { circuit_uuid: string; name: string; user_uuid?: string }): PowerSyncOp {
+function makeCircuitPutOp(args: {
+  circuit_uuid: string;
+  name: string;
+  user_uuid?: string;
+  color?: string | null;
+}): PowerSyncOp {
   return {
     op_id: '1',
     op: 'PUT',
@@ -1370,7 +1375,7 @@ function makeCircuitPutOp(args: { circuit_uuid: string; name: string; user_uuid?
       circuit_uuid: args.circuit_uuid,
       name: args.name,
       description: null,
-      color: null,
+      color: args.color ?? null,
       is_public: 0,
       user_uuid: args.user_uuid ?? 'user-sub',
       product_layout_uuid: null,
@@ -1462,6 +1467,30 @@ describe('applyCircuits — playlist upsert + diff-and-replace', () => {
     expect(climbsInsert).toHaveLength(2);
     // playlistClimbs schema is part of the assertion surface.
     expect(playlistClimbs).toBeDefined();
+  });
+
+  it.each([
+    ['#aB3', '#AABB33'],
+    ['aB3', '#AABB33'],
+    ['not-a-colour', null],
+  ])('canonicalizes Kilter circuit colour %s before writing a playlist', async (upstreamColor, expectedColor) => {
+    const { tx, insertValues } = createRichTx({
+      selectResults: [[], []],
+      returningRows: [[{ id: BigInt(99) }]],
+    });
+
+    await applyCircuits(
+      tx as unknown as ApplyCircuitsTx,
+      'user-1',
+      [makeCircuitPutOp({ circuit_uuid: 'circuit-1', name: 'Liked Climbs', color: upstreamColor })],
+      [],
+      new Map(),
+    );
+
+    const playlistInsert = insertValues
+      .flatMap((rows) => (Array.isArray(rows) ? rows : [rows]))
+      .find((row) => 'kilterType' in row);
+    expect(playlistInsert).toMatchObject({ color: expectedColor });
   });
 
   it('skips the climbs re-insert entirely when incoming and existing match exactly', async () => {

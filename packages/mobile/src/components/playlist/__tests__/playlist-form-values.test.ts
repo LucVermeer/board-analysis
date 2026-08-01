@@ -56,6 +56,34 @@ describe('buildPlaylistFormValues', () => {
     expect(result).toEqual({ ok: true, values: { name: 'P', description: 'd', color: '#AABBCC', icon: '🔥' } });
   });
 
+  it('canonicalizes a legacy colour before a new write', () => {
+    const result = buildPlaylistFormValues('create', {
+      name: 'P',
+      description: '',
+      color: '#aB3',
+      icon: undefined,
+      isPublic: false,
+    });
+    expect(result).toEqual({
+      ok: true,
+      values: { name: 'P', description: undefined, color: '#AABB33', icon: undefined },
+    });
+  });
+
+  it('omits an invalid colour from a create write', () => {
+    const result = buildPlaylistFormValues('create', {
+      name: 'P',
+      description: '',
+      color: 'not-a-colour',
+      icon: undefined,
+      isPublic: false,
+    });
+    expect(result).toEqual({
+      ok: true,
+      values: { name: 'P', description: undefined, color: undefined, icon: undefined },
+    });
+  });
+
   it("edit sends '' for cleared description/colour/icon (the clear signal)", () => {
     const result = buildPlaylistFormValues('edit', {
       name: 'P',

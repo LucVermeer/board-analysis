@@ -39,7 +39,7 @@ import { usePlaylistDrag } from './use-playlist-drag';
 import { PlaylistBoardBackdrop } from './PlaylistBoardBackdrop';
 import { buildHeroGradient } from './playlist-gradient';
 import { resolvePlaylistEmojiIcon } from './playlist-icon';
-import { PLAYLIST_COLORS, isValidPlaylistColor } from './playlist-colors';
+import { PLAYLIST_COLORS, normalizePlaylistColor } from './playlist-colors';
 import { withAlpha } from '../../theme/colors';
 import { toQueueClimb, toSchemaClimb } from '../../lib/climb-types';
 import { useDrawerHost } from '../../providers/drawer-host-provider';
@@ -363,7 +363,7 @@ export function PlaylistDetailView({
       </Pressable>
     ) : null;
 
-  const baseColor = hero.color && isValidPlaylistColor(hero.color) ? hero.color : PLAYLIST_COLORS[0];
+  const baseColor = normalizePlaylistColor(hero.color) ?? PLAYLIST_COLORS[0];
 
   // Shared list state visuals. The first-page load renders skeleton rows (a far
   // better "shape of what's coming" cue than a bare spinner). Empty + footer are

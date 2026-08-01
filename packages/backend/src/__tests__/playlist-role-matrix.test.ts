@@ -206,7 +206,8 @@ describe('playlist ownership role matrix — real Postgres (#4016)', () => {
   it.each([
     ['editor', EDITOR_ID],
     ['viewer', VIEWER_ID],
-  ])('denies all playlist-content and library-order writes to the %s role', async (_role, userId) => {
+    ['unrelated', UNRELATED_ID],
+  ])('denies all playlist-content and library-order writes to the %s caller', async (_callerKind, userId) => {
     const context = makeCtx(userId);
     const deniedWrites = [
       {
