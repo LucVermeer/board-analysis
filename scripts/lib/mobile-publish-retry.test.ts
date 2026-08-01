@@ -136,4 +136,19 @@ describe('platform aggregation', () => {
       { platform: 'android', success: true, attempts: 1, failureKind: null },
     ]);
   });
+
+  it('records a thrown callback as failed and still runs the next platform', async () => {
+    const calls: string[] = [];
+    const outcomes = await publishPlatformsSequentially(['ios', 'android'], async (platform) => {
+      calls.push(platform);
+      if (platform === 'ios') throw new Error('fixture callback failure');
+      return { platform, success: true, attempts: 1, failureKind: null };
+    });
+
+    expect(calls).toEqual(['ios', 'android']);
+    expect(outcomes).toEqual([
+      { platform: 'ios', success: false, attempts: 0, failureKind: 'unknown' },
+      { platform: 'android', success: true, attempts: 1, failureKind: null },
+    ]);
+  });
 });

@@ -77,6 +77,11 @@ describe('production OTA workflow reliability', () => {
       expect(preview).toContain(`- '${implementationPath}'`);
     }
   });
+
+  it('gives the preview publish job enough time for bounded platform retries', () => {
+    const timeout = Number(jobBlock(preview, 'publish').match(/timeout-minutes: (\d+)/)?.[1]);
+    expect(timeout).toBeGreaterThanOrEqual(45);
+  });
 });
 
 describe('backport OTA workflow upload pressure', () => {

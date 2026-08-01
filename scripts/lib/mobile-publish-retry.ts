@@ -247,7 +247,12 @@ export async function publishSelfHostedPlatformWithRetry(
 
   // The loop always returns. Keep a defensive result so a future attempt-count
   // refactor cannot turn an empty loop into accidental success.
-  return { platform: invocation.platform, success: false, attempts: 0, failureKind: 'unknown' };
+  return {
+    platform: invocation.platform,
+    success: false,
+    attempts: SELF_HOSTED_PUBLISH_MAX_ATTEMPTS,
+    failureKind: 'unknown',
+  };
 }
 
 /** Run every requested platform in order, even after an earlier failure. */

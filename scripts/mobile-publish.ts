@@ -320,7 +320,14 @@ export async function main(args: string[] = process.argv.slice(2)): Promise<numb
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  void main().then((exitCode) => {
-    process.exitCode = exitCode;
-  });
+  void main()
+    .then((exitCode) => {
+      process.exitCode = exitCode;
+    })
+    .catch(() => {
+      // Keep this generic: an unexpected error can contain child argv, env, or
+      // server output that must not be echoed as a captured diagnostic.
+      console.error('[mobile:publish] Unexpected publish failure.');
+      process.exitCode = 1;
+    });
 }
