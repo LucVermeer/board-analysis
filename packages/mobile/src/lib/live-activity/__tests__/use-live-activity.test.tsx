@@ -121,6 +121,26 @@ describe('useLiveActivity start-failure contract', () => {
     );
   });
 
+  it('refreshes an Android thumbnail when its generation changes at the same path', async () => {
+    plugin.startLiveActivitySession.mockResolvedValue(undefined);
+    const props = activeProps({
+      androidThumbnailOverlayPath: 'file:///cache/overlay.png',
+      androidThumbnailOverlayLoadKey: '1:0',
+    });
+    const { rerender } = render(<Harness {...props} />);
+    await waitFor(() => expect(plugin.updateLiveActivity).toHaveBeenCalled());
+    plugin.updateLiveActivity.mockClear();
+    plugin.updateLiveActivityClimb.mockClear();
+
+    rerender(<Harness {...props} androidThumbnailOverlayLoadKey="2:1" />);
+
+    await waitFor(() => expect(plugin.updateLiveActivity).toHaveBeenCalledTimes(1));
+    expect(plugin.updateLiveActivity).toHaveBeenCalledWith(
+      expect.objectContaining({ androidThumbnailOverlayPath: 'file:///cache/overlay.png' }),
+    );
+    expect(plugin.updateLiveActivityClimb).not.toHaveBeenCalled();
+  });
+
   it('does not leak updates when the session fails to start', async () => {
     // e.g. Android threw MissingBluetoothPermissionException — the native session
     // never activated, so the hook must not behave as if it did.

@@ -1,11 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { Platform, View, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
+import type { ImageErrorEventData } from 'expo-image';
 import { useIsAppBackgrounded } from '../lib/app-visibility';
 import { useBoardArtVisible } from './board-art-visibility-context';
 
 type LayeredClimbImageProps = {
   overlayUri: string | null;
+  /**
+   * Generation + per-consumer attempt identity. React's key must change when a
+   * missing overlay is regenerated at the same URI: Android expo-image does not
+   * reliably reload that case from recyclingKey alone.
+   */
+  overlayLoadKey?: string | null;
+  onOverlayLoad?: () => void;
+  onOverlayError?: (event: ImageErrorEventData) => void;
   backgroundPaths: string[];
   /**
    * Number of background layers the cache couldn't resolve. Each missing
@@ -59,6 +68,9 @@ export function backgroundImageUri(path: string): string {
  */
 const LayeredClimbImage = React.memo(function LayeredClimbImage({
   overlayUri,
+  overlayLoadKey,
+  onOverlayLoad,
+  onOverlayError,
   backgroundPaths,
   missingBackgroundCount = 0,
   mirrored,
@@ -93,6 +105,9 @@ const LayeredClimbImage = React.memo(function LayeredClimbImage({
   useEffect(() => {
     if (hidden) setOverlayPainted(false);
   }, [hidden]);
+  useEffect(() => {
+    setOverlayPainted(false);
+  }, [overlayUri, overlayLoadKey]);
   if (hidden) {
     return <View style={[styles.stack, mirrored && styles.mirrored]} />;
   }
@@ -134,6 +149,7 @@ const LayeredClimbImage = React.memo(function LayeredClimbImage({
       {dimBackground && <View style={[styles.layer, styles.dim]} pointerEvents="none" />}
       {overlayUri && (
         <Image
+          key={overlayLoadKey ?? overlayUri}
           source={{ uri: overlayUri }}
           style={styles.layer}
           contentFit="contain"
@@ -144,7 +160,11 @@ const LayeredClimbImage = React.memo(function LayeredClimbImage({
           // list/accessory, native for play) so no main-thread downscale
           // is needed — skip expo-image's resample.
           allowDownscaling={false}
-          onLoad={overlayTestID ? () => setOverlayPainted(true) : undefined}
+          onLoad={() => {
+            if (overlayTestID) setOverlayPainted(true);
+            onOverlayLoad?.();
+          }}
+          onError={onOverlayError}
         />
       )}
       {/* Screenshot/e2e anchor — see overlayPainted above. Transparent, full-bleed

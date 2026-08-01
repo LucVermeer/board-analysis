@@ -47,6 +47,8 @@ type UseLiveActivityOptions = {
   androidNotification?: AndroidNotificationStrings;
   /** Android-only on-device thumbnail (BoardRenderer overlay + bundled backgrounds). */
   androidThumbnailOverlayPath?: string | null;
+  /** Reload identity for same-path regenerated overlays. Never forwarded to native. */
+  androidThumbnailOverlayLoadKey?: string | null;
   androidThumbnailBackgroundPaths?: string[];
 };
 
@@ -143,6 +145,7 @@ export function useLiveActivity({
   holderDisplayName,
   androidNotification,
   androidThumbnailOverlayPath,
+  androidThumbnailOverlayLoadKey,
   androidThumbnailBackgroundPaths,
 }: UseLiveActivityOptions): void {
   const isActiveRef = useRef(false);
@@ -413,6 +416,7 @@ export function useLiveActivity({
       androidThumbnailBackgroundPaths,
     });
   }, [
+    androidThumbnailOverlayLoadKey,
     androidThumbnailOverlayPath,
     // Depend on backgroundsKey, not the array itself: it changes only when the
     // resolved backgrounds change, so it re-fires the push when late-resolving
@@ -454,6 +458,7 @@ export function useLiveActivity({
       androidThumbnailBackgroundPaths,
     });
   }, [
+    androidThumbnailOverlayLoadKey,
     androidThumbnailOverlayPath,
     // See Effect 1: backgroundsKey re-fires the push on a late background resolution.
     backgroundsKey,

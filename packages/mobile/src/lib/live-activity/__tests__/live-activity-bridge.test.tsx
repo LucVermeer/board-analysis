@@ -57,7 +57,9 @@ const boardState = vi.hoisted(() => ({
 
 const climbRender = vi.hoisted(() => ({
   overlayUri: null as string | null,
+  overlayLoadKey: null as string | null,
   backgroundPaths: [] as string[],
+  useNativeClimbRender: vi.fn(),
 }));
 
 const analytics = vi.hoisted(() => ({ track: vi.fn() }));
@@ -89,11 +91,17 @@ vi.mock('../../../components/ble/use-board-connection-state', () => ({
 }));
 
 vi.mock('../../../hooks/use-native-climb-render', () => ({
-  useNativeClimbRender: () => ({
-    overlayUri: climbRender.overlayUri,
-    backgroundPaths: climbRender.backgroundPaths,
-    missingBackgroundCount: 0,
-  }),
+  useNativeClimbRender: (params: unknown) => {
+    climbRender.useNativeClimbRender(params);
+    return {
+      overlayUri: climbRender.overlayUri,
+      overlayLoadKey: climbRender.overlayLoadKey,
+      onOverlayLoad: vi.fn(),
+      onOverlayError: vi.fn(),
+      backgroundPaths: climbRender.backgroundPaths,
+      missingBackgroundCount: 0,
+    };
+  },
 }));
 
 vi.mock('../use-live-activity', () => ({
@@ -263,20 +271,25 @@ describe('LiveActivityBridge lightbulb (boardControl)', () => {
     bt.reconnectDeviceIdForCurrentBoard = null;
     analytics.track.mockClear();
     climbRender.overlayUri = null;
+    climbRender.overlayLoadKey = null;
     climbRender.backgroundPaths = [];
+    climbRender.useNativeClimbRender.mockClear();
   });
 
   it('threads the on-device thumbnail (overlay + background paths) to the notification', () => {
     climbRender.overlayUri = 'file:///cache/overlay.png';
+    climbRender.overlayLoadKey = '7:0';
     climbRender.backgroundPaths = ['/assets/kilter-bg.png'];
     renderBridge();
 
     expect(widget.useLiveActivity).toHaveBeenCalledWith(
       expect.objectContaining({
         androidThumbnailOverlayPath: 'file:///cache/overlay.png',
+        androidThumbnailOverlayLoadKey: '7:0',
         androidThumbnailBackgroundPaths: ['/assets/kilter-bg.png'],
       }),
     );
+    expect(climbRender.useNativeClimbRender).toHaveBeenCalledWith(expect.objectContaining({ verifyOverlayFile: true }));
   });
 
   it('forwards the localized lightbulb labels + on-wall template to the notification', () => {

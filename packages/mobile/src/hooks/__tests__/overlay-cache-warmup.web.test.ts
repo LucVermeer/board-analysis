@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { listOverlayCacheEntries } from '../overlay-cache-warmup.web';
+import { listOverlayCacheEntries, overlayCacheEntryExists } from '../overlay-cache-warmup.web';
 import {
   hydrateOverlayCache,
   writeOverlayToCache,
@@ -56,6 +56,10 @@ afterEach(() => {
 });
 
 describe('listOverlayCacheEntries (web warmup)', () => {
+  it('marks synchronous URI validation as unsupported instead of guessing', () => {
+    expect(overlayCacheEntryExists('blob:warm/1')).toBeNull();
+  });
+
   it('returns null before anything has hydrated', () => {
     installCaches();
     expect(listOverlayCacheEntries('board-thumbnails')).toBeNull();

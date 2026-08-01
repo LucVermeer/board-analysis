@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
-import { render } from '@testing-library/react';
+import { fireEvent, render } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 
 type ViewMockProps = { children?: ReactNode; testID?: string };
@@ -22,17 +22,23 @@ vi.mock('expo-image', () => ({
     testID,
     transition,
     recyclingKey,
+    onLoad,
+    onError,
   }: {
     source: { uri: string };
     testID?: string;
     transition?: number;
     recyclingKey?: string;
+    onLoad?: () => void;
+    onError?: (event: { error: string }) => void;
   }) =>
     createElement('img', {
       src: source.uri,
       'data-testid': testID ?? 'expo-image',
       'data-transition': transition,
       'data-recycling-key': recyclingKey,
+      onLoad,
+      onError: () => onError?.({ error: 'mock image failure' }),
     }),
 }));
 
@@ -119,5 +125,48 @@ describe('LayeredClimbImage', () => {
 
     const overlay = container.querySelector('img[src="file:///overlay.png"]');
     expect(overlay?.getAttribute('data-recycling-key')).toBe('climb-frames-abc');
+  });
+
+  it('forces a React remount when a regenerated overlay keeps the same URI', () => {
+    const { container, rerender } = render(
+      createElement(LayeredClimbImage, {
+        overlayUri: 'file:///overlay.png',
+        overlayLoadKey: '1:0',
+        backgroundPaths: [],
+      }),
+    );
+    const failedImage = container.querySelector('img[src="file:///overlay.png"]');
+
+    rerender(
+      createElement(LayeredClimbImage, {
+        overlayUri: 'file:///overlay.png',
+        overlayLoadKey: '2:1',
+        backgroundPaths: [],
+      }),
+    );
+
+    expect(container.querySelector('img[src="file:///overlay.png"]')).not.toBe(failedImage);
+  });
+
+  it('forwards exact load and error notifications to the cache recovery owner', () => {
+    const onOverlayLoad = vi.fn();
+    const onOverlayError = vi.fn();
+    const { container } = render(
+      createElement(LayeredClimbImage, {
+        overlayUri: 'file:///overlay.png',
+        overlayLoadKey: '1:0',
+        backgroundPaths: [],
+        onOverlayLoad,
+        onOverlayError,
+      }),
+    );
+    const overlay = container.querySelector('img[src="file:///overlay.png"]');
+    if (!overlay) throw new Error('Expected overlay image');
+
+    fireEvent.load(overlay);
+    fireEvent.error(overlay);
+
+    expect(onOverlayLoad).toHaveBeenCalledTimes(1);
+    expect(onOverlayError).toHaveBeenCalledWith({ error: 'mock image failure' });
   });
 });
