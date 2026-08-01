@@ -6,8 +6,10 @@ describe('playlist validation', () => {
     expect(PlaylistColorSchema.safeParse('#A1b2C3').success).toBe(true);
     expect(PlaylistColorSchema.safeParse('').success).toBe(true);
     expect(PlaylistColorSchema.safeParse(undefined).success).toBe(true);
+    expect(PlaylistColorSchema.safeParse(null).success).toBe(false);
     expect(PlaylistColorSchema.safeParse('#abc').success).toBe(false);
     expect(PlaylistColorSchema.safeParse('A1b2C3').success).toBe(false);
+    expect(PlaylistColorSchema.safeParse('#A1b2C3D4').success).toBe(false);
   });
 
   it('accepts smart-playlist angles through 90 degrees and rejects 91', () => {

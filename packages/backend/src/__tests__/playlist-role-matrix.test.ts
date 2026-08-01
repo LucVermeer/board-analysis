@@ -26,6 +26,18 @@ async function ownedLibrary(userId: string) {
   return playlistQueries.allUserPlaylists(null, { input: {} }, makeCtx(userId));
 }
 
+async function expectExactAuthorizationError(operation: () => Promise<unknown>, expectedMessage: string) {
+  try {
+    await operation();
+  } catch (error) {
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe(expectedMessage);
+    return;
+  }
+
+  throw new Error(`Expected authorization error: ${expectedMessage}`);
+}
+
 describe('playlist ownership role matrix — real Postgres (#4016)', () => {
   beforeAll(async () => {
     await db.execute(sql`
@@ -39,7 +51,9 @@ describe('playlist ownership role matrix — real Postgres (#4016)', () => {
 
     await db.execute(sql`
       INSERT INTO board_climbs (uuid, board_type, layout_id, setter_username, name, description, frames, is_listed)
-      VALUES (${SEEDED_CLIMB_UUID}, 'kilter', 1, 'setter', 'Role matrix climb', '', 'p1r1', true)
+      VALUES
+        (${SEEDED_CLIMB_UUID}, 'kilter', 1, 'setter', 'Role matrix climb', '', 'p1r1', true),
+        (${ADDED_CLIMB_UUID}, 'kilter', 1, 'setter', 'Role matrix added climb', '', 'p1r2', true)
       ON CONFLICT (uuid) DO NOTHING
     `);
 
@@ -74,7 +88,7 @@ describe('playlist ownership role matrix — real Postgres (#4016)', () => {
 
   afterAll(async () => {
     await db.execute(sql`DELETE FROM playlists WHERE uuid = ${PLAYLIST_UUID}`);
-    await db.execute(sql`DELETE FROM board_climbs WHERE uuid = ${SEEDED_CLIMB_UUID}`);
+    await db.execute(sql`DELETE FROM board_climbs WHERE uuid IN (${SEEDED_CLIMB_UUID}, ${ADDED_CLIMB_UUID})`);
     await db.execute(sql`DELETE FROM users WHERE id IN (${OWNER_ID}, ${EDITOR_ID}, ${VIEWER_ID})`);
   });
 
@@ -160,29 +174,41 @@ describe('playlist ownership role matrix — real Postgres (#4016)', () => {
   ])('denies all playlist-content and library-order writes to the %s role', async (_role, userId) => {
     const context = makeCtx(userId);
     const deniedWrites = [
-      () =>
-        playlistMutations.addClimbToPlaylist(
-          null,
-          { input: { playlistId: PLAYLIST_UUID, climbUuid: ADDED_CLIMB_UUID, angle: 90 } },
-          context,
-        ),
-      () =>
-        playlistMutations.removeClimbFromPlaylist(
-          null,
-          { input: { playlistId: PLAYLIST_UUID, climbUuid: SEEDED_CLIMB_UUID } },
-          context,
-        ),
-      () =>
-        playlistMutations.reorderPlaylistClimb(
-          null,
-          { input: { playlistId: PLAYLIST_UUID, climbUuid: SEEDED_CLIMB_UUID, newIndex: 0 } },
-          context,
-        ),
-      () => playlistMutations.updatePlaylistLastAccessed(null, { playlistId: PLAYLIST_UUID }, context),
+      {
+        operation: () =>
+          playlistMutations.addClimbToPlaylist(
+            null,
+            { input: { playlistId: PLAYLIST_UUID, climbUuid: ADDED_CLIMB_UUID, angle: 90 } },
+            context,
+          ),
+        expectedMessage: 'Playlist not found or you do not have permission to edit it',
+      },
+      {
+        operation: () =>
+          playlistMutations.removeClimbFromPlaylist(
+            null,
+            { input: { playlistId: PLAYLIST_UUID, climbUuid: SEEDED_CLIMB_UUID } },
+            context,
+          ),
+        expectedMessage: 'Playlist not found or you do not have permission to edit it',
+      },
+      {
+        operation: () =>
+          playlistMutations.reorderPlaylistClimb(
+            null,
+            { input: { playlistId: PLAYLIST_UUID, climbUuid: SEEDED_CLIMB_UUID, newIndex: 0 } },
+            context,
+          ),
+        expectedMessage: 'Playlist not found or you do not have permission to edit it',
+      },
+      {
+        operation: () => playlistMutations.updatePlaylistLastAccessed(null, { playlistId: PLAYLIST_UUID }, context),
+        expectedMessage: 'Playlist not found or access denied',
+      },
     ];
 
-    for (const deniedWrite of deniedWrites) {
-      await expect(deniedWrite()).rejects.toThrow(/permission|access denied/);
+    for (const { operation, expectedMessage } of deniedWrites) {
+      await expectExactAuthorizationError(operation, expectedMessage);
     }
   });
 
