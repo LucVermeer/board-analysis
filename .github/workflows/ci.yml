@@ -32,6 +32,7 @@ jobs:
       backend: ${{ github.event_name != 'pull_request' && 'true' || steps.filter.outputs.backend }}
       mobile: ${{ github.event_name != 'pull_request' && 'true' || steps.filter.outputs.mobile }}
       ocr: ${{ github.event_name != 'pull_request' && 'true' || steps.filter.outputs.ocr }}
+      locationSync: ${{ github.event_name != 'pull_request' && 'true' || steps.filter.outputs.locationSync }}
       sharedDeps: ${{ github.event_name != 'pull_request' && 'true' || steps.filter.outputs.sharedDeps }}
       sharedSchema: ${{ github.event_name != 'pull_request' && 'true' || steps.filter.outputs.sharedSchema }}
       i18nCatalogs: ${{ github.event_name != 'pull_request' && 'true' || steps.filter.outputs.i18nCatalogs }}
@@ -53,7 +54,7 @@ jobs:
       # non-JS files (SQL migrations under packages/db, .graphql under
       # shared-schema) that wouldn't trigger anyJs but still need setup so
       # test-backend / mobile-bundle / codegen-drift can run.
-      runAny: ${{ github.event_name != 'pull_request' || steps.filter.outputs.anyJs == 'true' || steps.filter.outputs.web == 'true' || steps.filter.outputs.i18nCatalogs == 'true' || steps.filter.outputs.sharedSchema == 'true' || steps.filter.outputs.sharedDeps == 'true' || steps.filter.outputs.backend == 'true' || steps.filter.outputs.mobile == 'true' || steps.filter.outputs.ocr == 'true' || steps.filter.outputs.rootCi == 'true' }}
+      runAny: ${{ github.event_name != 'pull_request' || steps.filter.outputs.anyJs == 'true' || steps.filter.outputs.web == 'true' || steps.filter.outputs.i18nCatalogs == 'true' || steps.filter.outputs.sharedSchema == 'true' || steps.filter.outputs.sharedDeps == 'true' || steps.filter.outputs.backend == 'true' || steps.filter.outputs.mobile == 'true' || steps.filter.outputs.ocr == 'true' || steps.filter.outputs.locationSync == 'true' || steps.filter.outputs.rootCi == 'true' }}
       # NOTE: deployConfig is deliberately NOT part of runAny — the deploy-config
       # job below needs [changes] only (no bun-install/build:db setup pass), so a
       # deploy/app-subdomain-only PR doesn't pay for a `setup` run nothing else
@@ -85,6 +86,10 @@ jobs:
               - 'scripts/sync-mobile-board-renderer-wasm.sh'
             ocr:
               - 'packages/moonboard-ocr/**'
+            locationSync:
+              - 'packages/location-sync/**'
+              - 'packages/db/**'
+              - '.github/workflows/ci.yml'
             sharedDeps:
               # packages/shared/** gates test-backend (and mobile-bundle). The
               # backend test project includes the queue-client integration suite
@@ -640,6 +645,63 @@ jobs:
           path: packages/moonboard-ocr/test-results/junit-ocr.xml
           retention-days: 7
 
+  test-location-sync-integration:
+    needs: [changes, setup]
+    if: needs.changes.outputs.locationSync == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: ghcr.io/boardsesh/boardsesh-dev-db@sha256:ce32f2a70405112178f3b8b3e4b373175878539d8532f46dd313e04bbcb14cb4
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: main
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version: 'lts'
+          cache: true
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Download built packages
+        uses: actions/download-artifact@v4
+        with:
+          name: built-packages
+      - name: Apply the full migration journal
+        env:
+          DATABASE_URL: postgres://postgres:password@localhost:5432/main
+          VERIFY_MIGRATION_JOURNAL: '1'
+        run: bun run --filter=@boardsesh/db db:migrate
+      - name: Run the required location-sync integration suite
+        env:
+          DATABASE_URL: postgres://postgres:password@localhost:5432/main
+          REQUIRE_LOCATION_SYNC_INTEGRATION: '1'
+        run: |
+          mkdir -p packages/location-sync/test-results
+          vp test run --project location-sync \
+            --reporter=verbose --reporter=github-actions \
+            --reporter=junit --outputFile.junit=./packages/location-sync/test-results/junit-location-sync.xml
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-location-sync
+          path: packages/location-sync/test-results/junit-location-sync.xml
+          retention-days: 7
+
   mobile-bundle:
     needs: [changes, setup]
     if: needs.changes.outputs.mobile == 'true' || needs.changes.outputs.sharedDeps == 'true' || needs.changes.outputs.rootCi == 'true'
@@ -818,8 +880,8 @@ jobs:
           exit 1
 
   test-report:
-    needs: [test-default, test-backend, test-ocr]
-    # Only post a report when at least one test job actually ran. If all three
+    needs: [test-default, test-backend, test-ocr, test-location-sync-integration]
+    # Only post a report when at least one test job actually ran. If all four
     # were skipped (e.g. an i18n-catalog-only PR), there's nothing to
     # download — actions/download-artifact errors on missing artifacts, so we
     # skip the whole job instead of swallowing the failure.
@@ -827,7 +889,8 @@ jobs:
       always() && github.event_name == 'pull_request' && (
         needs.test-default.result != 'skipped' ||
         needs.test-backend.result != 'skipped' ||
-        needs.test-ocr.result != 'skipped'
+        needs.test-ocr.result != 'skipped' ||
+        needs.test-location-sync-integration.result != 'skipped'
       )
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -861,6 +924,7 @@ jobs:
       - test-default
       - test-backend
       - test-ocr
+      - test-location-sync-integration
       - mobile-bundle
       - commit-lint
       - release-notes

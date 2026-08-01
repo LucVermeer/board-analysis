@@ -1,9 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { randomUUID } from 'node:crypto';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { sql } from 'drizzle-orm';
-import { createDb, executeRows } from '@boardsesh/db/client';
+import { closePool, createDb, executeRows } from '@boardsesh/db/client';
 import { upsertPublicBoardLocations } from './upsert';
 import type { PublicBoardLocationInput } from './types';
 import { boardUuidForSource, gymUuidForSource } from './ids';
+import { resolveLocationSyncIntegrationConfig } from './integration-test-config';
 
 /**
  * Real-DB integration test proving the sync-freeze guards: once a human curates
@@ -11,26 +13,12 @@ import { boardUuidForSource, gymUuidForSource } from './ids';
  * NOT overwrite its metadata — while still keeping the source alias and the
  * board→gym link current. An unfrozen synced row must still update normally.
  *
- * Opt-in: needs a migrated, writable PostGIS database (the location triggers
- * from migration 0127 plus the sync_frozen_at columns). Point DATABASE_URL at a
- * local Postgres and run. It self-skips otherwise, so CI stays green without a DB.
- * Everything runs inside a transaction that is rolled back, leaving no residue.
+ * Local runs are opt-in and self-skip without an eligible DATABASE_URL. The
+ * dedicated CI job sets REQUIRE_LOCATION_SYNC_INTEGRATION=1, which turns every
+ * missing/invalid prerequisite into a hard failure. Everything runs inside a
+ * transaction that is rolled back, leaving no residue.
  */
-
-function localDatabaseUrl(): string | null {
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) {
-    return null;
-  }
-  try {
-    const hostname = new URL(databaseUrl).hostname.toLowerCase();
-    return ['localhost', '127.0.0.1', 'postgres'].includes(hostname) ? databaseUrl : null;
-  } catch {
-    return null;
-  }
-}
-
-const HAS_LOCAL_DB = localDatabaseUrl() !== null;
+const integrationConfig = resolveLocationSyncIntegrationConfig(process.env);
 
 type GymStateRow = {
   id: number | string;
@@ -50,6 +38,19 @@ type BoardStateRow = {
 };
 
 type AliasRow = { gymId: number | string };
+
+type PrerequisiteRow = {
+  hasPostgis: boolean;
+  hasGymsTable: boolean;
+  hasBoardsTable: boolean;
+  hasAliasesTable: boolean;
+  hasGymFreezeColumn: boolean;
+  hasBoardFreezeColumn: boolean;
+  hasGymLocationColumn: boolean;
+  hasBoardLocationColumn: boolean;
+  hasGymLocationTrigger: boolean;
+  hasBoardLocationTrigger: boolean;
+};
 
 function baseRecord(overrides: Partial<PublicBoardLocationInput>): PublicBoardLocationInput {
   return {
@@ -93,15 +94,67 @@ async function readBoard(tx: Parameters<typeof upsertPublicBoardLocations>[0], u
   return row;
 }
 
-describe.skipIf(!HAS_LOCAL_DB)('location sync freeze guards (integration)', () => {
+describe.skipIf(integrationConfig.databaseUrl === null)('location sync freeze guards (integration)', () => {
+  beforeAll(async () => {
+    const db = createDb();
+    const [prerequisites] = await executeRows<PrerequisiteRow>(
+      db,
+      sql`SELECT
+            EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'postgis') AS "hasPostgis",
+            to_regclass('public.gyms') IS NOT NULL AS "hasGymsTable",
+            to_regclass('public.user_boards') IS NOT NULL AS "hasBoardsTable",
+            to_regclass('public.location_sync_gym_sources') IS NOT NULL AS "hasAliasesTable",
+            EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_schema = 'public' AND table_name = 'gyms' AND column_name = 'sync_frozen_at'
+            ) AS "hasGymFreezeColumn",
+            EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_schema = 'public' AND table_name = 'user_boards' AND column_name = 'sync_frozen_at'
+            ) AS "hasBoardFreezeColumn",
+            EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_schema = 'public' AND table_name = 'gyms' AND column_name = 'location'
+                AND udt_name = 'geography'
+            ) AS "hasGymLocationColumn",
+            EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_schema = 'public' AND table_name = 'user_boards' AND column_name = 'location'
+                AND udt_name = 'geography'
+            ) AS "hasBoardLocationColumn",
+            EXISTS (
+              SELECT 1 FROM pg_trigger
+              WHERE tgname = 'gyms_set_location' AND tgrelid = 'public.gyms'::regclass
+                AND NOT tgisinternal AND tgenabled <> 'D'
+            ) AS "hasGymLocationTrigger",
+            EXISTS (
+              SELECT 1 FROM pg_trigger
+              WHERE tgname = 'user_boards_set_location'
+                AND tgrelid = 'public.user_boards'::regclass
+                AND NOT tgisinternal AND tgenabled <> 'D'
+            ) AS "hasBoardLocationTrigger"`,
+    );
+
+    expect(prerequisites, 'expected the location-sync prerequisite query to return one row').toBeTruthy();
+    const missingPrerequisites = Object.entries(prerequisites ?? {})
+      .filter(([, isPresent]) => !isPresent)
+      .map(([name]) => name);
+    expect(missingPrerequisites, 'location-sync integration database is missing required schema').toEqual([]);
+  });
+
+  afterAll(async () => {
+    await closePool();
+  });
+
   it('never overwrites a human-curated gym/board, but keeps alias + link current', async () => {
     const db = createDb();
     const rollback = new Error('rollback freeze fixture');
 
     await db
       .transaction(async (tx) => {
-        const gymSourceKey = `tension:freeze-gym-${Date.now()}`;
-        const boardSourceKey = `tension:freeze-board-${Date.now()}`;
+        const fixtureId = randomUUID();
+        const gymSourceKey = `tension:freeze-gym-${fixtureId}`;
+        const boardSourceKey = `tension:freeze-board-${fixtureId}`;
         const gymUuid = gymUuidForSource(gymSourceKey);
         const boardUuid = boardUuidForSource(boardSourceKey);
 
@@ -183,8 +236,9 @@ describe.skipIf(!HAS_LOCAL_DB)('location sync freeze guards (integration)', () =
 
     await db
       .transaction(async (tx) => {
-        const gymSourceKey = `tension:open-gym-${Date.now()}`;
-        const boardSourceKey = `tension:open-board-${Date.now()}`;
+        const fixtureId = randomUUID();
+        const gymSourceKey = `tension:open-gym-${fixtureId}`;
+        const boardSourceKey = `tension:open-board-${fixtureId}`;
         const gymUuid = gymUuidForSource(gymSourceKey);
 
         await upsertPublicBoardLocations(tx, [
