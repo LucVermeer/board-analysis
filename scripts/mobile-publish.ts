@@ -97,7 +97,9 @@ export function buildSelfHostedEoasArgs(
 }
 
 export function requestedSelfHostedPlatforms(platform: string): OtaPublishPlatform[] {
-  return platform === 'all' ? ['ios', 'android'] : [platform as OtaPublishPlatform];
+  if (platform === 'all') return ['ios', 'android'];
+  if (platform === 'ios' || platform === 'android') return [platform];
+  throw new Error(`Unsupported self-hosted publish platform: ${platform}`);
 }
 
 function summarizePlatformOutcome(outcome: PlatformPublishOutcome): string {

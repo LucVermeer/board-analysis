@@ -29,7 +29,12 @@ describe('mobile publish argument routing', () => {
 
   it('expands all to sequential iOS and Android targets', () => {
     expect(requestedSelfHostedPlatforms('all')).toEqual(['ios', 'android']);
+    expect(requestedSelfHostedPlatforms('ios')).toEqual(['ios']);
     expect(requestedSelfHostedPlatforms('android')).toEqual(['android']);
+  });
+
+  it('rejects an invalid self-hosted platform at the exported helper boundary', () => {
+    expect(() => requestedSelfHostedPlatforms('windows')).toThrow('Unsupported self-hosted publish platform');
   });
 
   it('parses the wrapper selector separately from the EAS branch', () => {

@@ -62,6 +62,9 @@ on:
       - 'packages/board-constants/**'
       - 'packages/shared-schema/**'
       - 'patches/**'
+      - 'scripts/mobile-publish.ts'
+      - 'scripts/lib/mobile-publish-retry.ts'
+      - 'scripts/lib/eoas.ts'
       - '.github/workflows/mobile-ota-preview.yml'
   issue_comment:
     types: [created]

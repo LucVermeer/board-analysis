@@ -9,6 +9,17 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const WORKFLOW_DIR = resolve(REPO_ROOT, '.github', 'workflows');
 const production = readFileSync(resolve(WORKFLOW_DIR, 'mobile-ota-production.yml'), 'utf8');
 const backport = readFileSync(resolve(WORKFLOW_DIR, 'mobile-ota-backport.yml'), 'utf8');
+const preview = readFileSync(resolve(WORKFLOW_DIR, 'mobile-ota-preview.yml'), 'utf8');
+
+function jobBlock(workflow: string, jobName: string): string {
+  const jobsStart = workflow.indexOf('\njobs:\n');
+  const start = workflow.indexOf(`\n  ${jobName}:\n`, jobsStart);
+  const remainingWorkflow = workflow.slice(start + 1);
+  const nextJobOffset = remainingWorkflow.search(/\n  [a-zA-Z0-9_-]+:\n/);
+  expect(jobsStart).toBeGreaterThanOrEqual(0);
+  expect(start).toBeGreaterThan(jobsStart);
+  return nextJobOffset >= 0 ? workflow.slice(start, start + 1 + nextJobOffset) : workflow.slice(start);
+}
 
 function stepBlock(workflow: string, stepName: string, nextStepName: string): string {
   const start = workflow.indexOf(`      - name: ${stepName}`);
@@ -22,7 +33,7 @@ describe('production OTA workflow reliability', () => {
   it('serializes runs without cancelling an active publish and has enough retry time', () => {
     expect(production).toContain('group: mobile-ota-production');
     expect(production).toContain('cancel-in-progress: false');
-    const timeout = Number(production.match(/timeout-minutes: (\d+)/)?.[1]);
+    const timeout = Number(jobBlock(production, 'publish').match(/timeout-minutes: (\d+)/)?.[1]);
     expect(timeout).toBeGreaterThanOrEqual(45);
   });
 
@@ -57,8 +68,14 @@ describe('production OTA workflow reliability', () => {
   });
 
   it('reruns when the self-hosted publish implementation changes', () => {
-    expect(production).toContain("- 'scripts/mobile-publish.ts'");
-    expect(production).toContain("- 'scripts/lib/mobile-publish-retry.ts'");
+    for (const implementationPath of [
+      'scripts/mobile-publish.ts',
+      'scripts/lib/mobile-publish-retry.ts',
+      'scripts/lib/eoas.ts',
+    ]) {
+      expect(production).toContain(`- '${implementationPath}'`);
+      expect(preview).toContain(`- '${implementationPath}'`);
+    }
   });
 });
 
@@ -67,7 +84,7 @@ describe('backport OTA workflow upload pressure', () => {
     expect(backport).toContain('group: mobile-ota-production');
     expect(backport).toContain('cancel-in-progress: false');
     expect(backport).toContain('max-parallel: 1');
-    const timeout = Number(backport.match(/timeout-minutes: (\d+)/)?.[1]);
+    const timeout = Number(jobBlock(backport, 'backport').match(/timeout-minutes: (\d+)/)?.[1]);
     expect(timeout).toBeGreaterThanOrEqual(45);
   });
 });
