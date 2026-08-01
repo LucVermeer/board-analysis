@@ -206,8 +206,32 @@ describe('reportHandledError', () => {
     });
   });
 
-  it('reports a real server error (response with an HTTP status) at error level', () => {
+  it('reports an HTTP error at error level', () => {
     const serverError = Object.assign(new Error('Internal Server Error'), { response: { status: 500 } });
+    reportHandledError(serverError, { tags: { source: 'react-query', kind: 'mutation' } });
+    expect(mockedCaptureToSentry).toHaveBeenCalledWith(serverError, {
+      level: 'error',
+      tags: { source: 'react-query', kind: 'mutation' },
+    });
+  });
+
+  it('reports an HTTP error even when its message resembles NSURL prose', () => {
+    const serverError = Object.assign(new Error('The connection has timed out unexpectedly.'), {
+      response: { status: 400 },
+    });
+    reportHandledError(serverError, { tags: { source: 'react-query', kind: 'mutation' } });
+    expect(mockedCaptureToSentry).toHaveBeenCalledWith(serverError, {
+      level: 'error',
+      tags: { source: 'react-query', kind: 'mutation' },
+    });
+  });
+
+  it('reports a nested GraphQL status even when its message resembles NSURL prose', () => {
+    const serverError = Object.assign(new Error('The connection has timed out unexpectedly.'), {
+      response: {
+        errors: [{ message: 'invalid input', extensions: { code: 400 } }],
+      },
+    });
     reportHandledError(serverError, { tags: { source: 'react-query', kind: 'mutation' } });
     expect(mockedCaptureToSentry).toHaveBeenCalledWith(serverError, {
       level: 'error',
