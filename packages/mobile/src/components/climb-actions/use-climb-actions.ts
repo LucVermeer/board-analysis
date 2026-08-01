@@ -258,6 +258,7 @@ export function useClimbActions({
             angle,
             isMirror: false,
             isBenchmark: !!climb.benchmark_difficulty,
+            baseAscensionistCount: climb.ascensionist_count,
             layoutId,
             sizeId,
             setIds,

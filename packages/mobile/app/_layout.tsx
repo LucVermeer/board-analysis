@@ -369,7 +369,11 @@ function ClimbActionsDataWrapper({ children }: { children: ReactNode }) {
 function BoardProviderWrapper({ children }: { children: ReactNode }) {
   const { data: activeBoard } = useActiveBoard();
   return (
-    <BoardProvider boardName={toBoardName(activeBoard?.boardType)} boardUuid={activeBoard?.uuid}>
+    <BoardProvider
+      boardName={toBoardName(activeBoard?.boardType)}
+      boardUuid={activeBoard?.uuid}
+      layoutId={activeBoard?.layoutId}
+    >
       {/* Screenshot builds only (inlined check → dead-strips in normal builds):
           auto-activate the user's first board so board-backed shots aren't stuck
           on the "No board selected" picker. */}

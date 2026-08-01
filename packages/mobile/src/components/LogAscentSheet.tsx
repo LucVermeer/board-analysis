@@ -33,6 +33,7 @@ type LogAscentSheetProps = {
   angle: number;
   isMirror: boolean;
   isBenchmark: boolean;
+  baseAscensionistCount: number;
   layoutId?: number;
   sizeId?: number;
   setIds?: string;
@@ -49,6 +50,7 @@ export function LogAscentSheet({
   angle,
   isMirror,
   isBenchmark,
+  baseAscensionistCount,
   layoutId,
   sizeId,
   setIds,
@@ -133,6 +135,7 @@ export function LogAscentSheet({
           angle={angle}
           isMirror={isMirror}
           isBenchmark={isBenchmark}
+          baseAscensionistCount={baseAscensionistCount}
           layoutId={layoutId}
           sizeId={sizeId}
           setIds={setIds}

@@ -49,7 +49,7 @@ export async function markCompleted(db: SqlExecutor, id: number): Promise<void> 
  * exhausted but status still 'pending' (which the old two-write
  * incrementRetry + markDeadLetter pair could).
  */
-export async function recordFailure(db: SqlExecutor, id: number, error: string): Promise<void> {
+export async function recordFailure(db: SqlExecutor, id: number, error: string): Promise<'pending' | 'dead_letter'> {
   await db.runAsync(
     `UPDATE pending_mutations
      SET retry_count = retry_count + 1,
@@ -58,6 +58,8 @@ export async function recordFailure(db: SqlExecutor, id: number, error: string):
      WHERE id = ?`,
     [error, id],
   );
+  const row = await db.getFirstAsync<{ status: string }>('SELECT status FROM pending_mutations WHERE id = ?', [id]);
+  return row?.status === 'dead_letter' ? 'dead_letter' : 'pending';
 }
 
 /**

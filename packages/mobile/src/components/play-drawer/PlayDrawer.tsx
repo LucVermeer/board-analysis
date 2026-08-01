@@ -34,7 +34,7 @@ import { DeferredBoard } from './DeferredBoard';
 import { BoardRenderUnavailable } from './BoardRenderUnavailable';
 import { PlaybackControls } from './PlaybackControls';
 import { useMobilePlayback } from './use-mobile-playback';
-import { PlayDrawerHeader } from './PlayDrawerHeader';
+import { LivePlayDrawerHeader } from './PlayDrawerHeader';
 import { copyClimbName } from './copy-climb-name';
 import { SwipeableHeader } from './SwipeableHeader';
 import { PlayDrawerPreviewBanner } from './PlayDrawerPreviewBanner';
@@ -340,7 +340,7 @@ export function PlayDrawer({
   // Boardsesh grade when the "Show Boardsesh grades" toggle is on and a trusted
   // one exists, else the legacy Aurora grade. `boardseshActive` also seeds the
   // tick picker's default grade below.
-  const { resolveGrade, boardseshActive } = useDisplayGrade();
+  const { boardseshActive } = useDisplayGrade();
   const { isAuthenticated } = useAuth();
 
   const { boardName, layoutId, sizeId, setIds, angle } = boardConfig;
@@ -412,12 +412,6 @@ export function PlayDrawer({
   // During the commit hand-off use the frozen climb (captured at fling start) so
   // the peek doesn't jump to the new climb's neighbour mid-swap.
   const headerPeekClimb = isSwipeCommitting ? frozenPeekClimb : peekClimb;
-
-  // The grade the header renders for the current + peek climbs under the "Show
-  // Boardsesh grades" toggle. `resolveGrade` is O(1) and auto-falls-back to the
-  // legacy Aurora grade, so this is safe to call each render (not a list).
-  const displayedGrade = displayedClimb ? resolveGrade(displayedClimb) : null;
-  const peekGrade = headerPeekClimb ? resolveGrade(headerPeekClimb) : null;
 
   // Host-owned post-fling reset: once the swiped-to climb has actually rendered
   // (the displayed queue item changes), snap the shared swipe offset back to 0 and
@@ -895,16 +889,11 @@ export function PlayDrawer({
                     swipeTranslateX={swipeTranslateX}
                     viewportWidth={windowWidth}
                     current={
-                      <PlayDrawerHeader
-                        name={displayedClimb.name}
-                        difficulty={displayedGrade?.label ?? displayedClimb.difficulty}
-                        rawDifficulty={displayedClimb.difficulty}
-                        gradeColor={displayedGrade?.color}
-                        qualityAverage={displayedClimb.quality_average}
-                        ascensionistCount={displayedClimb.ascensionist_count}
-                        setterUsername={displayedClimb.setter_username}
-                        benchmarkDifficulty={displayedClimb.benchmark_difficulty}
-                        characteristics={displayedClimb.characteristics}
+                      <LivePlayDrawerHeader
+                        climb={displayedClimb}
+                        boardName={boardName as BoardName}
+                        layoutId={layoutId}
+                        angle={angle}
                         // The accessory-bar wall climb is physically lit right now, so its
                         // read-only "on the wall" status rides in the header's leading slot
                         // (left of the name, opposite the grade) rather than as a banner.
@@ -914,16 +903,11 @@ export function PlayDrawer({
                     }
                     peek={
                       headerPeekClimb ? (
-                        <PlayDrawerHeader
-                          name={headerPeekClimb.name}
-                          difficulty={peekGrade?.label ?? headerPeekClimb.difficulty}
-                          rawDifficulty={headerPeekClimb.difficulty}
-                          gradeColor={peekGrade?.color}
-                          qualityAverage={headerPeekClimb.quality_average}
-                          ascensionistCount={headerPeekClimb.ascensionist_count}
-                          setterUsername={headerPeekClimb.setter_username}
-                          benchmarkDifficulty={headerPeekClimb.benchmark_difficulty}
-                          characteristics={headerPeekClimb.characteristics}
+                        <LivePlayDrawerHeader
+                          climb={headerPeekClimb}
+                          boardName={boardName as BoardName}
+                          layoutId={layoutId}
+                          angle={angle}
                         />
                       ) : null
                     }
@@ -1134,6 +1118,7 @@ export function PlayDrawer({
               angle={tickTarget?.boardConfig.angle ?? angle}
               isMirror={isMirrored}
               isBenchmark={tickClimb.benchmark_difficulty != null}
+              baseAscensionistCount={tickClimb.ascensionist_count}
               layoutId={tickTarget?.boardConfig.layoutId ?? layoutId}
               sizeId={tickTarget?.boardConfig.sizeId ?? sizeId}
               setIds={tickTarget?.boardConfig.setIds ?? setIds}

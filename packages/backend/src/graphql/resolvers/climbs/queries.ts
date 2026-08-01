@@ -1,4 +1,4 @@
-import { eq, and, gte, desc, asc } from 'drizzle-orm';
+import { eq, and, gte, desc, asc, sql } from 'drizzle-orm';
 import {
   type CheckMoonBoardClimbDuplicatesInput,
   type ClimbSearchInput,
@@ -364,7 +364,10 @@ export const climbQueries = {
       throw new Error(`Invalid board name: ${boardName}. Must be one of: ${SUPPORTED_BOARDS.join(', ')}`);
     }
 
-    const rows = await dbRead
+    // This query is the reconciliation read for optimistic live stats. Use the
+    // primary so a reconnect immediately after saveTick cannot replace a newer
+    // optimistic floor with replica-lagged numbers.
+    const rows = await db
       .select({
         angle: dbSchema.boardClimbStats.angle,
         ascensionistCount: dbSchema.boardClimbStats.ascensionistCount,
@@ -373,6 +376,9 @@ export const climbQueries = {
         displayDifficulty: dbSchema.boardClimbStats.displayDifficulty,
         faUsername: dbSchema.boardClimbStats.faUsername,
         faAt: dbSchema.boardClimbStats.faAt,
+        // The schema's historical Drizzle mapping uses JS number mode. Cast in
+        // PostgreSQL so revisions above MAX_SAFE_INTEGER reach the client intact.
+        syncSeq: sql<string>`${dbSchema.boardClimbStats.syncSeq}::text`,
       })
       .from(dbSchema.boardClimbStats)
       .where(and(eq(dbSchema.boardClimbStats.boardType, boardName), eq(dbSchema.boardClimbStats.climbUuid, climbUuid)))
@@ -382,6 +388,7 @@ export const climbQueries = {
       ...row,
       // Mirror the REST endpoint: round display difficulty to a grade id and label it.
       difficulty: row.displayDifficulty == null ? null : getGradeLabel(Math.round(row.displayDifficulty)),
+      syncSeq: row.syncSeq,
     }));
   },
 

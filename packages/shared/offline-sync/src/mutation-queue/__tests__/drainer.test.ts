@@ -73,6 +73,7 @@ describe('drainMutationQueue', () => {
     mockIsGraphQLEmptyResponseError.mockReturnValue(false);
     mockIsRetryable.mockReturnValue(false);
     mockIsNetworkError.mockReturnValue(false);
+    mockRecordFailure.mockResolvedValue('pending');
   });
 
   it('skips the drain entirely while offline', async () => {
@@ -122,6 +123,51 @@ describe('drainMutationQueue', () => {
     expect(mockMarkCompleted).toHaveBeenCalledTimes(2);
     expect(mockMarkCompleted).toHaveBeenCalledWith(mockDb, 1);
     expect(mockMarkCompleted).toHaveBeenCalledWith(mockDb, 2);
+  });
+
+  it('emits acknowledgement only after the local queue row is completed', async () => {
+    const mutation = makeMutation({ idempotency_key: 'tick-uuid' });
+    mockPeekPending.mockResolvedValueOnce([mutation]).mockResolvedValueOnce([]);
+    const onMutationStatus = vi.fn();
+    mockMarkCompleted.mockImplementationOnce(async () => {
+      expect(onMutationStatus).not.toHaveBeenCalled();
+    });
+
+    await drainMutationQueue(mockDb, createMockQueryClient(), mockGraphqlFetch, {
+      ...ONLINE,
+      onMutationStatus,
+    });
+
+    expect(onMutationStatus).toHaveBeenCalledWith({
+      tableName: 'boardsesh_ticks',
+      operation: 'create',
+      idempotencyKey: 'tick-uuid',
+      status: 'acknowledged',
+    });
+  });
+
+  it('emits dead-letter delivery for exhausted retryable and non-retryable writes', async () => {
+    const retryable = makeMutation({ id: 1, idempotency_key: 'retryable-tick' });
+    const nonRetryable = makeMutation({ id: 2, idempotency_key: 'invalid-tick' });
+    mockPeekPending.mockResolvedValueOnce([retryable]).mockResolvedValueOnce([nonRetryable]).mockResolvedValueOnce([]);
+    mockProcessMutation.mockRejectedValueOnce(new Error('503')).mockRejectedValueOnce(new Error('invalid'));
+    mockIsRetryable.mockReturnValueOnce(true).mockReturnValueOnce(false);
+    mockRecordFailure.mockResolvedValueOnce('dead_letter');
+    const onMutationStatus = vi.fn();
+
+    await drainMutationQueue(mockDb, createMockQueryClient(), mockGraphqlFetch, {
+      ...ONLINE,
+      maxCycleAttempts: 1,
+      sleep: async () => {},
+      onMutationStatus,
+    });
+
+    expect(onMutationStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ idempotencyKey: 'retryable-tick', status: 'dead_letter' }),
+    );
+    expect(onMutationStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ idempotencyKey: 'invalid-tick', status: 'dead_letter' }),
+    );
   });
 
   it('stops processing on retryable error and increments retry', async () => {

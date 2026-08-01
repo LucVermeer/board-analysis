@@ -24,6 +24,7 @@ import {
   pullSync as pullSyncCore,
   setBackgrounded,
   type DrainOptions,
+  type MutationDeliveryEvent,
   type DrainQueue,
   type GraphQLFetch,
   type OfflineDatabase,
@@ -41,6 +42,23 @@ import { reportHandledError } from '../lib/error-reporting';
 import { track } from '../lib/analytics';
 
 const isOnline = () => onlineManager.isOnline();
+
+const mutationDeliveryListeners = new Set<(event: MutationDeliveryEvent) => void>();
+
+export function subscribeMutationDelivery(listener: (event: MutationDeliveryEvent) => void): () => void {
+  mutationDeliveryListeners.add(listener);
+  return () => mutationDeliveryListeners.delete(listener);
+}
+
+function publishMutationDelivery(event: MutationDeliveryEvent): void {
+  for (const listener of mutationDeliveryListeners) {
+    try {
+      listener(event);
+    } catch (error) {
+      if (__DEV__) console.warn('[MutationQueue] delivery listener failed:', error);
+    }
+  }
+}
 
 const reportSchemaDrift: SchemaDriftReporter = ({ tableName, column }) => {
   reportHandledError(new Error(`Sync document for ${tableName} contains unknown column: ${column}`), {
@@ -120,6 +138,13 @@ export function drainMutationQueue(
   return drainMutationQueueCore(db, queryClient, graphqlFetch, {
     ...options,
     isOnline: options?.isOnline ?? isOnline,
+    onMutationStatus: (event) => {
+      try {
+        options?.onMutationStatus?.(event);
+      } finally {
+        publishMutationDelivery(event);
+      }
+    },
   });
 }
 

@@ -5,6 +5,7 @@ import type { BoardName } from '@boardsesh/shared-schema';
 import { Text } from './Text';
 import { ClimbListThumbnail, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT } from './ClimbListThumbnail';
 import { formatSends, formatQuality } from '../lib/format-climb-stats';
+import { useEffectiveClimbStats } from '@boardsesh/board-react';
 import { useDisplayGrade } from '../hooks/use-display-grade';
 import { useAscentStatus } from '../hooks/use-ascent-status';
 import { useTheme } from '../providers/theme-provider';
@@ -148,6 +149,100 @@ const AscentStatusGlyph = React.memo(function AscentStatusGlyph({
   );
 });
 
+const LiveClimbSubtitle = React.memo(function LiveClimbSubtitle({
+  boardName,
+  layoutId,
+  climbUuid,
+  angle,
+  isDraft,
+  ascensionistCount,
+  qualityAverage,
+  setterUsername,
+}: {
+  boardName: BoardName;
+  layoutId: number;
+  climbUuid: string;
+  angle: number;
+  isDraft: boolean;
+  ascensionistCount: number;
+  qualityAverage: string;
+  setterUsername: string;
+}) {
+  const { t } = useTranslation('climbs');
+  const liveStats = useEffectiveClimbStats(boardName, layoutId, climbUuid, angle, {
+    ascensionistCount,
+    qualityAverage,
+  });
+  const parts: string[] = [];
+  if (isDraft) parts.push(t('createClimbForm.draftBadge'));
+  if (!isDraft && liveStats.ascensionistCount > 0) {
+    parts.push(formatSends(liveStats.ascensionistCount, t));
+  }
+  const liveQuality = liveStats.qualityAverage;
+  if (liveQuality != null && parseFloat(liveQuality) > 0) parts.push(`${formatQuality(liveQuality)}★`);
+  if (setterUsername) parts.push(setterUsername);
+  const subtitle = parts.length > 0 ? parts.join(' · ') : t('mobile.climbRow.projectFallback');
+
+  return (
+    <Text variant="footnote" numberOfLines={1} style={styles.subtitle}>
+      {subtitle}
+    </Text>
+  );
+});
+
+const LiveClimbGrade = React.memo(function LiveClimbGrade({
+  climb,
+  boardName,
+  layoutId,
+  angle,
+  gradeIsConsensus,
+  consensusGrade,
+}: {
+  climb: ClimbListItemClimb;
+  boardName: BoardName;
+  layoutId: number;
+  angle: number;
+  gradeIsConsensus: boolean;
+  consensusGrade?: string | null;
+}) {
+  const { resolveGrade } = useDisplayGrade();
+  const { systemColors } = useTheme();
+  const liveStats = useEffectiveClimbStats(boardName, layoutId, climb.uuid, angle, {
+    ascensionistCount: climb.ascensionist_count,
+    qualityAverage: climb.quality_average,
+    difficulty: climb.difficulty,
+  });
+  // The canonical community difficulty may change, but the Boardsesh grade
+  // fields remain authoritative when that preference is active.
+  const { label: formattedGrade, color: gradeColor } = resolveGrade({
+    ...climb,
+    difficulty: liveStats.difficulty,
+  });
+
+  return (
+    <View style={styles.gradeColumn}>
+      <View style={styles.iconGradeRow}>
+        {gradeIsConsensus ? <Icon name="people" size={13} color={systemColors.secondaryLabel} /> : null}
+        <Text variant="title3" numberOfLines={1} style={[styles.gradeText, { color: gradeColor }]}>
+          {formattedGrade}
+        </Text>
+      </View>
+      {consensusGrade ? (
+        <View style={styles.iconGradeRow}>
+          <Icon name="people" size={11} color={systemColors.secondaryLabel} />
+          <Text
+            variant="caption2"
+            numberOfLines={1}
+            style={[styles.consensusText, { color: systemColors.secondaryLabel }]}
+          >
+            {consensusGrade}
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
+});
+
 /**
  * The shared visual of a climb list item: portrait thumbnail (with ascent
  * badge) + name/subtitle + colorized grade. Returns the three blocks as a
@@ -170,42 +265,7 @@ const ClimbListItemContent = React.memo(function ClimbListItemContent({
   gradeIsConsensus = false,
   showPlaylistChips = false,
 }: ClimbListItemContentProps) {
-  const { t } = useTranslation('climbs');
   const { t: tSession } = useTranslation('session');
-  const { resolveGrade } = useDisplayGrade();
-  const { systemColors } = useTheme();
-
-  // Subtitle parts: sends · quality★ · setter (each dropped when absent). A
-  // caller-supplied override wins outright — a string replaces the line, null
-  // hides it — so session rows can show the sender instead. Tolerates a nullish
-  // climb (partially-synced peer item) — the placeholder branch below renders
-  // before this value is read in that case.
-  const subtitleText = useMemo(() => {
-    if (primarySubtitleOverride !== undefined) return primarySubtitleOverride;
-    if (!climb) return null;
-    const parts: string[] = [];
-    if (climb.is_draft) {
-      parts.push(t('createClimbForm.draftBadge'));
-    }
-    if (!climb.is_draft && climb.ascensionist_count) {
-      parts.push(formatSends(climb.ascensionist_count, t));
-    }
-    const qualityNum = parseFloat(climb.quality_average);
-    if (qualityNum > 0) {
-      parts.push(`${formatQuality(climb.quality_average)}★`);
-    }
-    if (climb.setter_username) {
-      parts.push(climb.setter_username);
-    }
-    return parts.length > 0 ? parts.join(' · ') : t('mobile.climbRow.projectFallback');
-  }, [
-    primarySubtitleOverride,
-    climb?.is_draft,
-    climb?.ascensionist_count,
-    climb?.quality_average,
-    climb?.setter_username,
-    t,
-  ]);
 
   const subtitleDetailText = useMemo(() => {
     const parts = subtitleDetailParts?.filter((part) => part.length > 0) ?? [];
@@ -233,12 +293,6 @@ const ClimbListItemContent = React.memo(function ClimbListItemContent({
     );
   }
 
-  // One O(1) resolve per row: the Boardsesh grade (label + colour) when the "Show
-  // Boardsesh grades" toggle is on and a trusted one exists, else the legacy
-  // Aurora grade. `resolveGrade` is the stable callback from `useDisplayGrade`
-  // (called once above), so it never re-derives per render beyond this call.
-  const { label: formattedGrade, color: gradeColor } = resolveGrade(climb);
-
   return (
     <>
       {/* Left: portrait thumbnail with ascent badge */}
@@ -265,9 +319,20 @@ const ClimbListItemContent = React.memo(function ClimbListItemContent({
             isNoMatch={climb.is_no_match}
           />
         </View>
-        {subtitleText ? (
+        {primarySubtitleOverride === undefined ? (
+          <LiveClimbSubtitle
+            boardName={boardName}
+            layoutId={layoutId}
+            climbUuid={climb.uuid}
+            angle={angle}
+            isDraft={climb.is_draft ?? false}
+            ascensionistCount={climb.ascensionist_count ?? 0}
+            qualityAverage={climb.quality_average}
+            setterUsername={climb.setter_username ?? ''}
+          />
+        ) : primarySubtitleOverride ? (
           <Text variant="footnote" numberOfLines={1} style={styles.subtitle}>
-            {subtitleText}
+            {primarySubtitleOverride}
           </Text>
         ) : null}
         {subtitleDetailText ? (
@@ -281,26 +346,14 @@ const ClimbListItemContent = React.memo(function ClimbListItemContent({
       {/* Right: ascent-status glyph + colorized grade — the two scan keys together */}
       <View style={styles.rightSection}>
         {showAscentStatus ? <AscentStatusGlyph climbUuid={climb.uuid} angle={angle} /> : null}
-        <View style={styles.gradeColumn}>
-          <View style={styles.iconGradeRow}>
-            {gradeIsConsensus ? <Icon name="people" size={13} color={systemColors.secondaryLabel} /> : null}
-            <Text variant="title3" numberOfLines={1} style={[styles.gradeText, { color: gradeColor }]}>
-              {formattedGrade}
-            </Text>
-          </View>
-          {consensusGrade ? (
-            <View style={styles.iconGradeRow}>
-              <Icon name="people" size={11} color={systemColors.secondaryLabel} />
-              <Text
-                variant="caption2"
-                numberOfLines={1}
-                style={[styles.consensusText, { color: systemColors.secondaryLabel }]}
-              >
-                {consensusGrade}
-              </Text>
-            </View>
-          ) : null}
-        </View>
+        <LiveClimbGrade
+          climb={climb}
+          boardName={boardName}
+          layoutId={layoutId}
+          angle={angle}
+          gradeIsConsensus={gradeIsConsensus}
+          consensusGrade={consensusGrade}
+        />
       </View>
     </>
   );

@@ -8,6 +8,28 @@ import { createElement, type ReactNode } from 'react';
 // computing the legacy grade colour itself. A controllable stub lets us assert the
 // wiring without the flag/preference plumbing (covered by use-display-grade's tests).
 const resolveGrade = vi.fn();
+const liveStatsOverride = vi.hoisted(() => ({
+  current: null as null | {
+    ascensionistCount: number;
+    qualityAverage: string | null;
+    difficulty: string | null;
+  },
+}));
+
+vi.mock('@boardsesh/board-react', () => ({
+  useEffectiveClimbStats: (
+    _boardName: string,
+    _layoutId: number,
+    _climbUuid: string,
+    _angle: number,
+    base: { ascensionistCount?: number; qualityAverage?: string; difficulty?: string },
+  ) =>
+    liveStatsOverride.current ?? {
+      ascensionistCount: base.ascensionistCount ?? 0,
+      qualityAverage: base.qualityAverage ?? null,
+      difficulty: base.difficulty ?? null,
+    },
+}));
 
 vi.mock('react-native', () => ({
   StyleSheet: { create: (styles: unknown) => styles },
@@ -74,7 +96,10 @@ const baseClimb = {
 const gradeNode = (container: HTMLElement) => container.querySelector('[data-variant="title3"]');
 
 describe('ClimbListItemContent grade', () => {
-  beforeEach(() => resolveGrade.mockReset());
+  beforeEach(() => {
+    resolveGrade.mockReset();
+    liveStatsOverride.current = null;
+  });
 
   it('renders the label + colour resolveGrade returns (Boardsesh grade when active)', () => {
     resolveGrade.mockReturnValue({ label: 'V5', color: '#abcdef', isBoardsesh: true });
@@ -102,5 +127,21 @@ describe('ClimbListItemContent grade', () => {
     expect(resolveGrade).toHaveBeenCalledWith(
       expect.objectContaining({ difficulty: '6b/V4', boardseshDifficulty: 20, boardseshConfidence: 'confirmed' }),
     );
+  });
+
+  it('does not resurrect stale quality or difficulty after canonical stats clear them', () => {
+    liveStatsOverride.current = {
+      ascensionistCount: 10,
+      qualityAverage: null,
+      difficulty: null,
+    };
+    resolveGrade.mockReturnValue({ label: '', color: '#111111', isBoardsesh: false });
+
+    const { container } = render(
+      <ClimbListItemContent climb={baseClimb} boardName="kilter" layoutId={1} sizeId={1} setIds="1" angle={40} />,
+    );
+
+    expect(resolveGrade).toHaveBeenCalledWith(expect.objectContaining({ difficulty: null }));
+    expect(container.textContent).not.toContain('4.5★');
   });
 });

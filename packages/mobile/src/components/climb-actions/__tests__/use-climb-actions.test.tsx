@@ -206,7 +206,12 @@ describe('useClimbActions colours and dispatch', () => {
     const { result } = renderActions({ climb, boardConfig: kilterBoard, isAuthenticated: false, onAfterAction });
     result.current.find((action) => action.id === 'tick')?.run();
     expect(openers.openLogAscent).toHaveBeenCalledWith(
-      expect.objectContaining({ climbUuid: 'climb-1', boardName: 'kilter', angle: 40 }),
+      expect.objectContaining({
+        climbUuid: 'climb-1',
+        boardName: 'kilter',
+        angle: 40,
+        baseAscensionistCount: climb.ascensionist_count,
+      }),
     );
     expect(onAfterAction).toHaveBeenCalledTimes(1);
   });

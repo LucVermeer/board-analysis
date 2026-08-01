@@ -61,6 +61,8 @@ export const boardConfigTypeDefs = /* GraphQL */ `
     faUsername: String
     "When the first ascent was logged (ISO timestamp)"
     faAt: String
+    "Monotonic database revision, encoded as decimal text to preserve bigint precision"
+    syncSeq: String!
   }
 
   """

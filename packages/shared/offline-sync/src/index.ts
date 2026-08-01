@@ -46,7 +46,7 @@ export {
   setBackgrounded,
   isBackgrounded,
 } from './mutation-queue/drainer';
-export type { DrainOptions } from './mutation-queue/drainer';
+export type { DrainOptions, MutationDeliveryEvent } from './mutation-queue/drainer';
 export { ensureMutationQueueTable, MUTATION_QUEUE_SCHEMA } from './mutation-queue/schema';
 export { processMutation } from './mutation-queue/handlers';
 export type { GraphQLFetch } from './mutation-queue/handlers';

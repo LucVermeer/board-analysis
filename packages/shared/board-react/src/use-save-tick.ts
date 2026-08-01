@@ -9,6 +9,7 @@ import { useBoardAdapter } from './adapter';
 import {
   accumulatedLogbookQueryKey,
   fetchLogbookQueryKeyPrefix,
+  fetchedLogbookClimbUuidsQueryKey,
   toLogbookEntry,
   type LogbookEntry,
 } from './logbook-keys';
@@ -18,6 +19,15 @@ import {
   rollbackOptimisticTick,
   type SaveTickOptions,
 } from './tick-helpers';
+import {
+  acknowledgeOptimisticAscent,
+  beginOptimisticAscent,
+  markOptimisticAscentQueued,
+  rejectOptimisticAscent,
+  setClimbStatsAuthEpoch,
+  type ClimbStatsKey,
+} from './climb-stats-store';
+import { scheduleAcknowledgedClimbStatsRead } from './use-effective-climb-stats';
 
 /**
  * Build a collision-resistant temp uuid for the optimistic entry. Falls back
@@ -45,7 +55,8 @@ function nextTempUuid(): string {
  * surfaces refresh without a manual reload.
  */
 export function useSaveTick(boardName: BoardName | null) {
-  const { isAuthenticated, executeHttp, onTickSaved, saveTickOffline } = useBoardAdapter();
+  const adapter = useBoardAdapter();
+  const { isAuthenticated, executeHttp, onTickSaved, saveTickOffline } = adapter;
   const queryClient = useQueryClient();
   const accumulatedKey = accumulatedLogbookQueryKey(boardName);
 
@@ -83,11 +94,11 @@ export function useSaveTick(boardName: BoardName | null) {
 
       const offlineSavedTick = await saveTickOffline?.(variables, { queryClient, executeHttp });
       if (offlineSavedTick) {
-        return offlineSavedTick;
+        return { savedTick: offlineSavedTick, delivery: 'queued' as const };
       }
 
       const response = await executeHttp<SaveTickMutationResponse, SaveTickMutationVariables>(SAVE_TICK, variables);
-      return response.saveTick;
+      return { savedTick: response.saveTick, delivery: 'acknowledged' as const };
     },
     onMutate: async (options) => {
       // Cancel outgoing fetch batches so stale responses merge against the
@@ -95,12 +106,51 @@ export function useSaveTick(boardName: BoardName | null) {
       await queryClient.cancelQueries({ queryKey: fetchLogbookQueryKeyPrefix(boardName) });
 
       const tempUuid = nextTempUuid();
+      const authEpoch = adapter.captureAuthEpoch?.() ?? 0;
+      setClimbStatsAuthEpoch(authEpoch);
+      const statsKey: ClimbStatsKey | null =
+        boardName && options.layoutId != null && options.layoutId > 0
+          ? {
+              boardType: boardName,
+              layoutId: options.layoutId,
+              climbUuid: options.climbUuid,
+              angle: options.angle,
+            }
+          : null;
+      const existingLogbook = queryClient.getQueryData<LogbookEntry[]>(accumulatedKey) ?? [];
+      const fetchedClimbUuids = queryClient.getQueryData<ReadonlySet<string>>(
+        fetchedLogbookClimbUuidsQueryKey(boardName),
+      );
+      const isAscent = options.status === 'flash' || options.status === 'send';
+      const hasKnownPriorAscent = existingLogbook.some(
+        (entry) =>
+          !entry.uuid.startsWith('temp-') &&
+          entry.climb_uuid === options.climbUuid &&
+          entry.angle === options.angle &&
+          entry.is_ascent,
+      );
+      const baseAscensionistCount =
+        options.baseAscensionistCount != null && Number.isFinite(options.baseAscensionistCount)
+          ? options.baseAscensionistCount
+          : null;
+      const statsToken =
+        adapter.supportsClimbStatsOptimism === true &&
+        statsKey &&
+        isAscent &&
+        baseAscensionistCount != null &&
+        fetchedClimbUuids?.has(options.climbUuid) &&
+        !hasKnownPriorAscent
+          ? `${authEpoch}:${tempUuid}`
+          : null;
+      if (statsKey && statsToken && baseAscensionistCount != null) {
+        beginOptimisticAscent(statsKey, statsToken, authEpoch, baseAscensionistCount);
+      }
       const optimisticEntry = buildOptimisticTickEntry(options, tempUuid);
       queryClient.setQueryData<LogbookEntry[]>(accumulatedKey, (existing = []) => [optimisticEntry, ...existing]);
 
-      return { tempUuid };
+      return { tempUuid, authEpoch, statsKey, statsToken };
     },
-    onSuccess: (savedTick, options, context) => {
+    onSuccess: ({ savedTick, delivery }, options, context) => {
       const savedEntry = toLogbookEntry(savedTick);
       // `setQueriesData` (not `setQueryData`) so a logbook cache that was
       // removed mid-flight (e.g. invalidate fired between mutate and
@@ -109,6 +159,15 @@ export function useSaveTick(boardName: BoardName | null) {
       queryClient.setQueriesData<LogbookEntry[]>({ queryKey: accumulatedKey, exact: true }, (existing = []) =>
         applySavedTickToLogbook(existing ?? [], savedEntry, context?.tempUuid),
       );
+
+      if (context?.statsToken && context.statsKey && (adapter.isAuthEpochCurrent?.(context.authEpoch) ?? true)) {
+        if (delivery === 'queued') {
+          markOptimisticAscentQueued(context.statsToken, savedTick.uuid, context.authEpoch);
+        } else {
+          acknowledgeOptimisticAscent(context.statsToken, context.authEpoch);
+          scheduleAcknowledgedClimbStatsRead(adapter, context.statsKey);
+        }
+      }
 
       onTickSaved?.(options.climbUuid, options.angle);
 
@@ -150,6 +209,9 @@ export function useSaveTick(boardName: BoardName | null) {
         queryClient.setQueriesData<LogbookEntry[]>({ queryKey: accumulatedKey, exact: true }, (existing = []) =>
           rollbackOptimisticTick(existing ?? [], tempUuid),
         );
+      }
+      if (context?.statsToken && (adapter.isAuthEpochCurrent?.(context.authEpoch) ?? true)) {
+        rejectOptimisticAscent(context.statsToken, context.authEpoch);
       }
     },
   });

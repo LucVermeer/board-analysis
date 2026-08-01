@@ -252,6 +252,28 @@ type SetterStat {
 }
 
 """
+Complete canonical statistics for one climb and angle. Published after the
+debounced tick recompute. The layout-scoped subscription carries full rows,
+not deltas, so one event repairs a missed optimistic update without a second
+read. syncSeq is decimal text because JavaScript numbers cannot safely carry
+PostgreSQL bigint revisions.
+"""
+type ClimbStatsEvent {
+  boardType: String!
+  layoutId: Int!
+  climbUuid: ID!
+  angle: Int!
+  ascensionistCount: Int!
+  qualityAverage: Float
+  difficultyAverage: Float
+  displayDifficulty: Float
+  difficulty: String
+  faUsername: String
+  faAt: String
+  syncSeq: String!
+}
+
+"""
 User information displayed in queue items.
 """
 type QueueItemUser {
@@ -703,6 +725,8 @@ type ClimbStatsForAngle {
   faUsername: String
   "When the first ascent was logged (ISO timestamp)"
   faAt: String
+  "Monotonic database revision, encoded as decimal text to preserve bigint precision"
+  syncSeq: String!
 }
 
 """
@@ -6547,6 +6571,13 @@ type Subscription {
   Subscribe to new climbs for a board type and layout.
   """
   newClimbCreated(boardType: String!, layoutId: Int!): NewClimbCreatedEvent!
+
+  """
+  Subscribe to canonical climb-stat rows for a board layout. Authenticated
+  users only. Each event is a complete replacement row and carries a decimal
+  bigint revision for stale-event rejection.
+  """
+  climbStatsUpdated(boardType: String!, layoutId: Int!): ClimbStatsEvent!
 
   """
   Subscribe to the live "now on the wall" feed for a shared board (board_id

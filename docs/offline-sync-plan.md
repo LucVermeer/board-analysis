@@ -189,6 +189,15 @@ The obvious-seeming alternative — write only to the data tables and sync "unsy
 5. Processed mutations are removed from the queue.
 6. Failed mutations are retried up to `MAX_RETRY_COUNT` (10), then moved to dead letter state.
 
+The drainer also exposes a renderer-neutral delivery notification after local
+bookkeeping completes: `acknowledged` after the outbox row is deleted, or
+`dead_letter` after a permanent failure. Tick-create notifications carry the
+outbox idempotency key, which is the tick UUID. The mobile adapter fans these
+events to `@boardsesh/board-react` so an offline first-send floor remains visible
+until the canonical climb-stat count reaches it after acknowledgement, and is
+removed immediately on dead letter. Listener failures are isolated from the
+drain itself; this seam does not change replay ordering or retry behavior.
+
 ### Mutation queue schema
 
 ```sql

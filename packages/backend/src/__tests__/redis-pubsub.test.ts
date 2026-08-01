@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vite-plus/test';
 import Redis from 'ioredis';
 import { createRedisPubSubAdapter, type RedisPubSubAdapter } from '../pubsub/redis-adapter';
-import type { QueueEvent, SessionEvent } from '@boardsesh/shared-schema';
+import type { ClimbStatsEvent, QueueEvent, SessionEvent } from '@boardsesh/shared-schema';
 
 // Integration tests require Redis to be running
 // Run with: docker-compose -f docker-compose.test.yml up redis
@@ -136,6 +136,36 @@ describe('Redis PubSub Adapter', () => {
 
       // Cleanup
       await adapter2.unsubscribeSessionChannel(sessionId);
+    });
+
+    it('delivers complete climb-stats events across instances by layout key', async () => {
+      const channelKey = 'kilter:1';
+      const receivedEvents: ClimbStatsEvent[] = [];
+      adapter2.onClimbStatsMessage((receivedKey, event) => {
+        if (receivedKey === channelKey) receivedEvents.push(event);
+      });
+      await adapter2.subscribeClimbStatsChannel(channelKey);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const event: ClimbStatsEvent = {
+        boardType: 'kilter',
+        layoutId: 1,
+        climbUuid: 'climb-live-stats',
+        angle: 40,
+        ascensionistCount: 12,
+        qualityAverage: 3.5,
+        difficultyAverage: 20.4,
+        displayDifficulty: 20.6,
+        difficulty: '7a/V6',
+        faUsername: 'setter',
+        faAt: '2026-08-01T00:00:00.000Z',
+        syncSeq: '90071992547409930',
+      };
+      await adapter1.publishClimbStatsEvent(channelKey, event);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      expect(receivedEvents).toEqual([event]);
+      await adapter2.unsubscribeClimbStatsChannel(channelKey);
     });
 
     it('should NOT deliver messages to the same instance that published them', async () => {

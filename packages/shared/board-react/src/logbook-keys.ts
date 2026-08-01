@@ -103,6 +103,11 @@ export function fetchLogbookQueryKeyPrefix(boardName: BoardName | null) {
   return ['logbook', boardName, 'fetch'] as const;
 }
 
+/** Authoritative coverage marker used by first-send optimistic stats. */
+export function fetchedLogbookClimbUuidsQueryKey(boardName: BoardName | null) {
+  return ['logbook', boardName, 'fetched-climb-uuids'] as const;
+}
+
 export function fetchLogbookQueryKey(boardName: BoardName | null, climbUuids: string[]) {
   return [...fetchLogbookQueryKeyPrefix(boardName), [...climbUuids].sort().join(',')] as const;
 }

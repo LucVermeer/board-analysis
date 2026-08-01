@@ -71,9 +71,18 @@ vi.mock('../../lib/analytics', () => ({ track: vi.fn() }));
 // "save, don't double-count as a dismiss" path can be driven without the real
 // form.
 vi.mock('../play-drawer/QuickTickBar', () => ({
-  QuickTickBar: ({ onDismiss, savedRef }: { onDismiss: () => void; savedRef?: { current: boolean } }) =>
+  QuickTickBar: ({
+    onDismiss,
+    savedRef,
+    baseAscensionistCount,
+  }: {
+    onDismiss: () => void;
+    savedRef?: { current: boolean };
+    baseAscensionistCount: number;
+  }) =>
     createElement('button', {
       'data-testid': 'simulate-save-success',
+      'data-base-ascensionist-count': baseAscensionistCount,
       onClick: () => {
         if (savedRef) savedRef.current = true;
         onDismiss();
@@ -95,6 +104,7 @@ function renderSheet(overrides: Partial<Parameters<typeof LogAscentSheet>[0]> = 
       angle: 40,
       isMirror: false,
       isBenchmark: false,
+      baseAscensionistCount: 10,
       layoutId: 7,
       ...overrides,
     }),
@@ -107,6 +117,12 @@ beforeEach(() => {
 });
 
 describe('LogAscentSheet dismiss tracking', () => {
+  it('threads the immutable mutation-time count into QuickTickBar', () => {
+    const { getByTestId } = renderSheet({ baseAscensionistCount: 37 });
+
+    expect(getByTestId('simulate-save-success').getAttribute('data-base-ascensionist-count')).toBe('37');
+  });
+
   it('fires Quick Tick Dismissed when the X-button closes an unsaved form', () => {
     const { container, onClose } = renderSheet();
 
@@ -156,6 +172,7 @@ describe('LogAscentSheet dismiss tracking', () => {
         angle: 40,
         isMirror: false,
         isBenchmark: false,
+        baseAscensionistCount: 10,
       }),
     );
 
@@ -173,6 +190,7 @@ describe('LogAscentSheet dismiss tracking', () => {
         angle: 40,
         isMirror: false,
         isBenchmark: false,
+        baseAscensionistCount: 10,
       }),
     );
     rerender(
@@ -184,6 +202,7 @@ describe('LogAscentSheet dismiss tracking', () => {
         angle: 40,
         isMirror: false,
         isBenchmark: false,
+        baseAscensionistCount: 10,
       }),
     );
 

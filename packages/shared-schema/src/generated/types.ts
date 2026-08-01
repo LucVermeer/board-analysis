@@ -1153,6 +1153,29 @@ export type ClimbSearchResult = {
 };
 
 /**
+ * Complete canonical statistics for one climb and angle. Published after the
+ * debounced tick recompute. The layout-scoped subscription carries full rows,
+ * not deltas, so one event repairs a missed optimistic update without a second
+ * read. syncSeq is decimal text because JavaScript numbers cannot safely carry
+ * PostgreSQL bigint revisions.
+ */
+export type ClimbStatsEvent = {
+  __typename?: 'ClimbStatsEvent';
+  angle: Scalars['Int']['output'];
+  ascensionistCount: Scalars['Int']['output'];
+  boardType: Scalars['String']['output'];
+  climbUuid: Scalars['ID']['output'];
+  difficulty?: Maybe<Scalars['String']['output']>;
+  difficultyAverage?: Maybe<Scalars['Float']['output']>;
+  displayDifficulty?: Maybe<Scalars['Float']['output']>;
+  faAt?: Maybe<Scalars['String']['output']>;
+  faUsername?: Maybe<Scalars['String']['output']>;
+  layoutId: Scalars['Int']['output'];
+  qualityAverage?: Maybe<Scalars['Float']['output']>;
+  syncSeq: Scalars['String']['output'];
+};
+
+/**
  * Current statistics for a climb at one angle, read from the live stats table.
  * One entry per angle the climb has been logged at.
  */
@@ -1174,6 +1197,8 @@ export type ClimbStatsForAngle = {
   faUsername?: Maybe<Scalars['String']['output']>;
   /** Average quality rating */
   qualityAverage?: Maybe<Scalars['Float']['output']>;
+  /** Monotonic database revision, encoded as decimal text to preserve bigint precision */
+  syncSeq: Scalars['String']['output'];
 };
 
 /**
@@ -7047,6 +7072,12 @@ export type Subscription = {
    * clear instead of showing the last queue forever.
    */
   boardQueuePreview: BoardQueuePreview;
+  /**
+   * Subscribe to canonical climb-stat rows for a board layout. Authenticated
+   * users only. Each event is a complete replacement row and carries a decimal
+   * bigint revision for stale-event rejection.
+   */
+  climbStatsUpdated: ClimbStatsEvent;
   /** Subscribe to real-time comment updates on an entity. */
   commentUpdates: CommentEvent;
   controllerEvents: ControllerEvent;
@@ -7071,6 +7102,12 @@ export type SubscriptionBoardNowPlayingArgs = {
 /** Root subscription type for real-time updates. */
 export type SubscriptionBoardQueuePreviewArgs = {
   boardId: Scalars['Int']['input'];
+};
+
+/** Root subscription type for real-time updates. */
+export type SubscriptionClimbStatsUpdatedArgs = {
+  boardType: Scalars['String']['input'];
+  layoutId: Scalars['Int']['input'];
 };
 
 /** Root subscription type for real-time updates. */
@@ -7914,6 +7951,7 @@ export type ResolversTypes = ResolversObject<{
   ClimbQueueItemInput: ClimbQueueItemInput;
   ClimbSearchInput: ClimbSearchInput;
   ClimbSearchResult: ResolverTypeWrapper<ClimbSearchResult>;
+  ClimbStatsEvent: ResolverTypeWrapper<ClimbStatsEvent>;
   ClimbStatsForAngle: ResolverTypeWrapper<ClimbStatsForAngle>;
   ClimbStatsHistoryEntry: ResolverTypeWrapper<ClimbStatsHistoryEntry>;
   Comment: ResolverTypeWrapper<Comment>;
@@ -8277,6 +8315,7 @@ export type ResolversParentTypes = ResolversObject<{
   ClimbQueueItemInput: ClimbQueueItemInput;
   ClimbSearchInput: ClimbSearchInput;
   ClimbSearchResult: ClimbSearchResult;
+  ClimbStatsEvent: ClimbStatsEvent;
   ClimbStatsForAngle: ClimbStatsForAngle;
   ClimbStatsHistoryEntry: ClimbStatsHistoryEntry;
   Comment: Comment;
@@ -9135,6 +9174,25 @@ export type ClimbSearchResultResolvers<
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
+export type ClimbStatsEventResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['ClimbStatsEvent'] = ResolversParentTypes['ClimbStatsEvent'],
+> = ResolversObject<{
+  angle?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  ascensionistCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  boardType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  climbUuid?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  difficulty?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  difficultyAverage?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
+  displayDifficulty?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
+  faAt?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  faUsername?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  layoutId?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  qualityAverage?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
+  syncSeq?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
 export type ClimbStatsForAngleResolvers<
   ContextType = ConnectionContext,
   ParentType extends ResolversParentTypes['ClimbStatsForAngle'] = ResolversParentTypes['ClimbStatsForAngle'],
@@ -9147,6 +9205,7 @@ export type ClimbStatsForAngleResolvers<
   faAt?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   faUsername?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   qualityAverage?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
+  syncSeq?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
@@ -12389,6 +12448,13 @@ export type SubscriptionResolvers<
     ContextType,
     RequireFields<SubscriptionBoardQueuePreviewArgs, 'boardId'>
   >;
+  climbStatsUpdated?: SubscriptionResolver<
+    ResolversTypes['ClimbStatsEvent'],
+    'climbStatsUpdated',
+    ParentType,
+    ContextType,
+    RequireFields<SubscriptionClimbStatsUpdatedArgs, 'boardType' | 'layoutId'>
+  >;
   commentUpdates?: SubscriptionResolver<
     ResolversTypes['CommentEvent'],
     'commentUpdates',
@@ -12753,6 +12819,7 @@ export type Resolvers<ContextType = ConnectionContext> = ResolversObject<{
   ClimbPlaylistMembership?: ClimbPlaylistMembershipResolvers<ContextType>;
   ClimbQueueItem?: ClimbQueueItemResolvers<ContextType>;
   ClimbSearchResult?: ClimbSearchResultResolvers<ContextType>;
+  ClimbStatsEvent?: ClimbStatsEventResolvers<ContextType>;
   ClimbStatsForAngle?: ClimbStatsForAngleResolvers<ContextType>;
   ClimbStatsHistoryEntry?: ClimbStatsHistoryEntryResolvers<ContextType>;
   Comment?: CommentResolvers<ContextType>;

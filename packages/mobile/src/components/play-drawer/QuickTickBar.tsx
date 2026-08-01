@@ -62,6 +62,8 @@ export type QuickTickBarProps = {
   angle: number;
   isMirror: boolean;
   isBenchmark: boolean;
+  /** Immutable community send count captured with the climb that opened this form. */
+  baseAscensionistCount: number;
   layoutId?: number;
   sizeId?: number;
   setIds?: string;
@@ -84,6 +86,7 @@ export const QuickTickBar = React.memo(function QuickTickBar({
   angle,
   isMirror,
   isBenchmark,
+  baseAscensionistCount,
   layoutId,
   sizeId,
   setIds,
@@ -259,6 +262,7 @@ export const QuickTickBar = React.memo(function QuickTickBar({
           quality: tickState.quality != null && tickState.quality > 0 ? tickState.quality : null,
           difficulty: tickState.difficulty ?? null,
           isBenchmark,
+          baseAscensionistCount,
           comment,
           // Untouched: log a fresh save-time "now". Edited: honour the pick
           // (clamped, in case the sheet sat open past the chosen minute).
@@ -325,6 +329,7 @@ export const QuickTickBar = React.memo(function QuickTickBar({
       angle,
       isMirror,
       isBenchmark,
+      baseAscensionistCount,
       sessionId,
       layoutId,
       sizeId,

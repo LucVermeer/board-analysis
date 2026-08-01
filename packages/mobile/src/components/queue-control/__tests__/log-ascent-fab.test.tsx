@@ -168,6 +168,7 @@ describe('LogAscentFab', () => {
       angle: 40,
       isMirror: true,
       isBenchmark: true,
+      baseAscensionistCount: climb.ascensionist_count,
       layoutId: 8,
       sizeId: 17,
       setIds: '26,27',

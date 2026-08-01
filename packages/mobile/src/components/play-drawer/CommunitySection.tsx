@@ -1,6 +1,8 @@
 import { memo, useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import type { BoardName } from '@boardsesh/shared-schema';
+import { useEffectiveClimbStats } from '@boardsesh/board-react';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { DifficultyByAngleChart } from './DifficultyByAngleChart';
@@ -14,6 +16,8 @@ import { spacing } from '../../theme/tokens';
 type CommunitySectionProps = {
   climbUuid: string;
   boardName: string;
+  layoutId: number;
+  angle: number;
   qualityAverage: string;
   ascensionistCount: number;
 };
@@ -21,16 +25,24 @@ type CommunitySectionProps = {
 export const CommunitySection = memo(function CommunitySection({
   climbUuid,
   boardName,
+  layoutId,
+  angle,
   qualityAverage,
   ascensionistCount,
 }: CommunitySectionProps) {
   const { t } = useTranslation('session');
   const { gradeFormat } = useGradeFormat();
   const { data: history } = useClimbStatsHistory(boardName, climbUuid);
+  const liveStats = useEffectiveClimbStats(boardName as BoardName, layoutId, climbUuid, angle, {
+    ascensionistCount,
+    qualityAverage,
+  });
 
-  const qualityNum = parseFloat(qualityAverage);
+  const liveQualityAverage = liveStats.qualityAverage;
+  const qualityNum = liveQualityAverage == null ? Number.NaN : parseFloat(liveQualityAverage);
   const hasQuality = qualityNum > 0;
-  const hasAscensionists = ascensionistCount > 0;
+  const formattedQuality = hasQuality && liveQualityAverage != null ? formatQuality(liveQualityAverage) : null;
+  const hasAscensionists = liveStats.ascensionistCount > 0;
 
   const starIcons = useMemo(() => {
     if (!hasQuality) return null;
@@ -64,7 +76,7 @@ export const CommunitySection = memo(function CommunitySection({
         <View style={styles.statRow}>
           <View style={styles.starsRow}>{starIcons}</View>
           <Text variant="subheadline" color={iosSystemColors.systemGray}>
-            {formatQuality(qualityAverage)} &middot; {t('mobile.community.avgQuality')}
+            {formattedQuality} &middot; {t('mobile.community.avgQuality')}
           </Text>
         </View>
       )}
@@ -72,7 +84,9 @@ export const CommunitySection = memo(function CommunitySection({
       {hasAscensionists && (
         <View style={styles.statRow}>
           <Icon name="people" size={18} color={iosSystemColors.systemGray} />
-          <Text variant="subheadline">{t('mobile.community.ascensionists', { count: ascensionistCount })}</Text>
+          <Text variant="subheadline">
+            {t('mobile.community.ascensionists', { count: liveStats.ascensionistCount })}
+          </Text>
         </View>
       )}
 

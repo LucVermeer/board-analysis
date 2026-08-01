@@ -1150,6 +1150,29 @@ export type ClimbSearchResult = {
 };
 
 /**
+ * Complete canonical statistics for one climb and angle. Published after the
+ * debounced tick recompute. The layout-scoped subscription carries full rows,
+ * not deltas, so one event repairs a missed optimistic update without a second
+ * read. syncSeq is decimal text because JavaScript numbers cannot safely carry
+ * PostgreSQL bigint revisions.
+ */
+export type ClimbStatsEvent = {
+  __typename?: 'ClimbStatsEvent';
+  angle: Scalars['Int']['output'];
+  ascensionistCount: Scalars['Int']['output'];
+  boardType: Scalars['String']['output'];
+  climbUuid: Scalars['ID']['output'];
+  difficulty?: Maybe<Scalars['String']['output']>;
+  difficultyAverage?: Maybe<Scalars['Float']['output']>;
+  displayDifficulty?: Maybe<Scalars['Float']['output']>;
+  faAt?: Maybe<Scalars['String']['output']>;
+  faUsername?: Maybe<Scalars['String']['output']>;
+  layoutId: Scalars['Int']['output'];
+  qualityAverage?: Maybe<Scalars['Float']['output']>;
+  syncSeq: Scalars['String']['output'];
+};
+
+/**
  * Current statistics for a climb at one angle, read from the live stats table.
  * One entry per angle the climb has been logged at.
  */
@@ -1171,6 +1194,8 @@ export type ClimbStatsForAngle = {
   faUsername?: Maybe<Scalars['String']['output']>;
   /** Average quality rating */
   qualityAverage?: Maybe<Scalars['Float']['output']>;
+  /** Monotonic database revision, encoded as decimal text to preserve bigint precision */
+  syncSeq: Scalars['String']['output'];
 };
 
 /**
@@ -7044,6 +7069,12 @@ export type Subscription = {
    * clear instead of showing the last queue forever.
    */
   boardQueuePreview: BoardQueuePreview;
+  /**
+   * Subscribe to canonical climb-stat rows for a board layout. Authenticated
+   * users only. Each event is a complete replacement row and carries a decimal
+   * bigint revision for stale-event rejection.
+   */
+  climbStatsUpdated: ClimbStatsEvent;
   /** Subscribe to real-time comment updates on an entity. */
   commentUpdates: CommentEvent;
   controllerEvents: ControllerEvent;
@@ -7068,6 +7099,12 @@ export type SubscriptionBoardNowPlayingArgs = {
 /** Root subscription type for real-time updates. */
 export type SubscriptionBoardQueuePreviewArgs = {
   boardId: Scalars['Int']['input'];
+};
+
+/** Root subscription type for real-time updates. */
+export type SubscriptionClimbStatsUpdatedArgs = {
+  boardType: Scalars['String']['input'];
+  layoutId: Scalars['Int']['input'];
 };
 
 /** Root subscription type for real-time updates. */
@@ -7970,6 +8007,7 @@ export type ClimbStatsForAnglesQuery = {
     difficulty?: string | null;
     faUsername?: string | null;
     faAt?: string | null;
+    syncSeq: string;
   }>;
 };
 
@@ -10947,6 +10985,7 @@ export const ClimbStatsForAnglesDocument = {
                 { kind: 'Field', name: { kind: 'Name', value: 'difficulty' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'faUsername' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'faAt' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'syncSeq' } },
               ],
             },
           },

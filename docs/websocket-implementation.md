@@ -174,6 +174,31 @@ The web and mobile queue providers are thin wrappers around a small stack of sha
 
 `RedisClientManager.onRedisReady` runs registered recovery handlers after all three connections are ready and before request handlers see Redis as connected. A handler registered during an in-flight readiness pass joins that same barrier; one registered after Redis is connected runs immediately. Failures are isolated so Redis can still become available. Duplicate-gym report claims drain generation-stamped snapshots through the end of readiness recovery, including claims accepted while an earlier Redis write is awaiting a response. Request-path retries remain opportunistic and back off to once per minute during a persistent partition.
 
+### Live climb-stat stream
+
+The Expo native/browser climbing surface holds one authenticated
+`climbStatsUpdated(boardType, layoutId)` subscription for the active layout on
+the existing mobile `graphql-ws` singleton. The backend caps this at eight
+layout subscriptions per connection and validates both inputs before joining
+the `boardsesh:climb-stats-layout:{boardType}:{layoutId}` Redis channel.
+
+After a tick recompute commits, the publisher reads the complete canonical
+`board_climb_stats` row and layout from the primary database, then publishes a
+full snapshot. `syncSeq` is decimal text rather than a JavaScript number;
+clients compare it with `BigInt` and discard duplicate/stale revisions. Redis
+fan-out is multi-instance, while the existing fail-open recompute behavior is
+preserved: if Redis coordination fails, duplicate recomputes/events are safe
+because the revision gate makes them idempotent.
+
+`@boardsesh/board-react` stores only exact keys retained by mounted selectors or
+optimistic mutations, so a layout-wide stream cannot grow an unbounded client
+map. Mobile performs bounded primary catch-up reads on mount/reconnect/error and
+after an acknowledged tick, covering a missed publish. The visible send count
+is `max(server-rendered base, canonical event, optimistic floor)`; canonical
+quality and community difficulty update in memoized row/header children without
+re-rendering the board art or gesture shell. Boardsesh-grade fields still win
+when that display preference is active.
+
 ---
 
 ## Connection Flow

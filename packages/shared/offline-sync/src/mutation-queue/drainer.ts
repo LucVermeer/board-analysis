@@ -107,7 +107,30 @@ export type DrainOptions = {
    * packages/mobile/src/offline/offline-sync-adapter.ts; tests pass a literal.
    */
   isOnline: () => boolean;
+  /**
+   * Delivery seam for optimistic UI that must distinguish a durable local
+   * enqueue from server acknowledgement or permanent rejection. The
+   * idempotency key is the entity UUID for tick creates.
+   */
+  onMutationStatus?: (event: MutationDeliveryEvent) => void;
 };
+
+export type MutationDeliveryEvent = {
+  tableName: string;
+  operation: string;
+  idempotencyKey: string;
+  status: 'acknowledged' | 'dead_letter';
+};
+
+function notifyMutationStatus(options: DrainOptions, event: MutationDeliveryEvent): void {
+  try {
+    options.onMutationStatus?.(event);
+  } catch (error) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('[MutationQueue] mutation-status listener failed:', error);
+    }
+  }
+}
 
 function defaultSleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -219,6 +242,12 @@ export async function drainMutationQueue(
           }
           await markCompleted(db, mutation.id);
           invalidateForTable(queryClient, mutation.table_name);
+          notifyMutationStatus(options, {
+            tableName: mutation.table_name,
+            operation: mutation.operation,
+            idempotencyKey: mutation.idempotency_key,
+            status: 'acknowledged',
+          });
         } catch (error: unknown) {
           const errorMessage = formatError(error);
 
@@ -253,10 +282,18 @@ export async function drainMutationQueue(
             // One atomic UPDATE bumps the retry and, when the bumped count hits
             // max_retries, flips to dead_letter — no window where the row is
             // exhausted-but-still-pending.
-            await recordFailure(db, mutation.id, errorMessage);
+            const status = await recordFailure(db, mutation.id, errorMessage);
             // The row may have just flipped to dead_letter; refresh the pending
             // badges either way (an extra COUNT requery is harmless).
             invalidateForTable(queryClient, mutation.table_name);
+            if (status === 'dead_letter') {
+              notifyMutationStatus(options, {
+                tableName: mutation.table_name,
+                operation: mutation.operation,
+                idempotencyKey: mutation.idempotency_key,
+                status,
+              });
+            }
             retryableHit = true;
             break;
           } else {
@@ -264,6 +301,12 @@ export async function drainMutationQueue(
             // dead-letter immediately regardless of retry_count.
             await markDeadLetter(db, mutation.id, errorMessage);
             invalidateForTable(queryClient, mutation.table_name);
+            notifyMutationStatus(options, {
+              tableName: mutation.table_name,
+              operation: mutation.operation,
+              idempotencyKey: mutation.idempotency_key,
+              status: 'dead_letter',
+            });
           }
         }
       }

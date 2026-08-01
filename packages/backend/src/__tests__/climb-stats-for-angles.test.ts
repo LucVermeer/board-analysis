@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
 // Mock the live-stats query: capture what the resolver selects and feed it
-// canned rows. The chain mirrors dbRead.select().from().where().orderBy().
-const { selectRows, dbReadMock } = vi.hoisted(() => {
+// canned rows. The chain mirrors primary db.select().from().where().orderBy().
+const { selectRows, dbMock } = vi.hoisted(() => {
   const state: { rows: unknown[] } = { rows: [] };
   const chain = {
     from: vi.fn(() => chain),
@@ -11,13 +11,13 @@ const { selectRows, dbReadMock } = vi.hoisted(() => {
   };
   return {
     selectRows: state,
-    dbReadMock: { select: vi.fn(() => chain) },
+    dbMock: { select: vi.fn(() => chain) },
   };
 });
 
 vi.mock('../db/client', () => ({
-  db: {},
-  dbRead: dbReadMock,
+  db: dbMock,
+  dbRead: {},
 }));
 
 // Deterministic grade labels so we assert the mapping, not the grade table.
@@ -66,6 +66,7 @@ describe('climbStatsForAngles resolver', () => {
         qualityAverage: 3.5,
         difficultyAverage: 20.4,
         displayDifficulty: 20.6,
+        syncSeq: '90071992547409930',
         faUsername: 'Alice',
         faAt: '2024-01-02T00:00:00Z',
       },
@@ -81,6 +82,7 @@ describe('climbStatsForAngles resolver', () => {
         difficultyAverage: 20.4,
         displayDifficulty: 20.6,
         difficulty: 'V21', // round(20.6) -> 21
+        syncSeq: '90071992547409930',
         faUsername: 'Alice',
         faAt: '2024-01-02T00:00:00Z',
       },
@@ -95,6 +97,7 @@ describe('climbStatsForAngles resolver', () => {
         qualityAverage: null,
         difficultyAverage: null,
         displayDifficulty: null,
+        syncSeq: '2',
         faUsername: null,
         faAt: null,
       },
@@ -112,7 +115,7 @@ describe('climbStatsForAngles resolver', () => {
     const result = await callResolver('kilter', 'CLIMB-NONE');
 
     expect(result).toEqual([]);
-    expect(dbReadMock.select).toHaveBeenCalledTimes(1);
+    expect(dbMock.select).toHaveBeenCalledTimes(1);
   });
 
   it('applies a 60/min rate limit for this operation before querying', async () => {
@@ -125,16 +128,16 @@ describe('climbStatsForAngles resolver', () => {
     applyRateLimitMock.mockRejectedValueOnce(new Error('RATE_LIMITED'));
 
     await expect(callResolver('kilter', 'CLIMB-1')).rejects.toThrow('RATE_LIMITED');
-    expect(dbReadMock.select).not.toHaveBeenCalled();
+    expect(dbMock.select).not.toHaveBeenCalled();
   });
 
   it('rejects an unknown board name', async () => {
     await expect(callResolver('notaboard', 'CLIMB-1')).rejects.toThrow();
-    expect(dbReadMock.select).not.toHaveBeenCalled();
+    expect(dbMock.select).not.toHaveBeenCalled();
   });
 
   it('rejects an empty climb uuid', async () => {
     await expect(callResolver('kilter', '')).rejects.toThrow();
-    expect(dbReadMock.select).not.toHaveBeenCalled();
+    expect(dbMock.select).not.toHaveBeenCalled();
   });
 });
