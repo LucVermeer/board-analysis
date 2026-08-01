@@ -80,6 +80,9 @@ const nextConfig = {
   turbopack: {},
   experimental: {
     optimizePackageImports: ['@mui/material', '@mui/icons-material', '@mui/material-nextjs'],
+    // Next's build-time type check normally drives the TypeScript compiler API,
+    // which 7.0 no longer ships. This routes that step through `tsc` instead.
+    useTypeScriptCli: true,
     // Tree-shake the gql.ts Documents map by rewriting graphql(`...`) calls
     // into direct imports of the matching *Document constant.
     // - Runs during `next build` (Turbopack production); does not run under

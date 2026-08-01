@@ -29,7 +29,8 @@
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import ts from 'typescript';
+// TypeScript 7 ships no compiler API — see the note in check-orphaned-i18n-keys.ts.
+import ts from 'typescript-compiler-api';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const webRoot = join(here, '..');
