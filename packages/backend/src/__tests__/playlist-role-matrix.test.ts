@@ -13,6 +13,7 @@ const ADDED_CLIMB_UUID = `4016-add-${FIXTURE_RUN_ID}`;
 const OWNER_ID = `issue-4016-owner-${FIXTURE_RUN_ID}`;
 const EDITOR_ID = `issue-4016-editor-${FIXTURE_RUN_ID}`;
 const VIEWER_ID = `issue-4016-viewer-${FIXTURE_RUN_ID}`;
+const UNRELATED_ID = `issue-4016-unrelated-${FIXTURE_RUN_ID}`;
 
 function makeCtx(userId: string): ConnectionContext {
   return {
@@ -45,7 +46,8 @@ describe('playlist ownership role matrix — real Postgres (#4016)', () => {
       VALUES
         (${OWNER_ID}, ${`${OWNER_ID}@test.invalid`}, 'Playlist owner'),
         (${EDITOR_ID}, ${`${EDITOR_ID}@test.invalid`}, 'Playlist editor'),
-        (${VIEWER_ID}, ${`${VIEWER_ID}@test.invalid`}, 'Playlist viewer')
+        (${VIEWER_ID}, ${`${VIEWER_ID}@test.invalid`}, 'Playlist viewer'),
+        (${UNRELATED_ID}, ${`${UNRELATED_ID}@test.invalid`}, 'Unrelated user')
       ON CONFLICT (id) DO NOTHING
     `);
 
@@ -89,7 +91,7 @@ describe('playlist ownership role matrix — real Postgres (#4016)', () => {
   afterAll(async () => {
     await db.execute(sql`DELETE FROM playlists WHERE uuid = ${PLAYLIST_UUID}`);
     await db.execute(sql`DELETE FROM board_climbs WHERE uuid IN (${SEEDED_CLIMB_UUID}, ${ADDED_CLIMB_UUID})`);
-    await db.execute(sql`DELETE FROM users WHERE id IN (${OWNER_ID}, ${EDITOR_ID}, ${VIEWER_ID})`);
+    await db.execute(sql`DELETE FROM users WHERE id IN (${OWNER_ID}, ${EDITOR_ID}, ${VIEWER_ID}, ${UNRELATED_ID})`);
   });
 
   it('shows only the owner in libraries and edit-picker memberships', async () => {
@@ -166,6 +168,39 @@ describe('playlist ownership role matrix — real Postgres (#4016)', () => {
     );
     expect(result.totalCount).toBe(1);
     expect(result.climbs.map((climb) => climb.uuid)).toEqual([SEEDED_CLIMB_UUID]);
+  });
+
+  it('allows only the owner to update playlist metadata', async () => {
+    const ownerUpdatedName = 'Owner-updated role matrix playlist';
+
+    await expect(
+      playlistMutations.updatePlaylist(
+        null,
+        { input: { playlistId: PLAYLIST_UUID, name: ownerUpdatedName } },
+        makeCtx(OWNER_ID),
+      ),
+    ).resolves.toMatchObject({ uuid: PLAYLIST_UUID, name: ownerUpdatedName, userRole: 'owner' });
+
+    for (const [role, userId] of [
+      ['editor', EDITOR_ID],
+      ['viewer', VIEWER_ID],
+      ['unrelated', UNRELATED_ID],
+    ] as const) {
+      await expectExactAuthorizationError(
+        () =>
+          playlistMutations.updatePlaylist(
+            null,
+            { input: { playlistId: PLAYLIST_UUID, name: `${role} must not update this playlist` } },
+            makeCtx(userId),
+          ),
+        'Playlist not found or you do not have permission to edit it',
+      );
+    }
+
+    const [playlistRow] = await db.execute(sql`
+      SELECT name FROM playlists WHERE uuid = ${PLAYLIST_UUID}
+    `);
+    expect((playlistRow as { name: string }).name).toBe(ownerUpdatedName);
   });
 
   it.each([
