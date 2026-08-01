@@ -36,7 +36,11 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import ts from 'typescript';
+// TypeScript 7 ships no compiler API — its `typescript` entry point exports only
+// the version string, and the `unstable/ast` subpath has the node guards but no
+// source-text parser or `forEachChild`. The API returns in 7.1; until then this
+// AST walk runs on a pinned 6.x copy. See `typescript-compiler-api` in package.json.
+import ts from 'typescript-compiler-api';
 import { DEFAULT_NAMESPACE } from '../app/lib/i18n/config';
 
 const here = dirname(fileURLToPath(import.meta.url));

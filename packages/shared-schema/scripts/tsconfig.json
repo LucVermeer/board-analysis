@@ -2,6 +2,10 @@
   "extends": "../tsconfig.json",
   "compilerOptions": {
     "noEmit": true,
+    // print-schema.ts sits in scripts/ but imports from src/, so the root has to
+    // be the package itself. The inherited "./src" covers only one of the two,
+    // which TypeScript rejects even under noEmit.
+    "rootDir": "..",
     "types": ["node"]
   },
   "include": ["."]
