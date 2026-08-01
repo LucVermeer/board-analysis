@@ -5,7 +5,7 @@ import { useTheme } from '../providers/theme-provider';
 import { usePlaylistsContextOptional } from '../providers/playlists-provider';
 import { useClimbPlaylistMemberships } from '../hooks/use-climb-playlist-memberships';
 import { useShowPlaylistTagsPreference } from '../lib/show-playlist-tags-preference';
-import { isValidHexColor, PLAYLIST_COLORS } from './playlist/playlist-colors';
+import { isValidPlaylistColor, PLAYLIST_COLORS } from './playlist/playlist-colors';
 import { resolvePlaylistEmojiIcon } from './playlist/playlist-icon';
 import { spacing, borderRadius } from '../theme/tokens';
 import { selectByVariant } from '../theme/variants';
@@ -51,7 +51,7 @@ export const ClimbPlaylistChips = React.memo(function ClimbPlaylistChips({ climb
       const playlist = playlistsById.get(playlistUuid);
       if (!playlist) continue;
       const dotColor =
-        playlist.color && isValidHexColor(playlist.color)
+        playlist.color && isValidPlaylistColor(playlist.color)
           ? playlist.color
           : PLAYLIST_COLORS[index % PLAYLIST_COLORS.length];
       resolved.push({

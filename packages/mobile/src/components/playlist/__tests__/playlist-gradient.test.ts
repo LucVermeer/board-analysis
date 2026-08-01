@@ -47,5 +47,6 @@ describe('buildHeroGradient', () => {
   it('falls back to the brand violet for missing or invalid colours', () => {
     expect(buildHeroGradient(undefined).colors[1]).toBe(PLAYLIST_COLORS[0]);
     expect(buildHeroGradient('not-a-colour').colors[1]).toBe(PLAYLIST_COLORS[0]);
+    expect(buildHeroGradient('#fff').colors[1]).toBe(PLAYLIST_COLORS[0]);
   });
 });

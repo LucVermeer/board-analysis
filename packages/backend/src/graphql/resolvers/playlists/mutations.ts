@@ -276,12 +276,19 @@ export const playlistMutations = {
 
     const userId = ctx.userId!;
 
-    // Check ownership/access
+    // Check owner role. Editors/viewers retain private read access, but cannot
+    // mutate playlist contents.
     const ownership = await db
       .select({ id: dbSchema.playlists.id })
       .from(dbSchema.playlistOwnership)
       .innerJoin(dbSchema.playlists, eq(dbSchema.playlists.id, dbSchema.playlistOwnership.playlistId))
-      .where(and(eq(dbSchema.playlists.uuid, validatedInput.playlistId), eq(dbSchema.playlistOwnership.userId, userId)))
+      .where(
+        and(
+          eq(dbSchema.playlists.uuid, validatedInput.playlistId),
+          eq(dbSchema.playlistOwnership.userId, userId),
+          eq(dbSchema.playlistOwnership.role, 'owner'),
+        ),
+      )
       .limit(1);
 
     if (ownership.length === 0) {
@@ -395,12 +402,19 @@ export const playlistMutations = {
 
     const userId = ctx.userId!;
 
-    // Check ownership/access
+    // Check owner role. Editors/viewers retain private read access, but cannot
+    // mutate playlist contents.
     const ownership = await db
       .select({ id: dbSchema.playlists.id })
       .from(dbSchema.playlistOwnership)
       .innerJoin(dbSchema.playlists, eq(dbSchema.playlists.id, dbSchema.playlistOwnership.playlistId))
-      .where(and(eq(dbSchema.playlists.uuid, validatedInput.playlistId), eq(dbSchema.playlistOwnership.userId, userId)))
+      .where(
+        and(
+          eq(dbSchema.playlists.uuid, validatedInput.playlistId),
+          eq(dbSchema.playlistOwnership.userId, userId),
+          eq(dbSchema.playlistOwnership.role, 'owner'),
+        ),
+      )
       .limit(1);
 
     if (ownership.length === 0) {
@@ -443,12 +457,18 @@ export const playlistMutations = {
 
     const userId = ctx.userId!;
 
-    // Check ownership/access (same userId-match gate as add/remove climb).
+    // Check owner role (same gate as add/remove climb).
     const ownership = await db
       .select({ id: dbSchema.playlists.id })
       .from(dbSchema.playlistOwnership)
       .innerJoin(dbSchema.playlists, eq(dbSchema.playlists.id, dbSchema.playlistOwnership.playlistId))
-      .where(and(eq(dbSchema.playlists.uuid, validatedInput.playlistId), eq(dbSchema.playlistOwnership.userId, userId)))
+      .where(
+        and(
+          eq(dbSchema.playlists.uuid, validatedInput.playlistId),
+          eq(dbSchema.playlistOwnership.userId, userId),
+          eq(dbSchema.playlistOwnership.role, 'owner'),
+        ),
+      )
       .limit(1);
 
     if (ownership.length === 0) {
@@ -518,12 +538,18 @@ export const playlistMutations = {
 
     const userId = ctx.userId!;
 
-    // Verify ownership
+    // Only owners may move a playlist in their library ordering.
     const ownership = await db
       .select({ id: dbSchema.playlists.id })
       .from(dbSchema.playlistOwnership)
       .innerJoin(dbSchema.playlists, eq(dbSchema.playlists.id, dbSchema.playlistOwnership.playlistId))
-      .where(and(eq(dbSchema.playlists.uuid, playlistId), eq(dbSchema.playlistOwnership.userId, userId)))
+      .where(
+        and(
+          eq(dbSchema.playlists.uuid, playlistId),
+          eq(dbSchema.playlistOwnership.userId, userId),
+          eq(dbSchema.playlistOwnership.role, 'owner'),
+        ),
+      )
       .limit(1);
 
     if (ownership.length === 0) {

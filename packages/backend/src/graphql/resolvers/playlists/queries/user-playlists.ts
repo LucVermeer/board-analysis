@@ -8,11 +8,11 @@ import { getPlaylistFollowStats } from '../helpers/follow-stats';
 import { getClimbCounts, formatOwnedPlaylist, type OwnedPlaylistRow } from '../helpers/enrichment';
 
 /**
- * Build the select shape for owned-playlist queries. Takes the current user
- * id so we can compute isPinnedByMe via a LEFT JOIN against userPlaylistPins
- * — same query, no extra round-trip.
+ * Build the select shape for owned-playlist queries. isPinnedByMe is computed
+ * by the caller's user-scoped LEFT JOIN against userPlaylistPins — same query,
+ * no extra round-trip.
  */
-function ownedPlaylistSelect(userId: string) {
+function ownedPlaylistSelect() {
   return {
     id: dbSchema.playlists.id,
     uuid: dbSchema.playlists.uuid,
@@ -62,7 +62,7 @@ export const userPlaylists = async (
   const userId = ctx.userId!;
 
   const userPlaylists = await db
-    .select(ownedPlaylistSelect(userId))
+    .select(ownedPlaylistSelect())
     .from(dbSchema.playlists)
     .innerJoin(dbSchema.playlistOwnership, eq(dbSchema.playlistOwnership.playlistId, dbSchema.playlists.id))
     .leftJoin(
@@ -75,6 +75,7 @@ export const userPlaylists = async (
     .where(
       and(
         eq(dbSchema.playlistOwnership.userId, userId),
+        eq(dbSchema.playlistOwnership.role, 'owner'),
         eq(dbSchema.playlists.boardType, input.boardType),
         or(eq(dbSchema.playlists.layoutId, input.layoutId), isNull(dbSchema.playlists.layoutId)),
       ),
@@ -104,7 +105,7 @@ export const allUserPlaylists = async (
   const page = input.page ?? 0;
   const pageSize = input.pageSize ?? 20;
 
-  const conditions = [eq(dbSchema.playlistOwnership.userId, userId)];
+  const conditions = [eq(dbSchema.playlistOwnership.userId, userId), eq(dbSchema.playlistOwnership.role, 'owner')];
 
   if (input.boardType) {
     conditions.push(eq(dbSchema.playlists.boardType, input.boardType));
@@ -127,7 +128,7 @@ export const allUserPlaylists = async (
   const totalCount = countResult[0]?.count ?? 0;
 
   const rows = await db
-    .select(ownedPlaylistSelect(userId))
+    .select(ownedPlaylistSelect())
     .from(dbSchema.playlists)
     .innerJoin(dbSchema.playlistOwnership, eq(dbSchema.playlistOwnership.playlistId, dbSchema.playlists.id))
     .leftJoin(

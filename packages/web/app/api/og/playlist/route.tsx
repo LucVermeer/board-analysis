@@ -10,6 +10,8 @@ export const runtime = 'nodejs';
 
 const PLAYLIST_NAME_MAX_LENGTH = 34;
 const PLAYLIST_DESCRIPTION_MAX_LENGTH = 120;
+const EMOJI_GRAPHEME_PATTERN = /\p{Extended_Pictographic}|\p{Regional_Indicator}|\u20E3/u;
+const GRAPHEME_SEGMENTER = new Intl.Segmenter('en', { granularity: 'grapheme' });
 
 function truncateOgText(value: string, maxLength: number): string {
   const normalized = value.trim();
@@ -22,13 +24,22 @@ function truncateOgText(value: string, maxLength: number): string {
 
 function getPlaylistFallbackMark(icon: string | null, name: string, boardLabel: string): string {
   const normalizedIcon = icon?.trim() || '';
-  const safeIcon = normalizedIcon.replace(/[^A-Za-z0-9!?#+&]/g, '').toUpperCase();
-  if (safeIcon) {
-    return safeIcon.slice(0, 2);
+  for (const { segment } of GRAPHEME_SEGMENTER.segment(normalizedIcon)) {
+    if (EMOJI_GRAPHEME_PATTERN.test(segment)) {
+      return segment;
+    }
   }
 
-  const fallbackSource = `${name} ${boardLabel}`.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
-  return fallbackSource.slice(0, 2) || 'PL';
+  const asciiIdentifier = normalizedIcon.replace(/[^A-Za-z0-9!?#+&]/g, '').toUpperCase();
+  if (asciiIdentifier) {
+    return asciiIdentifier.slice(0, 2);
+  }
+
+  const initials = (`${name} ${boardLabel}`.match(/[A-Za-z0-9]+/g) ?? [])
+    .map((word) => word[0])
+    .join('')
+    .toUpperCase();
+  return initials.slice(0, 2) || 'PL';
 }
 
 export async function GET(request: NextRequest) {
@@ -180,6 +191,7 @@ export async function GET(request: NextRequest) {
       {
         width: OG_IMAGE_WIDTH,
         height: OG_IMAGE_HEIGHT,
+        emoji: 'twemoji',
         headers: createOgImageHeaders({
           contentType: 'image/png',
           version,

@@ -3,7 +3,7 @@
 // the small square thumbnail (`PlaylistPreviewSquare`) deliberately does NOT use
 // this — the gradient is the detail-hero-only treatment.
 
-import { PLAYLIST_COLORS, isValidHexColor } from './playlist-colors';
+import { PLAYLIST_COLORS, isValidPlaylistColor } from './playlist-colors';
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -88,7 +88,7 @@ export type HeroGradient = {
  * colour is missing/invalid, so the hero always has a deterministic banner.
  */
 export function buildHeroGradient(baseHex: string | undefined): HeroGradient {
-  const base = baseHex && isValidHexColor(baseHex) ? baseHex : PLAYLIST_COLORS[0];
+  const base = baseHex && isValidPlaylistColor(baseHex) ? baseHex : PLAYLIST_COLORS[0];
   return {
     colors: [shiftLightness(base, 14), base, shiftLightness(base, -20)],
     locations: [0, 0.55, 1],

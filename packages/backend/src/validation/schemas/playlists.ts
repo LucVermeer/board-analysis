@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { ExternalUUIDSchema, BoardNameSchema, UUIDSchema } from './primitives';
+import { isValidPlaylistColor } from '@boardsesh/shared-schema';
+import { ExternalUUIDSchema, BoardNameSchema } from './primitives';
 
 export const PlaylistNameSchema = z.string().min(1, 'Playlist name cannot be empty').max(100, 'Playlist name too long');
 
@@ -10,7 +11,7 @@ export const PlaylistColorSchema = z
   // Allow an empty string so an edit can explicitly clear a previously-set
   // colour. The update resolver only writes fields that are present, so '' is
   // the "clear" signal (undefined still means "leave unchanged").
-  .regex(/^(#[0-9A-Fa-f]{6})?$/, 'Invalid color format (must be hex)')
+  .refine((color) => color === '' || isValidPlaylistColor(color), 'Invalid color format (must be hex)')
   .optional();
 
 export const PlaylistIconSchema = z.string().max(50, 'Icon name too long').optional();
@@ -151,7 +152,7 @@ export const GetSmartPlaylistInputSchema = z.object({
   boardName: BoardNameSchema.optional(),
   boardUuid: z.string().min(1).optional(),
   sizeId: z.number().int().positive().optional(),
-  angle: z.number().int().min(0).max(70).optional(),
+  angle: z.number().int().min(0).max(90).optional(),
   page: z.number().int().min(0).optional(),
   pageSize: z.number().int().min(1).max(100).optional(),
 });

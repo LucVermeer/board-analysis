@@ -94,3 +94,13 @@ export function convertQualityToAurora(quality: number | null | undefined): numb
   const clamped = Math.min(5, Math.max(1, q));
   return Math.round(((clamped - 1) / 4) * 2) + 1;
 }
+
+/**
+ * Whether a playlist colour is a renderable six-digit CSS hex value.
+ *
+ * This intentionally rejects the empty string: mutation inputs use `''` as a
+ * separate clear signal, while renderers must only consume concrete colours.
+ */
+export function isValidPlaylistColor(color: string): boolean {
+  return /^#[0-9A-Fa-f]{6}$/.test(color);
+}

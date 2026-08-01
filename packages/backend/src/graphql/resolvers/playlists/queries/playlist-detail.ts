@@ -131,6 +131,7 @@ export const playlistsForClimb = async (
         eq(dbSchema.playlists.boardType, input.boardType),
         or(eq(dbSchema.playlists.layoutId, input.layoutId), isNull(dbSchema.playlists.layoutId)),
         eq(dbSchema.playlistOwnership.userId, userId),
+        eq(dbSchema.playlistOwnership.role, 'owner'),
       ),
     );
 
@@ -165,6 +166,7 @@ export const playlistsForClimbs = async (
         eq(dbSchema.playlists.boardType, input.boardType),
         or(eq(dbSchema.playlists.layoutId, input.layoutId), isNull(dbSchema.playlists.layoutId)),
         eq(dbSchema.playlistOwnership.userId, userId),
+        eq(dbSchema.playlistOwnership.role, 'owner'),
       ),
     );
 

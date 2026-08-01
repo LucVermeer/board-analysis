@@ -1,3 +1,5 @@
+import { isValidPlaylistColor } from '@boardsesh/shared-schema';
+
 // Cycling swatch palette for playlists. Used as the preview tint when a playlist
 // has no valid `color`, and as the swatch options in the create/edit form. Leads
 // with the violet brand + amber accent, then a varied set so playlists stay
@@ -18,8 +20,4 @@ export const PLAYLIST_COLORS = [
   '#1F2937', // near-black
 ] as const;
 
-const HEX_PATTERN = /^#([0-9A-Fa-f]{3}){1,2}$/;
-
-export function isValidHexColor(color: string): boolean {
-  return HEX_PATTERN.test(color);
-}
+export { isValidPlaylistColor };
