@@ -8011,6 +8011,30 @@ export type ClimbStatsForAnglesQuery = {
   }>;
 };
 
+export type ClimbStatsUpdatedSubscriptionVariables = Exact<{
+  boardType: Scalars['String']['input'];
+  layoutId: Scalars['Int']['input'];
+}>;
+
+export type ClimbStatsUpdatedSubscription = {
+  __typename?: 'Subscription';
+  climbStatsUpdated: {
+    __typename?: 'ClimbStatsEvent';
+    boardType: string;
+    layoutId: number;
+    climbUuid: string;
+    angle: number;
+    ascensionistCount: number;
+    qualityAverage?: number | null;
+    difficultyAverage?: number | null;
+    displayDifficulty?: number | null;
+    difficulty?: string | null;
+    faUsername?: string | null;
+    faAt?: string | null;
+    syncSeq: string;
+  };
+};
+
 export type ClimbStatsHistoryQueryVariables = Exact<{
   boardName: Scalars['String']['input'];
   climbUuid: Scalars['ID']['input'];
@@ -10994,6 +11018,66 @@ export const ClimbStatsForAnglesDocument = {
     },
   ],
 } as unknown as DocumentNode<ClimbStatsForAnglesQuery, ClimbStatsForAnglesQueryVariables>;
+export const ClimbStatsUpdatedDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'subscription',
+      name: { kind: 'Name', value: 'ClimbStatsUpdated' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'boardType' } },
+          type: { kind: 'NonNullType', type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'layoutId' } },
+          type: { kind: 'NonNullType', type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } } },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'climbStatsUpdated' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'boardType' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'boardType' } },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'layoutId' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'layoutId' } },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'boardType' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'layoutId' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'climbUuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'angle' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'ascensionistCount' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'qualityAverage' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'difficultyAverage' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'displayDifficulty' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'difficulty' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'faUsername' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'faAt' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'syncSeq' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<ClimbStatsUpdatedSubscription, ClimbStatsUpdatedSubscriptionVariables>;
 export const ClimbStatsHistoryDocument = {
   kind: 'Document',
   definitions: [

@@ -1,14 +1,18 @@
 import { act, render, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { BoardAdapter } from '../adapter';
 import {
   acknowledgeOptimisticAscent,
   applyCanonicalClimbStats,
   beginOptimisticAscent,
   getClimbStatsSnapshot,
+  markOptimisticAscentQueued,
   resetClimbStatsStoreForTests,
+  subscribeClimbStats,
   type ClimbStatsKey,
 } from '../climb-stats-store';
 import {
+  createAcknowledgedClimbStatsReadOwner,
   getClimbStatsReadCoordinatorStateForTests,
   MAX_LAST_READ_ENTRIES,
   recordClimbStatsReadForTests,
@@ -182,20 +186,21 @@ describe('useEffectiveClimbStats', () => {
       },
     ]);
     let connected: (() => void) | undefined;
-    const scheduledTasks: Array<() => void> = [];
+    const scheduledTasks: Array<{ callback: () => void; cancel: ReturnType<typeof vi.fn>; delayMs: number }> = [];
     const { wrapper } = createWrapper({
       fetchClimbStats,
       subscribeClimbStats: (_boardType, _layoutId, handlers) => {
         connected = handlers.connected;
         return vi.fn();
       },
-      scheduleTask: (callback) => {
-        scheduledTasks.push(callback);
-        return vi.fn();
+      scheduleTask: (callback, delayMs) => {
+        const cancel = vi.fn();
+        scheduledTasks.push({ callback, cancel, delayMs });
+        return cancel;
       },
     });
 
-    renderHook(
+    const view = renderHook(
       () => {
         useClimbStatsLayoutSync('kilter', 1);
         return useEffectiveClimbStats('kilter', 1, 'climb-1', 40, { ascensionistCount: 4 });
@@ -207,10 +212,128 @@ describe('useEffectiveClimbStats', () => {
     act(() => connected?.());
     await waitFor(() => expect(fetchClimbStats).toHaveBeenCalledTimes(2));
 
-    const missedEventRepair = scheduledTasks[0];
+    const missedEventRepair = scheduledTasks[0]?.callback;
     expect(missedEventRepair).toBeTypeOf('function');
+    expect(scheduledTasks[0]?.delayMs).toBe(120_000);
     act(() => missedEventRepair?.());
     await waitFor(() => expect(fetchClimbStats).toHaveBeenCalledTimes(3));
+    expect(scheduledTasks).toHaveLength(2);
+
+    view.unmount();
+    expect(scheduledTasks[1]?.cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels a pending post-ack read when the layout sync owner unmounts', () => {
+    const fetchClimbStats = vi.fn().mockResolvedValue([]);
+    let deliveryListener:
+      | ((event: {
+          tableName: string;
+          operation: string;
+          idempotencyKey: string;
+          status: 'acknowledged' | 'dead_letter';
+        }) => void)
+      | undefined;
+    const unsubscribeDelivery = vi.fn();
+    const scheduledTasks: Array<{ callback: () => void; cancel: ReturnType<typeof vi.fn> }> = [];
+    const { wrapper } = createWrapper({
+      fetchClimbStats,
+      subscribeOfflineMutationDelivery: (listener) => {
+        deliveryListener = listener;
+        return unsubscribeDelivery;
+      },
+      scheduleTask: (callback) => {
+        const cancel = vi.fn();
+        scheduledTasks.push({ callback, cancel });
+        return cancel;
+      },
+    });
+    const statsKey: ClimbStatsKey = {
+      boardType: 'kilter',
+      layoutId: 1,
+      climbUuid: 'climb-1',
+      angle: 40,
+    };
+    beginOptimisticAscent(statsKey, 'token-1', 0, 10);
+    markOptimisticAscentQueued('token-1', 'tick-1', 0);
+
+    const view = renderHook(() => useClimbStatsLayoutSync(null, undefined), { wrapper });
+    act(() => {
+      deliveryListener?.({
+        tableName: 'boardsesh_ticks',
+        operation: 'create',
+        idempotencyKey: 'tick-1',
+        status: 'acknowledged',
+      });
+    });
+    expect(scheduledTasks).toHaveLength(1);
+
+    view.unmount();
+    expect(unsubscribeDelivery).toHaveBeenCalledTimes(1);
+    expect(scheduledTasks[0]?.cancel).toHaveBeenCalledTimes(1);
+
+    act(() => scheduledTasks[0]?.callback());
+    expect(fetchClimbStats).not.toHaveBeenCalled();
+  });
+
+  it('cancels every pending post-ack read owned by one lifecycle', () => {
+    const cancelTasks = [vi.fn(), vi.fn()];
+    const adapter: BoardAdapter = {
+      isAuthenticated: true,
+      isAuthLoading: false,
+      executeHttp: async () => {
+        throw new Error('not used');
+      },
+      executeWs: async () => {
+        throw new Error('not used');
+      },
+      resolveActiveSessionId: () => undefined,
+      scheduleTask: vi.fn().mockReturnValueOnce(cancelTasks[0]).mockReturnValueOnce(cancelTasks[1]),
+    };
+    const owner = createAcknowledgedClimbStatsReadOwner();
+    owner.schedule(adapter, { boardType: 'kilter', layoutId: 1, climbUuid: 'climb-1', angle: 40 });
+    owner.schedule(adapter, { boardType: 'kilter', layoutId: 1, climbUuid: 'climb-2', angle: 40 });
+
+    owner.cancelAll();
+
+    expect(cancelTasks[0]).toHaveBeenCalledTimes(1);
+    expect(cancelTasks[1]).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not retain a cancellation handle when the scheduler runs synchronously', async () => {
+    const statsKey: ClimbStatsKey = {
+      boardType: 'kilter',
+      layoutId: 1,
+      climbUuid: 'climb-sync',
+      angle: 40,
+    };
+    const unsubscribe = subscribeClimbStats(statsKey, vi.fn());
+    const cancelTask = vi.fn();
+    const fetchClimbStats = vi.fn().mockResolvedValue([]);
+    const owner = createAcknowledgedClimbStatsReadOwner();
+    owner.schedule(
+      {
+        isAuthenticated: true,
+        isAuthLoading: false,
+        executeHttp: async () => {
+          throw new Error('not used');
+        },
+        executeWs: async () => {
+          throw new Error('not used');
+        },
+        resolveActiveSessionId: () => undefined,
+        fetchClimbStats,
+        scheduleTask: (callback) => {
+          callback();
+          return cancelTask;
+        },
+      },
+      statsKey,
+    );
+
+    await waitFor(() => expect(fetchClimbStats).toHaveBeenCalledTimes(1));
+    owner.cancelAll();
+    expect(cancelTask).not.toHaveBeenCalled();
+    unsubscribe();
   });
 
   it('starts one forced post-ack read after a stale in-flight read settles', async () => {

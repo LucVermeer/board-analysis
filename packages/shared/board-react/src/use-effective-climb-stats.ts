@@ -246,13 +246,18 @@ export function useClimbStatsLayoutSync(boardType: BoardName | null, layoutId: n
 
   useEffect(() => {
     if (!adapter.subscribeOfflineMutationDelivery) return undefined;
-    return adapter.subscribeOfflineMutationDelivery((event) => {
+    const acknowledgedReadOwner = createAcknowledgedClimbStatsReadOwner();
+    const unsubscribe = adapter.subscribeOfflineMutationDelivery((event) => {
       if (event.tableName !== 'boardsesh_ticks' || event.operation !== 'create') return;
       const settledKey = settleOfflineTickAscent(event.idempotencyKey, event.status, authEpoch);
       if (event.status === 'acknowledged' && settledKey) {
-        scheduleAcknowledgedClimbStatsRead(adapter, settledKey);
+        acknowledgedReadOwner.schedule(adapter, settledKey);
       }
     });
+    return () => {
+      unsubscribe();
+      acknowledgedReadOwner.cancelAll();
+    };
   }, [adapter, authEpoch]);
 
   useEffect(() => {
@@ -290,14 +295,51 @@ export function useClimbStatsLayoutSync(boardType: BoardName | null, layoutId: n
 }
 
 /** Schedule the post-ack safety read that covers a lost Redis publish. */
-export function scheduleAcknowledgedClimbStatsRead(adapter: BoardAdapter, key: ClimbStatsKey): void {
+export function scheduleAcknowledgedClimbStatsRead(
+  adapter: BoardAdapter,
+  key: ClimbStatsKey,
+  onReadStarted?: () => void,
+): () => void {
+  let pending = true;
+  const startRead = () => {
+    if (!pending) return;
+    pending = false;
+    onReadStarted?.();
+    void readCanonicalClimbStats(adapter, key, true);
+  };
   if (!adapter.scheduleTask) {
-    void readCanonicalClimbStats(adapter, key, true);
-    return;
+    startRead();
+    return () => {};
   }
-  adapter.scheduleTask(() => {
-    void readCanonicalClimbStats(adapter, key, true);
-  }, 3_000);
+  const cancelTask = adapter.scheduleTask(startRead, 3_000);
+  return () => {
+    if (!pending) return;
+    pending = false;
+    cancelTask();
+  };
+}
+
+/** Own any number of post-ack reads and cancel those still pending at teardown. */
+export function createAcknowledgedClimbStatsReadOwner(): {
+  schedule: (adapter: BoardAdapter, key: ClimbStatsKey) => void;
+  cancelAll: () => void;
+} {
+  const cancelScheduledReads = new Set<() => void>();
+  return {
+    schedule: (adapter, key) => {
+      let cancelScheduledRead: (() => void) | null = null;
+      let readStartedBeforeRegistration = false;
+      cancelScheduledRead = scheduleAcknowledgedClimbStatsRead(adapter, key, () => {
+        if (cancelScheduledRead) cancelScheduledReads.delete(cancelScheduledRead);
+        else readStartedBeforeRegistration = true;
+      });
+      if (!readStartedBeforeRegistration) cancelScheduledReads.add(cancelScheduledRead);
+    },
+    cancelAll: () => {
+      for (const cancelScheduledRead of cancelScheduledReads) cancelScheduledRead();
+      cancelScheduledReads.clear();
+    },
+  };
 }
 
 export function resetClimbStatsReadCoordinatorForTests(): void {

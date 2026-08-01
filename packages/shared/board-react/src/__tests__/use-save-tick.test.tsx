@@ -184,6 +184,154 @@ describe('useSaveTick (shared)', () => {
     unsubscribe();
   });
 
+  it('cancels a pending direct-ack stats read when the hook unmounts', async () => {
+    const executeHttp = vi.fn().mockResolvedValue({ saveTick: savedTick() });
+    const fetchClimbStats = vi.fn().mockResolvedValue([]);
+    const scheduledTasks: Array<{ callback: () => void; cancel: ReturnType<typeof vi.fn> }> = [];
+    const { wrapper, queryClient } = createWrapper({
+      executeHttp: executeHttp as unknown as ExecuteHttp,
+      fetchClimbStats,
+      supportsClimbStatsOptimism: true,
+      scheduleTask: (callback) => {
+        const cancel = vi.fn();
+        scheduledTasks.push({ callback, cancel });
+        return cancel;
+      },
+    });
+    queryClient.setQueryData(accumulatedLogbookQueryKey('kilter'), []);
+    queryClient.setQueryData(fetchedLogbookClimbUuidsQueryKey('kilter'), new Set(['climb-1']));
+    const statsKey: ClimbStatsKey = {
+      boardType: 'kilter',
+      layoutId: 1,
+      climbUuid: 'climb-1',
+      angle: 40,
+    };
+    const unsubscribeStats = subscribeClimbStats(statsKey, vi.fn());
+    const view = renderHook(() => useSaveTick('kilter'), { wrapper });
+
+    act(() => view.result.current.mutate(tickOptions({ layoutId: 1, baseAscensionistCount: 10 })));
+    await waitFor(() => expect(view.result.current.isSuccess).toBe(true));
+    expect(scheduledTasks).toHaveLength(1);
+
+    view.unmount();
+    expect(scheduledTasks[0]?.cancel).toHaveBeenCalledTimes(1);
+    act(() => scheduledTasks[0]?.callback());
+    expect(fetchClimbStats).not.toHaveBeenCalled();
+    unsubscribeStats();
+  });
+
+  it('does not schedule a direct-ack stats read when the mutation resolves after unmount', async () => {
+    let resolveExecute: (value: { saveTick: ReturnType<typeof savedTick> }) => void = () => {};
+    const executeHttp = vi.fn().mockImplementation(
+      () =>
+        new Promise<{ saveTick: ReturnType<typeof savedTick> }>((resolve) => {
+          resolveExecute = resolve;
+        }),
+    );
+    const scheduleTask = vi.fn(() => vi.fn());
+    const { wrapper, queryClient } = createWrapper({
+      executeHttp: executeHttp as unknown as ExecuteHttp,
+      fetchClimbStats: vi.fn(),
+      supportsClimbStatsOptimism: true,
+      scheduleTask,
+    });
+    queryClient.setQueryData(accumulatedLogbookQueryKey('kilter'), []);
+    queryClient.setQueryData(fetchedLogbookClimbUuidsQueryKey('kilter'), new Set(['climb-1']));
+    const statsKey: ClimbStatsKey = {
+      boardType: 'kilter',
+      layoutId: 1,
+      climbUuid: 'climb-1',
+      angle: 40,
+    };
+    const unsubscribeStats = subscribeClimbStats(statsKey, vi.fn());
+    const view = renderHook(() => useSaveTick('kilter'), { wrapper });
+
+    act(() => view.result.current.mutate(tickOptions({ layoutId: 1, baseAscensionistCount: 10 })));
+    await waitFor(() => expect(executeHttp).toHaveBeenCalledTimes(1));
+    view.unmount();
+
+    await act(async () => {
+      resolveExecute({ saveTick: savedTick() });
+    });
+    expect(scheduleTask).not.toHaveBeenCalled();
+    unsubscribeStats();
+  });
+
+  it('cancels an already-scheduled direct-ack read when the hook switches boards', async () => {
+    const executeHttp = vi.fn().mockResolvedValue({ saveTick: savedTick() });
+    const scheduledTasks: Array<{ cancel: ReturnType<typeof vi.fn> }> = [];
+    const { wrapper, queryClient } = createWrapper({
+      executeHttp: executeHttp as unknown as ExecuteHttp,
+      fetchClimbStats: vi.fn(),
+      supportsClimbStatsOptimism: true,
+      scheduleTask: () => {
+        const cancel = vi.fn();
+        scheduledTasks.push({ cancel });
+        return cancel;
+      },
+    });
+    queryClient.setQueryData(accumulatedLogbookQueryKey('kilter'), []);
+    queryClient.setQueryData(fetchedLogbookClimbUuidsQueryKey('kilter'), new Set(['climb-1']));
+    const statsKey: ClimbStatsKey = {
+      boardType: 'kilter',
+      layoutId: 1,
+      climbUuid: 'climb-1',
+      angle: 40,
+    };
+    const unsubscribeStats = subscribeClimbStats(statsKey, vi.fn());
+    const view = renderHook(({ boardName }: { boardName: 'kilter' | 'tension' }) => useSaveTick(boardName), {
+      wrapper,
+      initialProps: { boardName: 'kilter' },
+    });
+
+    act(() => view.result.current.mutate(tickOptions({ layoutId: 1, baseAscensionistCount: 10 })));
+    await waitFor(() => expect(scheduledTasks).toHaveLength(1));
+    view.rerender({ boardName: 'tension' });
+
+    expect(scheduledTasks[0]?.cancel).toHaveBeenCalledTimes(1);
+    unsubscribeStats();
+  });
+
+  it('does not schedule an old board direct-ack read after the hook switches boards', async () => {
+    let resolveExecute: (value: { saveTick: ReturnType<typeof savedTick> }) => void = () => {};
+    const executeHttp = vi.fn().mockImplementation(
+      () =>
+        new Promise<{ saveTick: ReturnType<typeof savedTick> }>((resolve) => {
+          resolveExecute = resolve;
+        }),
+    );
+    const scheduleTask = vi.fn(() => vi.fn());
+    const { wrapper, queryClient } = createWrapper({
+      executeHttp: executeHttp as unknown as ExecuteHttp,
+      fetchClimbStats: vi.fn(),
+      supportsClimbStatsOptimism: true,
+      scheduleTask,
+    });
+    queryClient.setQueryData(accumulatedLogbookQueryKey('kilter'), []);
+    queryClient.setQueryData(fetchedLogbookClimbUuidsQueryKey('kilter'), new Set(['climb-1']));
+    const statsKey: ClimbStatsKey = {
+      boardType: 'kilter',
+      layoutId: 1,
+      climbUuid: 'climb-1',
+      angle: 40,
+    };
+    const unsubscribeStats = subscribeClimbStats(statsKey, vi.fn());
+    const view = renderHook(({ boardName }: { boardName: 'kilter' | 'tension' }) => useSaveTick(boardName), {
+      wrapper,
+      initialProps: { boardName: 'kilter' },
+    });
+
+    act(() => view.result.current.mutate(tickOptions({ layoutId: 1, baseAscensionistCount: 10 })));
+    await waitFor(() => expect(executeHttp).toHaveBeenCalledTimes(1));
+    view.rerender({ boardName: 'tension' });
+
+    await act(async () => {
+      resolveExecute({ saveTick: savedTick() });
+    });
+    expect(scheduleTask).not.toHaveBeenCalled();
+    unsubscribeStats();
+  });
+
   it('keeps an independent first-send floor when a concurrent optimistic send fails', async () => {
     const pendingMutations: Array<{
       resolve: (value: { saveTick: ReturnType<typeof savedTick> }) => void;

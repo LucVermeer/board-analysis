@@ -28,7 +28,7 @@ export type ClimbStatsForAnglesEntry = {
   syncSeq: string;
 };
 
-export const CLIMB_STATS_UPDATED_SUBSCRIPTION = `
+export const CLIMB_STATS_UPDATED_SUBSCRIPTION = gql`
   subscription ClimbStatsUpdated($boardType: String!, $layoutId: Int!) {
     climbStatsUpdated(boardType: $boardType, layoutId: $layoutId) {
       boardType

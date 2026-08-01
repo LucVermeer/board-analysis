@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   SAVE_TICK,
@@ -27,7 +28,7 @@ import {
   setClimbStatsAuthEpoch,
   type ClimbStatsKey,
 } from './climb-stats-store';
-import { scheduleAcknowledgedClimbStatsRead } from './use-effective-climb-stats';
+import { createAcknowledgedClimbStatsReadOwner } from './use-effective-climb-stats';
 
 /**
  * Build a collision-resistant temp uuid for the optimistic entry. Falls back
@@ -59,6 +60,28 @@ export function useSaveTick(boardName: BoardName | null) {
   const { isAuthenticated, executeHttp, onTickSaved, saveTickOffline } = adapter;
   const queryClient = useQueryClient();
   const accumulatedKey = accumulatedLogbookQueryKey(boardName);
+  const acknowledgedReadOwnerRef = useRef<ReturnType<typeof createAcknowledgedClimbStatsReadOwner> | null>(null);
+  if (!acknowledgedReadOwnerRef.current) {
+    acknowledgedReadOwnerRef.current = createAcknowledgedClimbStatsReadOwner();
+  }
+  const acknowledgedReadOwner = acknowledgedReadOwnerRef.current;
+  const readLifecycleGenerationRef = useRef(0);
+  const currentAuthEpoch = adapter.captureAuthEpoch?.() ?? 0;
+
+  useEffect(() => {
+    const activeGeneration = readLifecycleGenerationRef.current + 1;
+    readLifecycleGenerationRef.current = activeGeneration;
+    return () => {
+      acknowledgedReadOwner.cancelAll();
+      // Fence mutation completions from the lifecycle being torn down. The
+      // next setup advances the generation again, so StrictMode replay and a
+      // board/auth transition cannot make an old completion current merely by
+      // setting a shared mounted flag back to true.
+      if (readLifecycleGenerationRef.current === activeGeneration) {
+        readLifecycleGenerationRef.current = activeGeneration + 1;
+      }
+    };
+  }, [acknowledgedReadOwner, adapter, boardName, currentAuthEpoch]);
 
   return useMutation({
     mutationFn: async (options: SaveTickOptions) => {
@@ -101,6 +124,10 @@ export function useSaveTick(boardName: BoardName | null) {
       return { savedTick: response.saveTick, delivery: 'acknowledged' as const };
     },
     onMutate: async (options) => {
+      // Capture before the first await. A board/auth transition can commit
+      // while cancelQueries is pending; that mutation must remain tied to the
+      // lifecycle in which the user initiated it.
+      const readLifecycleGeneration = readLifecycleGenerationRef.current;
       // Cancel outgoing fetch batches so stale responses merge against the
       // latest accumulated cache entry instead of racing the optimistic write.
       await queryClient.cancelQueries({ queryKey: fetchLogbookQueryKeyPrefix(boardName) });
@@ -148,7 +175,7 @@ export function useSaveTick(boardName: BoardName | null) {
       const optimisticEntry = buildOptimisticTickEntry(options, tempUuid);
       queryClient.setQueryData<LogbookEntry[]>(accumulatedKey, (existing = []) => [optimisticEntry, ...existing]);
 
-      return { tempUuid, authEpoch, statsKey, statsToken };
+      return { tempUuid, authEpoch, statsKey, statsToken, readLifecycleGeneration };
     },
     onSuccess: ({ savedTick, delivery }, options, context) => {
       const savedEntry = toLogbookEntry(savedTick);
@@ -165,7 +192,9 @@ export function useSaveTick(boardName: BoardName | null) {
           markOptimisticAscentQueued(context.statsToken, savedTick.uuid, context.authEpoch);
         } else {
           acknowledgeOptimisticAscent(context.statsToken, context.authEpoch);
-          scheduleAcknowledgedClimbStatsRead(adapter, context.statsKey);
+          if (context.readLifecycleGeneration === readLifecycleGenerationRef.current) {
+            acknowledgedReadOwner.schedule(adapter, context.statsKey);
+          }
         }
       }
 
