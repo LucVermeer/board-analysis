@@ -378,9 +378,9 @@ jobs:
         run: |
           vp run check:mobile-ota-compat -- --write-env --base-dir "$RUNNER_TEMP/main-baseline"
 
-      # V3 control-plane: `eoas publish` creates the pr-<n> branch + channel but
-      # leaves them UNMAPPED, so no pre-create is needed — mapping happens in the
-      # separate trusted-base `map` job (below). iOS WITHOUT GOOGLE_MAPS_API_KEY (Apple
+      # V3 control-plane: `eoas publish` creates the pr-<n> branch. Channel creation
+      # and mapping happen in the separate trusted-base `map` job (below). iOS
+      # WITHOUT GOOGLE_MAPS_API_KEY (Apple
       # Maps), Android WITH it — the per-platform split that keeps each published
       # fingerprint equal to its shipped binary (matches mobile-ota-production.yml). A
       # native-change platform is skipped.
@@ -399,9 +399,8 @@ jobs:
           GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
         run: vp run mobile:publish -- --channel "$CHANNEL" --platform android
 
-  # ── Map pr-<number> → its same-named branch on the self-hosted server. `eoas publish`
-  # left the channel UNMAPPED (a client requesting it gets "No branch mapping found"),
-  # and mapping is a dashboard-admin action the eoo_ publish key CANNOT perform — so it
+  # ── Map pr-<number> → its same-named branch on the self-hosted server. Channel
+  # creation/mapping is a dashboard-admin action the eoo_ publish key CANNOT perform — so it
   # logs in with OTA_ADMIN_* (ota-preview-unattended environment, no reviewers). This is
   # a SEPARATE trusted-base job, NOT a publish step: the admin creds must never be in
   # scope while PR-author code runs. It checks out the TRUSTED BASE (never PR head),

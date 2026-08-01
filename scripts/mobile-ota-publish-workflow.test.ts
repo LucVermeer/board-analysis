@@ -1,0 +1,73 @@
+/// <reference types="node" />
+
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it } from 'vitest';
+
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const WORKFLOW_DIR = resolve(REPO_ROOT, '.github', 'workflows');
+const production = readFileSync(resolve(WORKFLOW_DIR, 'mobile-ota-production.yml'), 'utf8');
+const backport = readFileSync(resolve(WORKFLOW_DIR, 'mobile-ota-backport.yml'), 'utf8');
+
+function stepBlock(workflow: string, stepName: string, nextStepName: string): string {
+  const start = workflow.indexOf(`      - name: ${stepName}`);
+  const end = workflow.indexOf(`      - name: ${nextStepName}`, start + 1);
+  expect(start).toBeGreaterThanOrEqual(0);
+  expect(end).toBeGreaterThan(start);
+  return workflow.slice(start, end);
+}
+
+describe('production OTA workflow reliability', () => {
+  it('serializes runs without cancelling an active publish and has enough retry time', () => {
+    expect(production).toContain('group: mobile-ota-production');
+    expect(production).toContain('cancel-in-progress: false');
+    const timeout = Number(production.match(/timeout-minutes: (\d+)/)?.[1]);
+    expect(timeout).toBeGreaterThanOrEqual(45);
+  });
+
+  it('attempts Android after iOS and records the aggregate result', () => {
+    const ios = stepBlock(production, 'Publish iOS OTA', 'Publish Android OTA');
+    const android = stepBlock(production, 'Publish Android OTA', 'Summarize platform publish results');
+    const summary = stepBlock(production, 'Summarize platform publish results', 'Push changelog to main');
+
+    expect(ios).toContain('continue-on-error: true');
+    expect(android).toContain('if: always()');
+    expect(android).toContain('continue-on-error: true');
+    expect(summary).toContain('all_success');
+    expect(summary).toContain('any_success');
+    expect(summary).toContain('no automatic rollback was attempted');
+  });
+
+  it('pushes the changelog and announces success only after every requested platform succeeds', () => {
+    const push = stepBlock(production, 'Push changelog to main', 'Notify deployments channel');
+    const success = stepBlock(production, 'Notify deployments channel', 'Notify deployments channel of failure');
+
+    expect(push).toContain("steps.publish_summary.outputs.all_success == 'true'");
+    expect(push).not.toContain('if: always()');
+    expect(success).toContain("steps.publish_summary.outputs.all_success == 'true'");
+    expect(success).not.toContain("steps.publish_ios.outcome == 'success' ||");
+  });
+
+  it('runs the health check after any successful platform, including partial success', () => {
+    const health = stepBlock(production, 'OTA health check (non-blocking)', 'Notify OTA health to Discord');
+
+    expect(health).toContain('if: always()');
+    expect(health).toContain("steps.publish_ios.outcome == 'success' || steps.publish_android.outcome == 'success'");
+  });
+
+  it('reruns when the self-hosted publish implementation changes', () => {
+    expect(production).toContain("- 'scripts/mobile-publish.ts'");
+    expect(production).toContain("- 'scripts/lib/mobile-publish-retry.ts'");
+  });
+});
+
+describe('backport OTA workflow upload pressure', () => {
+  it('shares the production lane and limits the platform matrix to one publish', () => {
+    expect(backport).toContain('group: mobile-ota-production');
+    expect(backport).toContain('cancel-in-progress: false');
+    expect(backport).toContain('max-parallel: 1');
+    const timeout = Number(backport.match(/timeout-minutes: (\d+)/)?.[1]);
+    expect(timeout).toBeGreaterThanOrEqual(45);
+  });
+});

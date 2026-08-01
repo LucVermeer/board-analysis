@@ -1,0 +1,267 @@
+/// <reference types="node" />
+
+/**
+ * Bounded retry support for self-hosted `eoas publish` calls.
+ *
+ * The EAS preview path deliberately does not import or call this helper. A
+ * whole-command retry is safe only for the narrowly classified transient
+ * failures below; every other non-zero exit remains a hard failure.
+ */
+
+import { spawn } from 'node:child_process';
+
+export const SELF_HOSTED_PUBLISH_MAX_ATTEMPTS = 4;
+export const SELF_HOSTED_PUBLISH_RETRY_DELAYS_MS = [30_000, 60_000, 120_000] as const;
+
+export type OtaPublishPlatform = 'ios' | 'android';
+export type PublishFailureKind = 's3-slowdown' | 'http-5xx' | 'permanent' | 'unknown';
+
+export type TextOutput = {
+  write(chunk: string): unknown;
+};
+
+export type PublishCommandRequest = {
+  command: string;
+  args: readonly string[];
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+  onStdout: (chunk: string) => void;
+  onStderr: (chunk: string) => void;
+};
+
+export type PublishCommandResult = {
+  exitCode: number;
+};
+
+export type PublishCommandRunner = (request: PublishCommandRequest) => Promise<PublishCommandResult>;
+export type PublishSleeper = (delayMs: number) => Promise<void>;
+
+export type PublishRetryInvocation = {
+  platform: OtaPublishPlatform;
+  command: string;
+  args: readonly string[];
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+};
+
+export type PlatformPublishOutcome = {
+  platform: OtaPublishPlatform;
+  success: boolean;
+  attempts: number;
+  failureKind: PublishFailureKind | null;
+};
+
+export type PublishRetryDependencies = {
+  runner?: PublishCommandRunner;
+  sleeper?: PublishSleeper;
+  stdout?: TextOutput;
+  stderr?: TextOutput;
+};
+
+const CLASSIFIER_WINDOW_CHARS = 4096;
+
+const EXPLICIT_HTTP_5XX =
+  /(?:\bHTTP(?:\/\d(?:\.\d)?)?\s+|\b(?:status|statusCode|status code|response (?:status|code))\s*[:=]?\s*)5\d{2}\b/i;
+const EXPLICIT_HTTP_4XX =
+  /(?:\bHTTP(?:\/\d(?:\.\d)?)?\s+|\b(?:status|statusCode|status code|response (?:status|code))\s*[:=]?\s*)4\d{2}\b/i;
+const S3_SLOWDOWN_CODE = /<Code>\s*SlowDown\s*<\/Code>/i;
+const S3_SLOWDOWN_MESSAGE = /<Message>\s*Please reduce your request rate\.?\s*<\/Message>/i;
+const PERMANENT_S3_CODE =
+  /<Code>\s*(?:AccessDenied|AuthorizationHeaderMalformed|ExpiredToken|InvalidAccessKeyId|InvalidArgument|InvalidRequest|InvalidToken|NoSuchBucket|SignatureDoesNotMatch)\s*<\/Code>/i;
+const PERMANENT_AUTH_ERROR =
+  /\b(?:authentication failed|invalid (?:api[ -]?)?(?:key|token|credentials)|permission denied|unauthorized|forbidden)\b/i;
+const PERMANENT_INPUT_ERROR =
+  /\b(?:configuration error|invalid (?:argument|configuration|option|request)|missing required|validation error)\b/i;
+const PERMANENT_BUILD_ERROR = /\b(?:expo export|bundle|build) failed\b|\b(?:ReferenceError|SyntaxError|TypeError):/i;
+
+type FailureEvidence = {
+  hasSlowDownCode: boolean;
+  hasSlowDownMessage: boolean;
+  hasHttp5xx: boolean;
+  hasPermanent: boolean;
+};
+
+function emptyEvidence(): FailureEvidence {
+  return {
+    hasSlowDownCode: false,
+    hasSlowDownMessage: false,
+    hasHttp5xx: false,
+    hasPermanent: false,
+  };
+}
+
+/**
+ * Incrementally classifies output while retaining only a small rolling window.
+ * Evidence bits survive after text falls out of the window, so the helper never
+ * needs a raw log tail to make or explain a retry decision.
+ */
+export class PublishFailureEvidenceScanner {
+  private evidence = emptyEvidence();
+  private window = '';
+
+  push(chunk: string): void {
+    const searchable = `${this.window}${chunk}`;
+    this.evidence.hasSlowDownCode ||= S3_SLOWDOWN_CODE.test(searchable);
+    this.evidence.hasSlowDownMessage ||= S3_SLOWDOWN_MESSAGE.test(searchable);
+    this.evidence.hasHttp5xx ||= EXPLICIT_HTTP_5XX.test(searchable);
+    this.evidence.hasPermanent ||=
+      EXPLICIT_HTTP_4XX.test(searchable) ||
+      PERMANENT_S3_CODE.test(searchable) ||
+      PERMANENT_AUTH_ERROR.test(searchable) ||
+      PERMANENT_INPUT_ERROR.test(searchable) ||
+      PERMANENT_BUILD_ERROR.test(searchable);
+    this.window = searchable.slice(-CLASSIFIER_WINDOW_CHARS);
+  }
+
+  classify(): PublishFailureKind {
+    // Any permanent signal vetoes a retry, even when a retryable marker also
+    // appeared earlier in the same command's mixed output.
+    if (this.evidence.hasPermanent) return 'permanent';
+    if (this.evidence.hasSlowDownCode && this.evidence.hasSlowDownMessage) return 's3-slowdown';
+    if (this.evidence.hasHttp5xx) return 'http-5xx';
+    return 'unknown';
+  }
+}
+
+/** Convenience entry point for fixture/unit classification. */
+export function classifyPublishFailure(output: string): PublishFailureKind {
+  const scanner = new PublishFailureEvidenceScanner();
+  scanner.push(output);
+  return scanner.classify();
+}
+
+/**
+ * Real child runner: stdout/stderr are piped so callers can both stream them
+ * immediately and feed the evidence scanner. It never prints or summarizes an
+ * error itself, which prevents a captured secret-bearing tail from being echoed
+ * a second time.
+ */
+export const runStreamingPublishCommand: PublishCommandRunner = (request) =>
+  new Promise((resolve) => {
+    let settled = false;
+    const settle = (exitCode: number) => {
+      if (settled) return;
+      settled = true;
+      resolve({ exitCode });
+    };
+
+    try {
+      const child = spawn(request.command, [...request.args], {
+        cwd: request.cwd,
+        env: request.env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      child.stdout.setEncoding('utf8');
+      child.stderr.setEncoding('utf8');
+      child.stdout.on('data', request.onStdout);
+      child.stderr.on('data', request.onStderr);
+      child.once('error', () => settle(1));
+      child.once('close', (exitCode) => settle(exitCode ?? 1));
+    } catch {
+      settle(1);
+    }
+  });
+
+export const sleepForPublishRetry: PublishSleeper = (delayMs) =>
+  new Promise((resolve) => {
+    setTimeout(resolve, delayMs);
+  });
+
+function platformLabel(platform: OtaPublishPlatform): string {
+  return platform === 'ios' ? 'iOS' : 'Android';
+}
+
+function failureDescription(kind: PublishFailureKind): string {
+  if (kind === 's3-slowdown') return 'S3 SlowDown';
+  if (kind === 'http-5xx') return 'HTTP 5xx';
+  if (kind === 'permanent') return 'permanent error evidence';
+  return 'no retryable error evidence';
+}
+
+/**
+ * Run one platform's self-hosted publish with four total attempts. Only exact
+ * S3 SlowDown XML or an explicit HTTP 5xx is retryable. Output is streamed once
+ * as it arrives; notices contain classification metadata only.
+ */
+export async function publishSelfHostedPlatformWithRetry(
+  invocation: PublishRetryInvocation,
+  dependencies: PublishRetryDependencies = {},
+): Promise<PlatformPublishOutcome> {
+  const runner = dependencies.runner ?? runStreamingPublishCommand;
+  const sleeper = dependencies.sleeper ?? sleepForPublishRetry;
+  const stdout = dependencies.stdout ?? process.stdout;
+  const stderr = dependencies.stderr ?? process.stderr;
+  const label = platformLabel(invocation.platform);
+
+  for (let attempt = 1; attempt <= SELF_HOSTED_PUBLISH_MAX_ATTEMPTS; attempt++) {
+    const scanner = new PublishFailureEvidenceScanner();
+    let exitCode = 1;
+    try {
+      const result = await runner({
+        command: invocation.command,
+        args: invocation.args,
+        cwd: invocation.cwd,
+        env: invocation.env,
+        onStdout: (chunk) => {
+          stdout.write(chunk);
+          scanner.push(chunk);
+        },
+        onStderr: (chunk) => {
+          stderr.write(chunk);
+          scanner.push(chunk);
+        },
+      });
+      exitCode = result.exitCode;
+    } catch {
+      // A runner failure has no retryable server evidence. Keep the diagnostic
+      // intentionally generic: thrown errors can embed argv/env or a raw tail.
+      stderr.write(`[mobile:publish] ${label} publish process failed to run; not retrying.\n`);
+      return { platform: invocation.platform, success: false, attempts: attempt, failureKind: 'unknown' };
+    }
+
+    if (exitCode === 0) {
+      return { platform: invocation.platform, success: true, attempts: attempt, failureKind: null };
+    }
+
+    const failureKind = scanner.classify();
+    const retryable = failureKind === 's3-slowdown' || failureKind === 'http-5xx';
+    if (!retryable || attempt === SELF_HOSTED_PUBLISH_MAX_ATTEMPTS) {
+      const exhausted = retryable ? ' after exhausting the retry budget' : '';
+      stderr.write(
+        `[mobile:publish] ${label} publish failed (${failureDescription(failureKind)})${exhausted}; not retrying.\n`,
+      );
+      return { platform: invocation.platform, success: false, attempts: attempt, failureKind };
+    }
+
+    const delayMs = SELF_HOSTED_PUBLISH_RETRY_DELAYS_MS[attempt - 1];
+    stderr.write(
+      `[mobile:publish] ${label} publish attempt ${attempt}/${SELF_HOSTED_PUBLISH_MAX_ATTEMPTS} failed with ${failureDescription(failureKind)}; retrying in ${delayMs / 1000}s.\n`,
+    );
+    try {
+      await sleeper(delayMs);
+    } catch {
+      stderr.write(`[mobile:publish] ${label} retry wait failed; not retrying.\n`);
+      return { platform: invocation.platform, success: false, attempts: attempt, failureKind: 'unknown' };
+    }
+  }
+
+  // The loop always returns. Keep a defensive result so a future attempt-count
+  // refactor cannot turn an empty loop into accidental success.
+  return { platform: invocation.platform, success: false, attempts: 0, failureKind: 'unknown' };
+}
+
+/** Run every requested platform in order, even after an earlier failure. */
+export async function publishPlatformsSequentially(
+  platforms: readonly OtaPublishPlatform[],
+  publishPlatform: (platform: OtaPublishPlatform) => Promise<PlatformPublishOutcome>,
+): Promise<PlatformPublishOutcome[]> {
+  const outcomes: PlatformPublishOutcome[] = [];
+  for (const platform of platforms) {
+    try {
+      outcomes.push(await publishPlatform(platform));
+    } catch {
+      outcomes.push({ platform, success: false, attempts: 0, failureKind: 'unknown' });
+    }
+  }
+  return outcomes;
+}
