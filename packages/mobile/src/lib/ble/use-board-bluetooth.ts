@@ -653,12 +653,11 @@ export function useBoardBluetooth({
   }, []);
 
   const clearConnectionAfterDrop = useCallback(
-    (expectedAdapter: BluetoothAdapter, expectedGeneration: number) => {
+    (expectedAdapter: BluetoothAdapter) => {
       // A callback from a replaced adapter must not tear down the new link.
       if (adapterRef.current !== expectedAdapter) return;
       unsubDisconnectRef.current?.();
       unsubDisconnectRef.current = null;
-      consumeConnectionLifetime(expectedAdapter, expectedGeneration, 'unexpected', 'link_drop');
       adapterRef.current = null;
       configuredDeviceNameRef.current = undefined;
       connectedConfigIdentityRef.current = null;
@@ -678,7 +677,7 @@ export function useBoardBluetooth({
       // native link would otherwise leak — dispose explicitly.
       void expectedAdapter.disconnect().catch(() => {});
     },
-    [consumeConnectionLifetime, onConnectionChange],
+    [onConnectionChange],
   );
 
   const handleDisconnection = useCallback(
@@ -693,7 +692,7 @@ export function useBoardBluetooth({
         return;
       }
       consumeConnectionLifetime(expectedAdapter, expectedGeneration, 'unexpected', 'link_drop', info);
-      clearConnectionAfterDrop(expectedAdapter, expectedGeneration);
+      clearConnectionAfterDrop(expectedAdapter);
     },
     [clearConnectionAfterDrop, consumeConnectionLifetime],
   );
@@ -1673,6 +1672,12 @@ export function useBoardBluetooth({
       const adapter = adapterRef.current;
       const lifetime = activeConnectionLifetimeRef.current;
       if (adapter && lifetime?.adapter === adapter) {
+        // A provider unmount is component teardown, not an observed BLE end:
+        // its analytics/presence callback owners are unmounting too. Ordinary
+        // navigation keeps this global provider mounted, while user-triggered
+        // disconnects go through teardownConnection and do notify. Consume this
+        // lifetime silently so the native disconnect callback cannot emit it
+        // later after the subscription and owners are gone.
         consumeConnectionLifetime(adapter, lifetime.generation, 'user', 'explicit_user', undefined, false);
       }
       adapterRef.current = null;
