@@ -34,6 +34,14 @@ const TEST_SOURCE_FILES = [
     projectPath: 'BoardseshTests/BoardBleServiceDiscoveryTests.swift',
   },
   {
+    sourcePath: '../ios-tests/BoardRendererErrorClassificationTests.swift',
+    projectPath: 'BoardseshTests/BoardRendererErrorClassificationTests.swift',
+  },
+  {
+    sourcePath: '../modules/board-renderer/ios/BoardRendererErrorClassification.swift',
+    projectPath: 'BoardseshTests/BoardRendererSources/BoardRendererErrorClassification.swift',
+  },
+  {
     sourcePath: '../modules/live-activity/ios/BoardBleManager.swift',
     projectPath: 'BoardseshTests/LiveActivitySources/BoardBleManager.swift',
   },

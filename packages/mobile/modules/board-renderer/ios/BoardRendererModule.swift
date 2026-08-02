@@ -108,37 +108,19 @@ public class BoardRendererModule: Module {
   /// invalidated and re-run the whole thing exactly once from scratch.
   ///
   /// Deliberately narrow, mirroring the Android twin `CacheMissRecovery`:
-  /// only a file-not-found-shaped error is retried — `NSCocoaErrorDomain` /
-  /// `NSFileNoSuchFileError` (what `Data.write(to:options:.atomic)` throws
-  /// for a missing directory) or `NSPOSIXErrorDomain` / `ENOENT` (in case the
-  /// underlying implementation surfaces a lower-level POSIX error instead).
-  /// The exact domain/code Foundation uses here is unverified against a real
-  /// device or simulator — no Mac was available while writing this — so both
-  /// are checked defensively; narrow it further once confirmed. The three
-  /// `"BoardRenderer"`-domain `NSError`s below (Rust render failure, failed
-  /// `CGImage` wrap, failed PNG encoding) are a different domain entirely and
-  /// so are never matched here — retrying a genuine encoder or render bug
-  /// would waste work without fixing anything.
-  private func isFileVanishedError(_ error: Error) -> Bool {
-    let nsError = error as NSError
-    if nsError.domain == NSCocoaErrorDomain,
-      nsError.code == NSFileNoSuchFileError || nsError.code == NSFileReadNoSuchFileError
-    {
-      return true
-    }
-    if nsError.domain == NSPOSIXErrorDomain, nsError.code == Int(ENOENT) {
-      return true
-    }
-    return false
-  }
-
+  /// only a file-not-found-shaped error is retried. The classification —
+  /// Cocoa no-such-file codes, POSIX `ENOENT`, and a bounded unwrap of
+  /// `NSUnderlyingErrorKey` for Cocoa wrappers that carry the POSIX cause —
+  /// lives in `BoardRendererErrorClassification`, which is compiled into the
+  /// `BoardseshTests` XCTest target and verified there against the error a
+  /// real `Data.write(to:options:.atomic)` into a deleted directory throws.
   private func renderOverlay(configJson: String, cacheKey: String) throws -> String {
     do {
       return try renderOverlayOnce(configJson: configJson, cacheKey: cacheKey)
     } catch {
-      guard isFileVanishedError(error) else { throw error }
+      guard BoardRendererErrorClassification.isFileVanishedError(error) else { throw error }
       NSLog(
-        "[BoardRenderer] Overlay cache file vanished mid-request for \(cacheKey); invalidating and re-rendering once"
+        "[BoardRenderer] Overlay cache file vanished mid-request for \(cacheKey) (\(error)); invalidating and re-rendering once"
       )
       return try renderOverlayOnce(configJson: configJson, cacheKey: cacheKey)
     }

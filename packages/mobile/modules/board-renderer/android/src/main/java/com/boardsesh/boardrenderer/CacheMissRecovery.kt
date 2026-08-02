@@ -20,38 +20,61 @@ import java.io.IOException
  * defense-in-depth if a future change to the fast path ever adds a real
  * read.
  *
- * Deliberately narrower than [CacheDirRecovery]: this only retries
- * [FileNotFoundException] specifically — "the cache file/dir isn't there
- * right now" — not the broader [IOException] contract [CacheDirRecovery]
- * accepts (which also covers e.g. an out-of-space failure with the
- * directory in place the whole time). A vanished cache entry is recoverable
- * by re-rendering; an out-of-space condition usually isn't, and silently
- * retrying the entire pipeline for it would double the wasted work without
- * fixing anything. [CacheDirRecovery] keeps owning that broader,
- * write-scoped retry as its own inner concern.
+ * The retry gate is a *vanished cache*, classified two ways:
  *
- * Pure Kotlin, no Android framework calls, no `File`-specific coupling — it
- * just retries a callable once on a specific exception type — so
+ * 1. [FileNotFoundException] — the classic "the cache file/dir isn't there
+ *    right now" signal, kept as an explicit retry trigger in its own right
+ *    (it is an [IOException] subclass, so it would also pass the second
+ *    check whenever the directory is gone, but the intent — a missing
+ *    *path*, retry-worthy regardless of directory state at catch time — is
+ *    preserved explicitly).
+ * 2. A plain [IOException] thrown while the cache directory is missing
+ *    ([isCacheDirMissing] returns true at catch time). In the current
+ *    atomic-write pipeline most second-vanish failures surface this way,
+ *    not as FNF: `File.createTempFile` into a vanished directory throws a
+ *    plain `IOException("No such file or directory")`, and an ENOENT
+ *    `ErrnoException` from `Os.rename` is wrapped in a plain [IOException]
+ *    by [AndroidAtomicFileCommitter].
+ *
+ * A plain [IOException] with the directory still in place — out-of-space,
+ * permissions — is deliberately NOT retried: that failure mode is not a
+ * vanished cache entry, re-rendering can't fix it, and silently retrying
+ * the entire pipeline for it would double the wasted work without fixing
+ * anything. This keeps the contract narrower than [CacheDirRecovery]'s
+ * broad `IOException` acceptance, which stays that helper's own inner,
+ * write-scoped concern.
+ *
+ * Pure Kotlin, no Android framework calls, no `File`-specific coupling —
+ * the directory check is injected as [isCacheDirMissing] (the call site in
+ * [BoardRendererModule] supplies the real `!cacheDir.isDirectory`) — so
  * [CacheMissRecoveryTest] needs neither Robolectric nor a real cache
  * directory, matching [CacheDirRecovery]'s approach for its sibling helper.
  */
 object CacheMissRecovery {
     /**
-     * Runs [action]. If it throws [FileNotFoundException], invokes
-     * [onRecovered] with the original failure and runs [action] exactly one
-     * more time. Any other exception — including a broader [IOException] —
-     * propagates immediately, untouched. A second [FileNotFoundException]
-     * also propagates: the retry is bounded to one extra attempt, so a
-     * persistently vanished cache path still fails fast instead of looping.
+     * Runs [action]. If it throws a retryable failure — a
+     * [FileNotFoundException], or any other [IOException] while
+     * [isCacheDirMissing] reports the cache directory gone — invokes
+     * [onRecovered] with the original failure plus the directory-missing
+     * verdict (so the call site can log what actually happened), and runs
+     * [action] exactly one more time. A non-retryable failure — a plain
+     * [IOException] with the directory still present, or anything that isn't
+     * an [IOException] at all — propagates immediately, untouched. A second
+     * retryable failure also propagates: the retry is bounded to one extra
+     * attempt, so a persistently vanished cache path still fails fast
+     * instead of looping.
      */
-    fun <T> retryOnceOnFileNotFound(
-        onRecovered: (FileNotFoundException) -> Unit = {},
+    fun <T> retryOnceOnCacheVanish(
+        isCacheDirMissing: () -> Boolean,
+        onRecovered: (failure: IOException, cacheDirMissing: Boolean) -> Unit = { _, _ -> },
         action: () -> T,
     ): T {
         return try {
             action()
-        } catch (failure: FileNotFoundException) {
-            onRecovered(failure)
+        } catch (failure: IOException) {
+            val cacheDirMissing = isCacheDirMissing()
+            if (failure !is FileNotFoundException && !cacheDirMissing) throw failure
+            onRecovered(failure, cacheDirMissing)
             action()
         }
     }

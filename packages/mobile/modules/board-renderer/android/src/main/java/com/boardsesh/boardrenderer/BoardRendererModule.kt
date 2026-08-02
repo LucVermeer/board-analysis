@@ -46,19 +46,32 @@ class BoardRendererModule : Module() {
      * and that second [java.io.FileNotFoundException] was previously
      * unguarded, reaching JS as a rejected `renderHoldsOverlay` promise.
      * This wraps the *entire* pipeline — fast-path check, render, and write
-     * — in one more bounded retry: on a vanished-file failure, treat the
+     * — in one more bounded retry: on a vanished-cache failure, treat the
      * cache entry as invalidated and re-run the whole thing exactly once
-     * from scratch. See [CacheMissRecovery] for why this is scoped to
-     * `FileNotFoundException` specifically, narrower than
-     * [CacheDirRecovery]'s own `IOException` contract.
+     * from scratch. See [CacheMissRecovery] for the classification — a
+     * `FileNotFoundException`, or a plain `IOException` caught while the
+     * cache directory is missing (how `File.createTempFile` and the wrapped
+     * `Os.rename` ENOENT actually surface a second vanish) — and for why a
+     * dir-present `IOException` (out-of-space, permissions) stays
+     * non-retryable, narrower than [CacheDirRecovery]'s own `IOException`
+     * contract.
      */
     private fun renderOverlay(configJson: String, cacheKey: String): String {
         ensurePruned()
-        return CacheMissRecovery.retryOnceOnFileNotFound(
-            onRecovered = { failure ->
+        return CacheMissRecovery.retryOnceOnCacheVanish(
+            isCacheDirMissing = { !cacheDir.isDirectory },
+            onRecovered = { failure, cacheDirMissing ->
+                // Log what was actually observed: the gate checked the
+                // directory at catch time, so "dir was missing" is a
+                // verified fact here, not an assumption.
+                val observedCause = if (cacheDirMissing) {
+                    "cache dir ${cacheDir.absolutePath} was missing at failure time"
+                } else {
+                    "cache file path vanished with the dir still in place"
+                }
                 android.util.Log.w(
                     "BoardRenderer",
-                    "Overlay cache file vanished mid-request for $cacheKey; invalidating and re-rendering once",
+                    "Overlay render failed for $cacheKey ($observedCause); invalidating and re-rendering once",
                     failure,
                 )
             },
