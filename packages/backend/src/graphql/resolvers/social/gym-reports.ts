@@ -6,25 +6,18 @@ import { db } from '../../../db/client';
 import { requireAuthenticated, applyRateLimit, validateInput } from '../shared/helpers';
 import { ReportGymDuplicateInputSchema } from '../../../validation/schemas';
 import { sendGymDuplicateReportAdminNotification } from '../../../email/email-service';
-import { checkRateLimit, cleanupRateLimit, RateLimitError } from '../../../utils/rate-limiter';
 import { logger } from '../../../utils/logger';
+import {
+  acquireGymDuplicateReportClaim,
+  gymDuplicateReportClaimKey,
+  releaseGymDuplicateReportClaim,
+} from '../../../utils/gym-duplicate-report-claims';
 
 // Owner-facing "report a duplicate" surfaces the pair to admins by email (the same
 // admin-notification path a queued gym claim uses). It is deliberately migration-free:
-// no dedicated table, so repeated reports of the SAME pair are de-duplicated with the
-// in-memory window limiter below rather than a persisted row. This is per-instance,
-// best-effort de-dup — enough to stop one flurry of clicks (or two climbers flagging
-// the same pair) from spamming the team, while the per-user `applyRateLimit` bounds
-// overall volume. Known limitation: in-memory de-dup resets on deploy and doesn't
-// span instances, so the same pair can re-email after a restart or from another node.
-// A Redis-backed (SET NX EX) de-dup + a durable reports table are the follow-up.
-const REPORT_DEDUP_WINDOW_MS = 24 * 60 * 60 * 1000;
-
-/** One stable key per unordered gym pair, so (A,B) and (B,A) de-dupe together. */
-function duplicateReportDedupKey(firstUuid: string, secondUuid: string): string {
-  const [low, high] = [firstUuid, secondUuid].sort();
-  return `gymDuplicateReport:${low}:${high}`;
-}
+// no dedicated table. A local owner-token claim collapses concurrent requests on
+// this instance, while Redis SET NX PXAT extends the same 24-hour window across
+// instances and deploys. The per-user `applyRateLimit` independently bounds volume.
 
 /** The reporter's display name for the admin email, falling back to a neutral label. */
 async function loadReporterName(userId: string): Promise<string> {
@@ -72,8 +65,8 @@ export const socialGymReportMutations = {
   ): Promise<{ status: 'reported' | 'already_reported' }> => {
     // Intentionally NOT owner-gated: a duplicate report is a community data-quality
     // signal, so any signed-in climber who spots two listings of a gym can flag them
-    // (not just the owner). The 10/min per-user ceiling — shared with the gym-claim
-    // flow — bounds abuse. Do not tighten this to owners-only.
+    // (not just the owner). A dedicated 10/min per-user bucket bounds abuse
+    // independently from the gym-claim mutation. Do not tighten this to owners-only.
     requireAuthenticated(ctx);
     await applyRateLimit(ctx, 10, 'reportGymDuplicate');
 
@@ -107,17 +100,12 @@ export const socialGymReportMutations = {
     // ever sent — the report would be silently lost.
     const reporterName = await loadReporterName(userId);
 
-    // De-dup: the first report of this pair claims the window; a repeat inside it
-    // returns without re-emailing. Marked BEFORE the send so concurrent clicks
-    // collapse to one, and released on send failure so a retry isn't stranded.
-    const dedupKey = duplicateReportDedupKey(gym.uuid, duplicate.uuid);
-    try {
-      checkRateLimit(dedupKey, 1, REPORT_DEDUP_WINDOW_MS);
-    } catch (error) {
-      if (error instanceof RateLimitError) {
-        return { status: 'already_reported' };
-      }
-      throw error;
+    // Claim BEFORE sending so concurrent clicks collapse to one notification.
+    // Local ownership is always acquired first; Redis extends the same stable,
+    // unordered pair claim across backend instances when available.
+    const claimResult = await acquireGymDuplicateReportClaim(gymDuplicateReportClaimKey(gym.uuid, duplicate.uuid));
+    if (claimResult.status === 'already_claimed') {
+      return { status: 'already_reported' };
     }
 
     try {
@@ -129,11 +117,18 @@ export const socialGymReportMutations = {
         reporterName,
         note: validatedInput.note ?? null,
       });
-    } catch (error) {
+    } catch {
       // The email IS the record for this pair, so a failed send must not leave the
-      // pair marked reported — release it so the climber can try again.
-      cleanupRateLimit(dedupKey);
-      logger.error('[GymDuplicateReport] Failed to send admin notification:', error);
+      // pair marked reported. Owner-checked local + Redis cleanup lets the climber
+      // retry without allowing a stale request to delete a successor's claim.
+      await releaseGymDuplicateReportClaim(claimResult.claim);
+      // Email-provider errors can echo the submitted payload. Keep Sentry/error
+      // visibility through a fresh Error while excluding gym names, UUIDs,
+      // reporter details, and notes from logs.
+      logger.error(
+        '[GymDuplicateReport] Failed to send admin notification:',
+        new Error('Gym duplicate report admin notification delivery failed'),
+      );
       throw new GraphQLError("We couldn't send that report. Try again in a moment.", {
         extensions: { code: 'INTERNAL_SERVER_ERROR' },
       });
