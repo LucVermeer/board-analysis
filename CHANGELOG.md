@@ -8,6 +8,7 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- Keep receiving over-the-air fixes after JavaScript-only dependency updates. ([#4148](https://github.com/boardsesh/boardsesh/pull/4148))
 - Remixing or editing a climb now waits for the current board, queue, and player screens to finish closing before the editor opens, preventing stranded sheets and taps that appear to do nothing. ([#4091](https://github.com/boardsesh/boardsesh/pull/4091))
 - Board climbs catch up sooner after temporary Aurora sync outages ([#4096](https://github.com/boardsesh/boardsesh/pull/4096))
 - Keep empty board angles out of Kilter climb stats after catalog repairs. ([#4109](https://github.com/boardsesh/boardsesh/pull/4109))

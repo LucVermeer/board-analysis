@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-08-02T00:24:06.888Z",
+  "generatedAt": "2026-08-02T03:14:04.788Z",
   "entries": [
+    {
+      "prNumber": 4148,
+      "category": "fixed",
+      "title": "Keep receiving over-the-air fixes after JavaScript-only dependency updates.",
+      "mergedAt": "2026-08-02T03:13:47Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4148"
+    },
     {
       "prNumber": 4091,
       "category": "fixed",
