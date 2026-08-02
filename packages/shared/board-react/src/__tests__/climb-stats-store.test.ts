@@ -4,6 +4,7 @@ import {
   acknowledgeOptimisticAscent,
   applyCanonicalClimbStats,
   beginOptimisticAscent,
+  getAcknowledgedClimbStatsTokens,
   getClimbStatsRefCount,
   getClimbStatsSnapshot,
   markOptimisticAscentQueued,
@@ -102,19 +103,44 @@ describe('climb stats external store', () => {
     unsubscribe();
   });
 
+  it('snapshots exact acknowledged repair obligations by board, climb, and auth epoch', () => {
+    setClimbStatsAuthEpoch(4);
+    beginOptimisticAscent(key, 'acknowledged-first', 4, 10);
+    acknowledgeOptimisticAscent('acknowledged-first', 4);
+    beginOptimisticAscent(key, 'still-pending', 4, 20);
+    const captured = getAcknowledgedClimbStatsTokens('kilter', 'climb-1', 4);
+
+    acknowledgeOptimisticAscent('still-pending', 4);
+    beginOptimisticAscent({ ...key, climbUuid: 'climb-2' }, 'other-climb', 4, 30);
+    acknowledgeOptimisticAscent('other-climb', 4);
+
+    expect(captured).toEqual(['acknowledged-first']);
+    expect(getAcknowledgedClimbStatsTokens('kilter', 'climb-1', 4)).toEqual(['acknowledged-first', 'still-pending']);
+    expect(getAcknowledgedClimbStatsTokens('kilter', 'climb-2', 4)).toEqual(['other-climb']);
+    expect(getAcknowledgedClimbStatsTokens('kilter', 'climb-1', 3)).toEqual([]);
+  });
+
   it('bridges queued tick acknowledgements and dead letters by tick UUID', () => {
     setClimbStatsAuthEpoch(2);
     const unsubscribe = subscribeClimbStats(key, vi.fn());
     beginOptimisticAscent(key, 'queued-a', 2, 20);
     markOptimisticAscentQueued('queued-a', 'tick-a', 2);
-    expect(settleOfflineTickAscent('tick-a', 'acknowledged', 2)).toEqual(key);
+    expect(settleOfflineTickAscent('tick-a', 'acknowledged', 2)).toEqual({
+      key,
+      token: 'queued-a',
+      status: 'acknowledged',
+    });
     expect(getClimbStatsSnapshot(key).optimisticFloor).toBe(21);
     applyCanonicalClimbStats(canonical('5', 21));
     expect(getClimbStatsSnapshot(key).optimisticFloor).toBeNull();
 
     beginOptimisticAscent(key, 'queued-b', 2, 21);
     markOptimisticAscentQueued('queued-b', 'tick-b', 2);
-    expect(settleOfflineTickAscent('tick-b', 'dead_letter', 2)).toEqual(key);
+    expect(settleOfflineTickAscent('tick-b', 'dead_letter', 2)).toEqual({
+      key,
+      token: 'queued-b',
+      status: 'dead_letter',
+    });
     expect(getClimbStatsSnapshot(key).optimisticFloor).toBeNull();
     unsubscribe();
   });
@@ -124,7 +150,11 @@ describe('climb stats external store', () => {
     const unsubscribe = subscribeClimbStats(key, vi.fn());
     beginOptimisticAscent(key, 'queued-a', 2, 4);
     expect(settleOfflineTickAscent('tick-a', 'acknowledged', 2)).toBeNull();
-    markOptimisticAscentQueued('queued-a', 'tick-a', 2);
+    expect(markOptimisticAscentQueued('queued-a', 'tick-a', 2)).toEqual({
+      key,
+      token: 'queued-a',
+      status: 'acknowledged',
+    });
     applyCanonicalClimbStats(canonical('2', 5));
     expect(getClimbStatsSnapshot(key).optimisticFloor).toBeNull();
     unsubscribe();

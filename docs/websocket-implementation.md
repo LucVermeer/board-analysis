@@ -192,12 +192,31 @@ because the revision gate makes them idempotent.
 
 `@boardsesh/board-react` stores only exact keys retained by mounted selectors or
 optimistic mutations, so a layout-wide stream cannot grow an unbounded client
-map. Mobile performs bounded primary catch-up reads on mount/reconnect/error and
-after an acknowledged tick, covering a missed publish. The visible send count
-is `max(server-rendered base, canonical event, optimistic floor)`; canonical
-quality and community difficulty update in memoized row/header children without
-re-rendering the board art or gesture shell. Boardsesh-grade fields still win
-when that display preference is active.
+map. Mobile microtask-coalesces mount/reconnect/error and post-ack repair work
+into `climbStatsForClimbs` primary reads, with one physical batch in flight and
+at most 50 deduplicated UUIDs per query. Forced post-ack work runs before normal
+catch-up work. Rate limiting pauses the whole adapter-and-board lane behind one
+server-directed timer, including chunks queued after the rejected batch. The
+affected UUIDs retry in one coalesced batch exactly once; other boards and
+adapter instances may use the global single-flight slot while that lane waits.
+The retry is fenced by the auth generation, and a second rejection ends the
+lane attempt instead of amplifying timers or immediately draining later chunks.
+Same-auth reads that arrive during that retry end with the exhausted attempt;
+reads from a newer auth generation wait for the old physical retry to settle,
+then start independently without inheriting its terminal backoff.
+
+The server-rendered base is bootstrap-only. Once a revision-gated canonical row
+exists, the visible send count is `max(canonical, outstanding optimistic floor)`
+even when canonical decreased to zero. Acknowledged optimistic mutations are
+the durable repair obligations: cancellation or a failed post-ack request leaves
+them discoverable by the next primary read. Each physical request snapshots the
+exact acknowledged tokens immediately before dispatch, and only a successful
+response retires that snapshot. A stale absolute floor therefore cannot stick
+forever, while a later mutation cannot be cleared by an earlier response.
+Canonical quality and community
+difficulty update in memoized row/header children without re-rendering the
+board art or gesture shell. Boardsesh-grade fields still win when that display
+preference is active.
 
 ---
 

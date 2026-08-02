@@ -1199,6 +1199,35 @@ export type ClimbStatsForAngle = {
 };
 
 /**
+ * Current statistics for one climb at one angle in a batched primary read.
+ * The climb UUID is repeated on every row so clients can route a flat response
+ * without relying on request order. Requested climbs with no stats have no row.
+ */
+export type ClimbStatsForClimb = {
+  __typename?: 'ClimbStatsForClimb';
+  /** Board angle in degrees */
+  angle: Scalars['Int']['output'];
+  /** Number of people who have completed this climb at this angle */
+  ascensionistCount?: Maybe<Scalars['Int']['output']>;
+  /** Climb whose statistics this row describes */
+  climbUuid: Scalars['ID']['output'];
+  /** Human-readable grade label derived from displayDifficulty (e.g., 'V5', '6B+') */
+  difficulty?: Maybe<Scalars['String']['output']>;
+  /** Average difficulty rating */
+  difficultyAverage?: Maybe<Scalars['Float']['output']>;
+  /** Display difficulty value */
+  displayDifficulty?: Maybe<Scalars['Float']['output']>;
+  /** When the first ascent was logged (ISO timestamp) */
+  faAt?: Maybe<Scalars['String']['output']>;
+  /** Username of the first ascensionist */
+  faUsername?: Maybe<Scalars['String']['output']>;
+  /** Average quality rating */
+  qualityAverage?: Maybe<Scalars['Float']['output']>;
+  /** Monotonic database revision, encoded as decimal text to preserve bigint precision */
+  syncSeq: Scalars['String']['output'];
+};
+
+/**
  * A single snapshot of climb statistics from the history table.
  * Captured during shared sync to track trends over time.
  */
@@ -4642,6 +4671,11 @@ export type Query = {
    */
   climbStatsForAngles: Array<ClimbStatsForAngle>;
   /**
+   * Get current per-angle statistics for 1-50 climbs in one primary-database
+   * read. Requires authentication. Duplicate UUIDs are folded before querying.
+   */
+  climbStatsForClimbs: Array<ClimbStatsForClimb>;
+  /**
    * Get climb stats history for a climb over the last 12 months.
    * Returns snapshots captured during shared sync for trend analysis.
    */
@@ -5220,6 +5254,12 @@ export type QueryClimbProposalsArgs = {
 export type QueryClimbStatsForAnglesArgs = {
   boardName: Scalars['String']['input'];
   climbUuid: Scalars['ID']['input'];
+};
+
+/** Root query type for all read operations. */
+export type QueryClimbStatsForClimbsArgs = {
+  boardName: Scalars['String']['input'];
+  climbUuids: Array<Scalars['ID']['input']>;
 };
 
 /** Root query type for all read operations. */
@@ -8033,6 +8073,28 @@ export type ClimbStatsUpdatedSubscription = {
     faAt?: string | null;
     syncSeq: string;
   };
+};
+
+export type ClimbStatsForClimbsQueryVariables = Exact<{
+  boardName: Scalars['String']['input'];
+  climbUuids: Array<Scalars['ID']['input']> | Scalars['ID']['input'];
+}>;
+
+export type ClimbStatsForClimbsQuery = {
+  __typename?: 'Query';
+  climbStatsForClimbs: Array<{
+    __typename?: 'ClimbStatsForClimb';
+    climbUuid: string;
+    angle: number;
+    ascensionistCount?: number | null;
+    qualityAverage?: number | null;
+    difficultyAverage?: number | null;
+    displayDifficulty?: number | null;
+    difficulty?: string | null;
+    faUsername?: string | null;
+    faAt?: string | null;
+    syncSeq: string;
+  }>;
 };
 
 export type ClimbStatsHistoryQueryVariables = Exact<{
@@ -11078,6 +11140,70 @@ export const ClimbStatsUpdatedDocument = {
     },
   ],
 } as unknown as DocumentNode<ClimbStatsUpdatedSubscription, ClimbStatsUpdatedSubscriptionVariables>;
+export const ClimbStatsForClimbsDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'ClimbStatsForClimbs' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'boardName' } },
+          type: { kind: 'NonNullType', type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'climbUuids' } },
+          type: {
+            kind: 'NonNullType',
+            type: {
+              kind: 'ListType',
+              type: { kind: 'NonNullType', type: { kind: 'NamedType', name: { kind: 'Name', value: 'ID' } } },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'climbStatsForClimbs' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'boardName' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'boardName' } },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'climbUuids' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'climbUuids' } },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'climbUuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'angle' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'ascensionistCount' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'qualityAverage' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'difficultyAverage' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'displayDifficulty' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'difficulty' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'faUsername' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'faAt' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'syncSeq' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<ClimbStatsForClimbsQuery, ClimbStatsForClimbsQueryVariables>;
 export const ClimbStatsHistoryDocument = {
   kind: 'Document',
   definitions: [

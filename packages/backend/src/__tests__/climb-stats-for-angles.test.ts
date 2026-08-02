@@ -1,23 +1,27 @@
 import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import type { SQL } from 'drizzle-orm';
 
 // Mock the live-stats query: capture what the resolver selects and feed it
 // canned rows. The chain mirrors primary db.select().from().where().orderBy().
-const { selectRows, dbMock } = vi.hoisted(() => {
+const { selectRows, dbMock, dbReadMock, whereMock } = vi.hoisted(() => {
   const state: { rows: unknown[] } = { rows: [] };
   const chain = {
     from: vi.fn(() => chain),
-    where: vi.fn(() => chain),
+    where: vi.fn((_whereClause: unknown) => chain),
     orderBy: vi.fn(async () => state.rows),
   };
   return {
     selectRows: state,
-    dbMock: { select: vi.fn(() => chain) },
+    dbMock: { select: vi.fn((_selection: unknown) => chain) },
+    dbReadMock: { select: vi.fn() },
+    whereMock: chain.where,
   };
 });
 
 vi.mock('../db/client', () => ({
   db: dbMock,
-  dbRead: {},
+  dbRead: dbReadMock,
 }));
 
 // Deterministic grade labels so we assert the mapping, not the grade table.
@@ -48,9 +52,16 @@ const applyRateLimitMock = vi.mocked(applyRateLimit);
 // Anonymous HTTP-style context: only the in-memory rate-limit tier runs (the
 // Redis tier is gated on authenticated users), so no infra is needed.
 const ctx = { isAuthenticated: false, connectionId: 'test-conn' } as unknown as ConnectionContext;
+const authenticatedCtx = {
+  isAuthenticated: true,
+  userId: 'user-1',
+  connectionId: 'test-auth-conn',
+} as unknown as ConnectionContext;
 
 const callResolver = (boardName: string, climbUuid: string) =>
   climbQueries.climbStatsForAngles(undefined, { boardName, climbUuid }, ctx);
+const callBatchResolver = (boardName: string, climbUuids: string[], context = authenticatedCtx) =>
+  climbQueries.climbStatsForClimbs(undefined, { boardName, climbUuids }, context);
 
 describe('climbStatsForAngles resolver', () => {
   beforeEach(() => {
@@ -139,5 +150,87 @@ describe('climbStatsForAngles resolver', () => {
   it('rejects an empty climb uuid', async () => {
     await expect(callResolver('kilter', '')).rejects.toThrow();
     expect(dbMock.select).not.toHaveBeenCalled();
+  });
+});
+
+describe('climbStatsForClimbs resolver', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    selectRows.rows = [];
+  });
+
+  it('rejects an empty UUID batch', async () => {
+    await expect(callBatchResolver('kilter', [])).rejects.toThrow();
+    expect(dbMock.select).not.toHaveBeenCalled();
+  });
+
+  it('rejects a batch above 50 UUIDs', async () => {
+    const climbUuids = Array.from({ length: 51 }, (_, index) => `CLIMB-${index}`);
+    await expect(callBatchResolver('kilter', climbUuids)).rejects.toThrow();
+    expect(dbMock.select).not.toHaveBeenCalled();
+  });
+
+  it('accepts exactly 50 UUIDs in one primary query', async () => {
+    const climbUuids = Array.from({ length: 50 }, (_, index) => `CLIMB-${index}`);
+
+    await expect(callBatchResolver('kilter', climbUuids)).resolves.toEqual([]);
+
+    expect(dbMock.select).toHaveBeenCalledTimes(1);
+    expect(whereMock).toHaveBeenCalledTimes(1);
+    const { params } = new PgDialect().sqlToQuery(whereMock.mock.calls[0]?.[0] as SQL);
+    for (const climbUuid of climbUuids) expect(params).toContain(climbUuid);
+  });
+
+  it('requires authentication before spending the shared rate-limit bucket', async () => {
+    await expect(callBatchResolver('kilter', ['CLIMB-1'], ctx)).rejects.toThrow('Authentication required');
+    expect(applyRateLimitMock).not.toHaveBeenCalled();
+    expect(dbMock.select).not.toHaveBeenCalled();
+  });
+
+  it('dedupes UUIDs into one primary IN query', async () => {
+    await callBatchResolver('kilter', ['CLIMB-1', 'CLIMB-1', 'CLIMB-2']);
+
+    expect(dbMock.select).toHaveBeenCalledTimes(1);
+    expect(dbReadMock.select).not.toHaveBeenCalled();
+    expect(whereMock).toHaveBeenCalledTimes(1);
+    const { params } = new PgDialect().sqlToQuery(whereMock.mock.calls[0]?.[0] as SQL);
+    expect(params.filter((parameter) => parameter === 'CLIMB-1')).toHaveLength(1);
+    expect(params.filter((parameter) => parameter === 'CLIMB-2')).toHaveLength(1);
+  });
+
+  it('returns climb routing, bigint text, and labelled angle stats', async () => {
+    selectRows.rows = [
+      {
+        climbUuid: 'CLIMB-1',
+        angle: 40,
+        ascensionistCount: 12,
+        qualityAverage: 3.5,
+        difficultyAverage: 20.4,
+        displayDifficulty: 20.6,
+        syncSeq: '90071992547409930',
+        faUsername: 'Alice',
+        faAt: '2024-01-02T00:00:00Z',
+      },
+    ];
+
+    await expect(callBatchResolver('kilter', ['CLIMB-1'])).resolves.toEqual([
+      expect.objectContaining({
+        climbUuid: 'CLIMB-1',
+        angle: 40,
+        difficulty: 'V21',
+        syncSeq: '90071992547409930',
+      }),
+    ]);
+
+    const selection = dbMock.select.mock.calls[0]?.[0] as { syncSeq: SQL };
+    const { sql: syncSeqSql } = new PgDialect().sqlToQuery(selection.syncSeq);
+    expect(syncSeqSql).toContain('::text');
+  });
+
+  it('uses the legacy climb-stats-for-angles bucket exactly once for the batch', async () => {
+    await callBatchResolver('tension', ['CLIMB-1', 'CLIMB-2']);
+
+    expect(applyRateLimitMock).toHaveBeenCalledTimes(1);
+    expect(applyRateLimitMock).toHaveBeenCalledWith(authenticatedCtx, 60, 'climb-stats-for-angles');
   });
 });

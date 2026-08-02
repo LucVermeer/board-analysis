@@ -1,7 +1,7 @@
 import { createContext, useContext, type ReactNode } from 'react';
 import type { QueryClient } from '@tanstack/react-query';
 import type { SaveTickMutationResponse, SaveTickMutationVariables } from '@boardsesh/graphql/operations';
-import type { ClimbStatsForAnglesEntry } from '@boardsesh/graphql/operations';
+import type { ClimbStatsForClimbEntry } from '@boardsesh/graphql/operations';
 import type { ClimbStatsEvent } from '@boardsesh/shared-schema';
 
 export type ClimbStatsSubscriptionHandlers = {
@@ -61,8 +61,8 @@ export type BoardAdapter = {
    * does not, so it must not create tokens accidentally.
    */
   supportsClimbStatsOptimism?: true;
-  /** Primary-backed canonical read; one response covers every angle for a climb. */
-  fetchClimbStats?: (boardType: string, climbUuid: string) => Promise<ClimbStatsForAnglesEntry[]>;
+  /** Primary-backed canonical batch read; one response covers every requested climb and angle. */
+  fetchClimbStatsForClimbs?: (boardType: string, climbUuids: string[]) => Promise<ClimbStatsForClimbEntry[]>;
   /** Layout-wide stream multiplexed over the platform's singleton graphql-ws client. */
   subscribeClimbStats?: (boardType: string, layoutId: number, handlers: ClimbStatsSubscriptionHandlers) => () => void;
   /** Offline outbox acknowledgement/dead-letter notifications keyed by tick UUID. */

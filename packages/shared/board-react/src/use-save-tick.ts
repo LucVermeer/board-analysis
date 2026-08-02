@@ -189,11 +189,17 @@ export function useSaveTick(boardName: BoardName | null) {
 
       if (context?.statsToken && context.statsKey && (adapter.isAuthEpochCurrent?.(context.authEpoch) ?? true)) {
         if (delivery === 'queued') {
-          markOptimisticAscentQueued(context.statsToken, savedTick.uuid, context.authEpoch);
+          const eagerlySettled = markOptimisticAscentQueued(context.statsToken, savedTick.uuid, context.authEpoch);
+          if (
+            eagerlySettled?.status === 'acknowledged' &&
+            context.readLifecycleGeneration === readLifecycleGenerationRef.current
+          ) {
+            acknowledgedReadOwner.schedule(adapter, eagerlySettled.key, eagerlySettled.token);
+          }
         } else {
           acknowledgeOptimisticAscent(context.statsToken, context.authEpoch);
           if (context.readLifecycleGeneration === readLifecycleGenerationRef.current) {
-            acknowledgedReadOwner.schedule(adapter, context.statsKey);
+            acknowledgedReadOwner.schedule(adapter, context.statsKey, context.statsToken);
           }
         }
       }

@@ -14,6 +14,12 @@ export type ClimbStatsSnapshot = {
   optimisticFloor: number | null;
 };
 
+export type SettledOfflineTickAscent = {
+  key: ClimbStatsKey;
+  token: string;
+  status: 'acknowledged' | 'dead_letter';
+};
+
 type OptimisticAscent = {
   token: string;
   floor: number;
@@ -144,6 +150,28 @@ export function isClimbStatsReadRetained(boardType: string, climbUuid: string): 
   return false;
 }
 
+/**
+ * Snapshot the exact acknowledged mutations a successful primary read may
+ * retire. The acknowledged mutation itself is the durable repair obligation:
+ * canceling a delayed repair or losing a request to a terminal transport error
+ * cannot orphan it, because the next primary read discovers it here. Callers
+ * snapshot immediately before dispatch so a newer acknowledgement cannot be
+ * retired by an older in-flight response.
+ */
+export function getAcknowledgedClimbStatsTokens(boardType: string, climbUuid: string, authEpoch: number): string[] {
+  if (authEpoch !== activeAuthEpoch) return [];
+  const acknowledgedTokens: string[] = [];
+  for (const entry of entries.values()) {
+    if (entry.key.boardType !== boardType || entry.key.climbUuid !== climbUuid) continue;
+    for (const mutation of entry.optimistic.values()) {
+      if (mutation.authEpoch === authEpoch && mutation.status === 'acknowledged') {
+        acknowledgedTokens.push(mutation.token);
+      }
+    }
+  }
+  return acknowledgedTokens;
+}
+
 export function applyCanonicalClimbStats(payload: CanonicalClimbStats): boolean {
   if (!validRevision(payload.syncSeq)) return false;
   const serialized = climbStatsKeyString(payload);
@@ -182,20 +210,25 @@ export function beginOptimisticAscent(
   publish(entry);
 }
 
-export function markOptimisticAscentQueued(token: string, tickUuid: string, authEpoch: number): void {
-  if (authEpoch !== activeAuthEpoch) return;
+export function markOptimisticAscentQueued(
+  token: string,
+  tickUuid: string,
+  authEpoch: number,
+): SettledOfflineTickAscent | null {
+  if (authEpoch !== activeAuthEpoch) return null;
   const serialized = tokenKeys.get(token);
   const entry = serialized ? entries.get(serialized) : undefined;
   const mutation = entry?.optimistic.get(token);
-  if (!serialized || !entry || !mutation || mutation.authEpoch !== authEpoch) return;
+  if (!serialized || !entry || !mutation || mutation.authEpoch !== authEpoch) return null;
   mutation.status = 'queued';
   mutation.tickUuid = tickUuid;
   offlineTickTokens.set(tickUuid, token);
   const settled = unmatchedOfflineSettlements.get(tickUuid);
   if (settled) {
     unmatchedOfflineSettlements.delete(tickUuid);
-    settleOfflineTickAscent(tickUuid, settled, authEpoch);
+    return settleOfflineTickAscent(tickUuid, settled, authEpoch);
   }
+  return null;
 }
 
 export function acknowledgeOptimisticAscent(token: string, authEpoch: number): void {
@@ -221,11 +254,37 @@ export function rejectOptimisticAscent(token: string, authEpoch: number): void {
   deleteIfUnused(serialized, entry);
 }
 
+/**
+ * Retire only the acknowledged mutations whose post-ack primary repair just
+ * succeeded. A stale absolute base can leave canonical below a mutation's
+ * floor forever, so primary authority — not floor comparison — settles these
+ * exact tokens. Tokens created after the batch snapshot are deliberately not
+ * touched.
+ */
+export function retireAcknowledgedOptimisticAscents(tokens: Iterable<string>, authEpoch: number): void {
+  if (authEpoch !== activeAuthEpoch) return;
+  const changedEntries = new Map<string, StoreEntry>();
+  for (const token of tokens) {
+    const serialized = tokenKeys.get(token);
+    const entry = serialized ? entries.get(serialized) : undefined;
+    const mutation = entry?.optimistic.get(token);
+    if (!serialized || !entry || !mutation || mutation.authEpoch !== authEpoch || mutation.status !== 'acknowledged') {
+      continue;
+    }
+    removeToken(entry, token);
+    changedEntries.set(serialized, entry);
+  }
+  for (const [serialized, entry] of changedEntries) {
+    publish(entry);
+    deleteIfUnused(serialized, entry);
+  }
+}
+
 export function settleOfflineTickAscent(
   tickUuid: string,
   status: 'acknowledged' | 'dead_letter',
   authEpoch: number,
-): ClimbStatsKey | null {
+): SettledOfflineTickAscent | null {
   const token = offlineTickTokens.get(tickUuid);
   if (!token) {
     // An eager drain can acknowledge between saveTickOffline returning and the
@@ -242,7 +301,7 @@ export function settleOfflineTickAscent(
   const key = serialized ? (entries.get(serialized)?.key ?? null) : null;
   if (status === 'acknowledged') acknowledgeOptimisticAscent(token, authEpoch);
   else rejectOptimisticAscent(token, authEpoch);
-  return key;
+  return key ? { key, token, status } : null;
 }
 
 export function setClimbStatsAuthEpoch(authEpoch: number): void {

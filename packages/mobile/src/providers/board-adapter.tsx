@@ -9,9 +9,9 @@ import { randomUUID } from 'expo-crypto';
 import { BoardAdapterProvider, type BoardAdapter } from '@boardsesh/board-react';
 import { execute } from '@boardsesh/graphql-client';
 import {
-  CLIMB_STATS_FOR_ANGLES,
+  CLIMB_STATS_FOR_CLIMBS,
   CLIMB_STATS_UPDATED_SUBSCRIPTION,
-  type ClimbStatsForAnglesResponse,
+  type ClimbStatsForClimbsResponse,
   type ClimbStatsUpdatedSubscriptionResponse,
 } from '@boardsesh/graphql/operations';
 import { useAuth } from './auth-provider';
@@ -60,12 +60,12 @@ export function BoardAdapterWrapper({ children }: { children: ReactNode }) {
       captureAuthEpoch: captureAuthCredentialGeneration,
       isAuthEpochCurrent: isAuthCredentialGenerationCurrent,
       supportsClimbStatsOptimism: true,
-      fetchClimbStats: async (boardType, climbUuid) => {
-        const response = await getHttpClient().request<ClimbStatsForAnglesResponse>(CLIMB_STATS_FOR_ANGLES, {
+      fetchClimbStatsForClimbs: async (boardType, climbUuids) => {
+        const response = await getHttpClient().request<ClimbStatsForClimbsResponse>(CLIMB_STATS_FOR_CLIMBS, {
           boardName: boardType,
-          climbUuid,
+          climbUuids,
         });
-        return response.climbStatsForAngles;
+        return response.climbStatsForClimbs;
       },
       subscribeClimbStats: (boardType, layoutId, handlers) => {
         const wsClient = getWsClient();

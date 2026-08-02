@@ -44,10 +44,16 @@ export {
   acknowledgeOptimisticAscent,
   rejectOptimisticAscent,
   markOptimisticAscentQueued,
+  retireAcknowledgedOptimisticAscents,
   settleOfflineTickAscent,
   setClimbStatsAuthEpoch,
 } from './climb-stats-store';
-export type { ClimbStatsKey, ClimbStatsSnapshot, CanonicalClimbStats } from './climb-stats-store';
+export type {
+  ClimbStatsKey,
+  ClimbStatsSnapshot,
+  CanonicalClimbStats,
+  SettledOfflineTickAscent,
+} from './climb-stats-store';
 export { useUpdateTick, useDeleteTick } from './use-mutate-tick';
 export { useSaveClimb, useUpdateClimb } from './use-save-climb';
 

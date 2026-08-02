@@ -115,6 +115,12 @@ export const queriesTypeDefs = /* GraphQL */ `
     climbStatsForAngles(boardName: String!, climbUuid: ID!): [ClimbStatsForAngle!]!
 
     """
+    Get current per-angle statistics for 1-50 climbs in one primary-database
+    read. Requires authentication. Duplicate UUIDs are folded before querying.
+    """
+    climbStatsForClimbs(boardName: String!, climbUuids: [ID!]!): [ClimbStatsForClimb!]!
+
+    """
     Get the Boardsesh grade for a climb at a specific angle.
     Returns null when no grade has been computed for that climb+angle
     (e.g. MoonBoard, or too few ascents).

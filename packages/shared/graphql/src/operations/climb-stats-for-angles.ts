@@ -59,3 +59,28 @@ export type ClimbStatsUpdatedSubscriptionResponse = {
 export type ClimbStatsForAnglesResponse = {
   climbStatsForAngles: ClimbStatsForAnglesEntry[];
 };
+
+export const CLIMB_STATS_FOR_CLIMBS = gql`
+  query ClimbStatsForClimbs($boardName: String!, $climbUuids: [ID!]!) {
+    climbStatsForClimbs(boardName: $boardName, climbUuids: $climbUuids) {
+      climbUuid
+      angle
+      ascensionistCount
+      qualityAverage
+      difficultyAverage
+      displayDifficulty
+      difficulty
+      faUsername
+      faAt
+      syncSeq
+    }
+  }
+`;
+
+export type ClimbStatsForClimbEntry = ClimbStatsForAnglesEntry & {
+  climbUuid: string;
+};
+
+export type ClimbStatsForClimbsResponse = {
+  climbStatsForClimbs: ClimbStatsForClimbEntry[];
+};

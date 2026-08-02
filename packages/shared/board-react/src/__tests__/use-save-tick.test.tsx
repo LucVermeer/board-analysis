@@ -6,6 +6,7 @@ import { accumulatedLogbookQueryKey, fetchedLogbookClimbUuidsQueryKey } from '..
 import {
   getClimbStatsSnapshot,
   resetClimbStatsStoreForTests,
+  settleOfflineTickAscent,
   subscribeClimbStats,
   type ClimbStatsKey,
 } from '../climb-stats-store';
@@ -154,6 +155,38 @@ describe('useSaveTick (shared)', () => {
     expect(cache?.[0].uuid).toBe('local-1');
   });
 
+  it('schedules the exact post-ack repair when an eager drain wins the queued-token race', async () => {
+    const scheduledTasks: Array<() => void> = [];
+    const saveTickOffline = vi.fn().mockImplementation(async () => {
+      expect(settleOfflineTickAscent('local-ack', 'acknowledged', 0)).toBeNull();
+      return savedTick({ uuid: 'local-ack' });
+    });
+    const { wrapper, queryClient } = createWrapper({
+      saveTickOffline,
+      fetchClimbStatsForClimbs: vi.fn().mockResolvedValue([]),
+      supportsClimbStatsOptimism: true,
+      scheduleTask: (callback) => {
+        scheduledTasks.push(callback);
+        return vi.fn();
+      },
+    });
+    queryClient.setQueryData(accumulatedLogbookQueryKey('kilter'), []);
+    queryClient.setQueryData(fetchedLogbookClimbUuidsQueryKey('kilter'), new Set(['climb-1']));
+    const statsKey: ClimbStatsKey = {
+      boardType: 'kilter',
+      layoutId: 1,
+      climbUuid: 'climb-1',
+      angle: 40,
+    };
+    const unsubscribeStats = subscribeClimbStats(statsKey, vi.fn());
+    const { result } = renderHook(() => useSaveTick('kilter'), { wrapper });
+
+    act(() => result.current.mutate(tickOptions({ layoutId: 1, baseAscensionistCount: 10 })));
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(scheduledTasks).toHaveLength(1);
+    unsubscribeStats();
+  });
+
   it('raises a first-send floor only after authoritative logbook coverage is known', async () => {
     let resolveExecute: (value: { saveTick: ReturnType<typeof savedTick> }) => void = () => {};
     const executeHttp = vi.fn().mockImplementation(
@@ -190,7 +223,7 @@ describe('useSaveTick (shared)', () => {
     const scheduledTasks: Array<{ callback: () => void; cancel: ReturnType<typeof vi.fn> }> = [];
     const { wrapper, queryClient } = createWrapper({
       executeHttp: executeHttp as unknown as ExecuteHttp,
-      fetchClimbStats,
+      fetchClimbStatsForClimbs: fetchClimbStats,
       supportsClimbStatsOptimism: true,
       scheduleTask: (callback) => {
         const cancel = vi.fn();
@@ -231,7 +264,7 @@ describe('useSaveTick (shared)', () => {
     const scheduleTask = vi.fn(() => vi.fn());
     const { wrapper, queryClient } = createWrapper({
       executeHttp: executeHttp as unknown as ExecuteHttp,
-      fetchClimbStats: vi.fn(),
+      fetchClimbStatsForClimbs: vi.fn(),
       supportsClimbStatsOptimism: true,
       scheduleTask,
     });
@@ -262,7 +295,7 @@ describe('useSaveTick (shared)', () => {
     const scheduledTasks: Array<{ cancel: ReturnType<typeof vi.fn> }> = [];
     const { wrapper, queryClient } = createWrapper({
       executeHttp: executeHttp as unknown as ExecuteHttp,
-      fetchClimbStats: vi.fn(),
+      fetchClimbStatsForClimbs: vi.fn(),
       supportsClimbStatsOptimism: true,
       scheduleTask: () => {
         const cancel = vi.fn();
@@ -303,7 +336,7 @@ describe('useSaveTick (shared)', () => {
     const scheduleTask = vi.fn(() => vi.fn());
     const { wrapper, queryClient } = createWrapper({
       executeHttp: executeHttp as unknown as ExecuteHttp,
-      fetchClimbStats: vi.fn(),
+      fetchClimbStatsForClimbs: vi.fn(),
       supportsClimbStatsOptimism: true,
       scheduleTask,
     });
@@ -346,6 +379,7 @@ describe('useSaveTick (shared)', () => {
     const scheduledTasks: Array<() => void> = [];
     const fetchClimbStats = vi.fn().mockResolvedValue([
       {
+        climbUuid: 'climb-1',
         angle: 40,
         ascensionistCount: 11,
         qualityAverage: null,
@@ -359,7 +393,7 @@ describe('useSaveTick (shared)', () => {
     ]);
     const { wrapper, queryClient } = createWrapper({
       executeHttp: executeHttp as unknown as ExecuteHttp,
-      fetchClimbStats,
+      fetchClimbStatsForClimbs: fetchClimbStats,
       supportsClimbStatsOptimism: true,
       scheduleTask: (callback) => {
         scheduledTasks.push(callback);
