@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-08-01T00:44:41.283Z",
+  "generatedAt": "2026-08-02T00:09:06.042Z",
   "entries": [
+    {
+      "prNumber": 4125,
+      "category": "fixed",
+      "title": "Ticks and favorites waiting to sync now stay queued when a mobile connection drops after response headers, instead of being discarded.",
+      "mergedAt": "2026-08-02T00:04:36Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4125"
+    },
     {
       "prNumber": 4083,
       "category": "fixed",
@@ -2671,6 +2678,32 @@
     }
   ],
   "nativeReleases": [
+    {
+      "kind": "native-release",
+      "date": "2026-08-01T17:50:41+10:00",
+      "sha": "1ac562d98ed35068ff0507a51ae762a7d256c6da",
+      "platforms": [
+        "android",
+        "ios"
+      ],
+      "fingerprints": {
+        "android": "982da3e63cc3fa678d206850a67e193fd9487f15",
+        "ios": "28ae4e48c81dbbee620c0e0ed26d268ce857bc20"
+      }
+    },
+    {
+      "kind": "native-release",
+      "date": "2026-08-01T10:47:59+10:00",
+      "sha": "253bc44c8af684274bf966b58532104b6c7d9817",
+      "platforms": [
+        "android",
+        "ios"
+      ],
+      "fingerprints": {
+        "android": "e79e4582798bb1a688c1a7729672f0e7c2c607da",
+        "ios": "9d490d456e75b1837acb9b04b3cd14ffff1c9fde"
+      }
+    },
     {
       "kind": "native-release",
       "date": "2026-08-01T10:06:49+10:00",

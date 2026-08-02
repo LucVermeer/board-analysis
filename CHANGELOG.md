@@ -4,6 +4,12 @@ User-facing changes to Boardsesh, newest first. Auto-generated from the "Release
 Notes" section of merged pull requests — do not edit by hand (a CI check rejects
 manual changes). See docs/mobile-ota-updates.md.
 
+## 2026-08-02
+
+### Fixed
+
+- Ticks and favorites waiting to sync now stay queued when a mobile connection drops after response headers, instead of being discarded. ([#4125](https://github.com/boardsesh/boardsesh/pull/4125))
+
 ## 2026-08-01
 
 ### App update
