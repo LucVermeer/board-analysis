@@ -16,6 +16,7 @@ A new version shipped to the App Store and Play Store.
 
 ### Fixed
 
+- Climb hold overlays now recover when storage pressure clears their cached image, instead of leaving a blank board or stale notification thumbnail. ([#4147](https://github.com/boardsesh/boardsesh/pull/4147))
 - Reconnecting to the same board on iPhone no longer lets a late disconnect from the old connection knock the new link offline. ([#4152](https://github.com/boardsesh/boardsesh/pull/4152))
 - Keep receiving over-the-air fixes after JavaScript-only dependency updates. ([#4148](https://github.com/boardsesh/boardsesh/pull/4148))
 - Remixing or editing a climb now waits for the current board, queue, and player screens to finish closing before the editor opens, preventing stranded sheets and taps that appear to do nothing. ([#4091](https://github.com/boardsesh/boardsesh/pull/4091))

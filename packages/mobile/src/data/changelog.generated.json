@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-08-02T05:20:34.515Z",
+  "generatedAt": "2026-08-02T06:09:27.836Z",
   "entries": [
+    {
+      "prNumber": 4147,
+      "category": "fixed",
+      "title": "Climb hold overlays now recover when storage pressure clears their cached image, instead of leaving a blank board or stale notification thumbnail.",
+      "mergedAt": "2026-08-02T06:09:01Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4147"
+    },
     {
       "prNumber": 4168,
       "category": "improved",
