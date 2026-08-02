@@ -6,6 +6,10 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ## 2026-08-02
 
+### App update
+
+A new version shipped to the App Store and Play Store.
+
 ### Improved
 
 - This PR *is* the store release notes — it ships no app code, so there's nothing for the in-app "What's New" screen to show. ([#4168](https://github.com/boardsesh/boardsesh/pull/4168))
