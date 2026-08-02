@@ -155,7 +155,9 @@ private struct IntentDiagnosticEnvelope: Codable {
 /// One encoded envelope is replaced under a process lock on each transition.
 /// `UserDefaults.set(Data, forKey:)` is a best-effort atomic replacement at the
 /// app-local persistence boundary; failures must never affect intent behavior.
-final class LiveActivityIntentDiagnosticStore {
+/// `@unchecked Sendable` is intentional: immutable configuration includes a
+/// sendable clock, and every envelope read, mutation, and write uses `lock`.
+final class LiveActivityIntentDiagnosticStore: @unchecked Sendable {
     static let defaultStorageKey = "bs_live_activity_intent_diagnostics_v1"
     static let defaultMaxRecords = 16
     static let defaultTimeToLive: TimeInterval = 24 * 60 * 60
@@ -169,7 +171,7 @@ final class LiveActivityIntentDiagnosticStore {
     private let maxRecords: Int
     private let timeToLive: TimeInterval
     private let incompleteGrace: TimeInterval
-    private let now: () -> Date
+    private let now: @Sendable () -> Date
     private let lock = NSLock()
 
     init(
@@ -181,7 +183,7 @@ final class LiveActivityIntentDiagnosticStore {
         maxRecords: Int = defaultMaxRecords,
         timeToLive: TimeInterval = defaultTimeToLive,
         incompleteGrace: TimeInterval = defaultIncompleteGrace,
-        now: @escaping () -> Date = Date.init
+        now: @escaping @Sendable () -> Date = Date.init
     ) {
         self.defaults = defaults
         self.storageKey = storageKey
@@ -396,7 +398,9 @@ final class LiveActivityIntentDiagnosticStore {
 /// Per-run scoped handle. `complete` is idempotent and prevents later stages
 /// from reopening a normal exit. Callers use `defer` so every normal early
 /// return is marked completed while process termination leaves it incomplete.
-final class LiveActivityIntentDiagnosticRun {
+/// `@unchecked Sendable` is intentional: immutable run identity targets the
+/// locked store, and this run's mutable completion state is guarded by `lock`.
+final class LiveActivityIntentDiagnosticRun: @unchecked Sendable {
     private let store: LiveActivityIntentDiagnosticStore
     private let runId: String
     private let processId: String

@@ -339,6 +339,8 @@ function setBuildSettings(project, targetUuid) {
     buildSettings.OTHER_SWIFT_FLAGS = SWIFT_FLAGS;
     buildSettings.PRODUCT_BUNDLE_IDENTIFIER = BUNDLE_IDENTIFIER;
     buildSettings.PRODUCT_NAME = '"$(TARGET_NAME)"';
+    buildSettings.SWIFT_STRICT_CONCURRENCY = 'complete';
+    buildSettings.SWIFT_TREAT_WARNINGS_AS_ERRORS = 'YES';
     buildSettings.SWIFT_VERSION = '5.0';
     buildSettings.TEST_HOST = '""';
   }
