@@ -510,6 +510,11 @@ export function useBoardBluetooth({
   const activeConnectionLifetimeRef = useRef<ActiveBleConnectionLifetime | null>(null);
   const onConnectionEndedRef = useRef(onConnectionEnded);
   onConnectionEndedRef.current = onConnectionEnded;
+  // A connect callback can outlive the render which started its asynchronous
+  // adapter request. Read session attribution when that request actually opens
+  // a physical-link generation, rather than from the callback's stale closure.
+  const analyticsInSessionRef = useRef(analyticsInSession);
+  analyticsInSessionRef.current = analyticsInSession;
 
   const beginConnectionLifetime = useCallback(
     (adapter: BluetoothAdapter, generation: number, configIdentity: string) => {
@@ -523,11 +528,11 @@ export function useBoardBluetooth({
           layoutId,
           sizeId,
           setIds,
-          inSession: analyticsInSession,
+          inSession: analyticsInSessionRef.current,
         },
       };
     },
-    [analyticsInSession, boardName, layoutId, setIds, sizeId],
+    [boardName, layoutId, setIds, sizeId],
   );
 
   const createConnectionHandle = useCallback(

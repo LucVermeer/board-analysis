@@ -1245,6 +1245,62 @@ describe('useBoardBluetooth', () => {
     expect(fakeAdapter.disconnect).toHaveBeenCalledOnce();
   });
 
+  it('uses the session state current when a pending connect opens its lifetime', async () => {
+    let resolveConnect!: (connection: { deviceId: string; deviceName?: string }) => void;
+    const fakeAdapter = makeFakeAdapter({
+      requestAndConnect: vi.fn(
+        () =>
+          new Promise<{ deviceId: string; deviceName?: string }>((resolve) => {
+            resolveConnect = resolve;
+          }),
+      ),
+    });
+    vi.mocked(createBluetoothAdapter).mockReturnValue(
+      fakeAdapter as unknown as ReturnType<typeof createBluetoothAdapter>,
+    );
+    const onConnectionEnded = vi.fn();
+    const { result, rerender } = renderHook((props) => useBoardBluetooth(props), {
+      initialProps: {
+        boardName: 'kilter',
+        layoutId: 1,
+        sizeId: 1,
+        analyticsInSession: false,
+        onConnectionEnded,
+      },
+    });
+
+    let connectPromise!: Promise<boolean>;
+    await act(async () => {
+      connectPromise = result.current.connect();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      rerender({
+        boardName: 'kilter',
+        layoutId: 1,
+        sizeId: 1,
+        analyticsInSession: true,
+        onConnectionEnded,
+      });
+    });
+
+    await act(async () => {
+      resolveConnect({ deviceId: 'device-1', deviceName: 'Kilter Board#123@3' });
+      await connectPromise;
+      await result.current.disconnect();
+    });
+
+    expect(onConnectionEnded).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: 'user',
+        disconnectTrigger: 'explicit_user',
+        inSession: true,
+      }),
+    );
+  });
+
   it('attributes adapter replacement to the old generation', async () => {
     const firstAdapter = makeFakeAdapter();
     const secondAdapter = makeFakeAdapter({
