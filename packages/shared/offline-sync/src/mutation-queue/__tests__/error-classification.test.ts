@@ -1,6 +1,30 @@
 import { describe, it, expect } from 'vitest';
 
-import { isRetryable, getErrorStatus, isNetworkError, isTransportNetworkError } from '../error-classification';
+import {
+  GRAPHQL_EMPTY_RESPONSE_ERROR_NAME,
+  isGraphQLEmptyResponseError,
+  isRetryable,
+  getErrorStatus,
+  isNetworkError,
+  isTransportNetworkError,
+} from '../error-classification';
+
+describe('isGraphQLEmptyResponseError', () => {
+  it('matches the platform error directly and through a cause wrapper', () => {
+    const emptyResponseError = Object.assign(new Error('empty GraphQL response'), {
+      name: GRAPHQL_EMPTY_RESPONSE_ERROR_NAME,
+      status: 200,
+    });
+    const wrappedError = Object.assign(new Error('request failed'), { cause: emptyResponseError });
+
+    expect(isGraphQLEmptyResponseError(emptyResponseError)).toBe(true);
+    expect(isGraphQLEmptyResponseError(wrappedError)).toBe(true);
+  });
+
+  it('does not match an ordinary transport failure', () => {
+    expect(isGraphQLEmptyResponseError(new TypeError('Network request failed'))).toBe(false);
+  });
+});
 
 describe('getErrorStatus', () => {
   it('extracts status from Response object', () => {
@@ -249,6 +273,17 @@ describe('isTransportNetworkError', () => {
 });
 
 describe('isNetworkError', () => {
+  it('treats a named GraphQL empty 2xx response as transport-shaped even with its status attached', () => {
+    const error = Object.assign(new Error('GraphQL response body was empty or not valid JSON (HTTP 200)'), {
+      name: GRAPHQL_EMPTY_RESPONSE_ERROR_NAME,
+      status: 200,
+    });
+
+    expect(getErrorStatus(error)).toBe(200);
+    expect(isNetworkError(error)).toBe(true);
+    expect(isRetryable(error)).toBe(true);
+  });
+
   it('still treats an AbortError (by name) as a network failure — replaying is safe', () => {
     const aborted = new Error('Aborted');
     aborted.name = 'AbortError';

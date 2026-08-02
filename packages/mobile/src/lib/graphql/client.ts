@@ -1,4 +1,5 @@
 import { GraphQLClient } from 'graphql-request';
+import { GRAPHQL_EMPTY_RESPONSE_ERROR_NAME } from '@boardsesh/offline-sync/error-classification';
 import { authenticatedFetch } from '../auth-interceptor';
 import { BACKEND_URL } from '../env';
 
@@ -12,14 +13,17 @@ export function getGraphQLHttpUrl(): string {
  * committed, body truncated) rather than a real GraphQL answer. Common on
  * flaky mobile networks going offline mid-request (#3190).
  *
- * `name` is checked by `isNetworkError` in `../error-reporting.ts` so this
- * gets the same "warning, tagged network" Sentry treatment as other
- * transport failures instead of showing up as a raw crash.
+ * `name` is checked by the shared offline-sync classifier so this gets the
+ * same network-stop treatment in the mutation drainer and the same
+ * "warning, tagged network" Sentry treatment as other transport failures.
  */
 export class GraphQLEmptyResponseError extends Error {
+  readonly status: number;
+
   constructor(status: number) {
     super(`GraphQL response body was empty or not valid JSON (HTTP ${status})`);
-    this.name = 'GraphQLEmptyResponseError';
+    this.name = GRAPHQL_EMPTY_RESPONSE_ERROR_NAME;
+    this.status = status;
   }
 }
 

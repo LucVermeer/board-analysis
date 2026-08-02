@@ -1,4 +1,9 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
+import {
+  GRAPHQL_EMPTY_RESPONSE_ERROR_NAME,
+  getErrorStatus,
+  isNetworkError,
+} from '@boardsesh/offline-sync/error-classification';
 
 // The guard wraps authenticatedFetch — mock it directly so we can hand back
 // whatever Response shape the test wants without touching auth/token plumbing
@@ -49,13 +54,20 @@ describe('graphqlFetchWithEmptyBodyGuard', () => {
     );
   });
 
-  it('names the thrown error GraphQLEmptyResponseError and includes the HTTP status', async () => {
+  it('keeps the 2xx status while classifying the typed empty response as a network stop', async () => {
     mockAuthenticatedFetch.mockResolvedValue(new Response('', { status: 200 }));
 
-    await expect(graphqlFetchWithEmptyBodyGuard('https://api.example.com/graphql')).rejects.toMatchObject({
-      name: 'GraphQLEmptyResponseError',
+    const request = graphqlFetchWithEmptyBodyGuard('https://api.example.com/graphql');
+
+    await expect(request).rejects.toMatchObject({
+      name: GRAPHQL_EMPTY_RESPONSE_ERROR_NAME,
       message: expect.stringContaining('200'),
+      status: 200,
     });
+
+    const error = new GraphQLEmptyResponseError(200);
+    expect(getErrorStatus(error)).toBe(200);
+    expect(isNetworkError(error)).toBe(true);
   });
 
   it('passes a valid JSON object body straight through untouched', async () => {
