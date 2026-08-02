@@ -16,27 +16,71 @@ class BoardRendererModule : Module() {
     @Volatile
     private var pruned = false
 
-    private fun renderOverlay(configJson: String, cacheKey: String): String {
-        if (!pruned) {
-            synchronized(this@BoardRendererModule) {
-                if (!pruned) {
-                    val result = CachePruner.pruneCacheIfNeeded(cacheDir, CACHE_CAP_BYTES)
-                    if (result.orphanedTempFilesRemoved > 0) {
-                        android.util.Log.i(
-                            "BoardRenderer",
-                            "Swept ${result.orphanedTempFilesRemoved} orphaned temp file(s) from a prior crash",
-                        )
-                    }
-                    if (result.cacheEntriesEvicted > 0) {
-                        android.util.Log.i(
-                            "BoardRenderer",
-                            "Pruned ${result.cacheEntriesEvicted} cached PNGs; new total ${result.finalTotalBytes} bytes",
-                        )
-                    }
-                    pruned = true
+    private fun ensurePruned() {
+        if (pruned) return
+        synchronized(this@BoardRendererModule) {
+            if (!pruned) {
+                val result = CachePruner.pruneCacheIfNeeded(cacheDir, CACHE_CAP_BYTES)
+                if (result.orphanedTempFilesRemoved > 0) {
+                    android.util.Log.i(
+                        "BoardRenderer",
+                        "Swept ${result.orphanedTempFilesRemoved} orphaned temp file(s) from a prior crash",
+                    )
                 }
+                if (result.cacheEntriesEvicted > 0) {
+                    android.util.Log.i(
+                        "BoardRenderer",
+                        "Pruned ${result.cacheEntriesEvicted} cached PNGs; new total ${result.finalTotalBytes} bytes",
+                    )
+                }
+                pruned = true
             }
         }
+    }
+
+    /**
+     * #4107: [CacheDirRecovery] already retries the write once if the cache
+     * directory vanishes mid-request, but under sustained storage pressure
+     * that single retry can lose too — the recreated directory (or a fresh
+     * temp file inside it) can vanish again before the retried write lands,
+     * and that second [java.io.FileNotFoundException] was previously
+     * unguarded, reaching JS as a rejected `renderHoldsOverlay` promise.
+     * This wraps the *entire* pipeline — fast-path check, render, and write
+     * — in one more bounded retry: on a vanished-cache failure, treat the
+     * cache entry as invalidated and re-run the whole thing exactly once
+     * from scratch. See [CacheMissRecovery] for the classification — a
+     * `FileNotFoundException`, or a plain `IOException` caught while the
+     * cache directory is missing (how `File.createTempFile` and the wrapped
+     * `Os.rename` ENOENT actually surface a second vanish) — and for why a
+     * dir-present `IOException` (out-of-space, permissions) stays
+     * non-retryable, narrower than [CacheDirRecovery]'s own `IOException`
+     * contract.
+     */
+    private fun renderOverlay(configJson: String, cacheKey: String): String {
+        ensurePruned()
+        return CacheMissRecovery.retryOnceOnCacheVanish(
+            isCacheDirMissing = { !cacheDir.isDirectory },
+            onRecovered = { failure, cacheDirMissing ->
+                // Log what was actually observed: the gate checked the
+                // directory at catch time, so "dir was missing" is a
+                // verified fact here, not an assumption.
+                val observedCause = if (cacheDirMissing) {
+                    "cache dir ${cacheDir.absolutePath} was missing at failure time"
+                } else {
+                    "cache file path vanished with the dir still in place"
+                }
+                android.util.Log.w(
+                    "BoardRenderer",
+                    "Overlay render failed for $cacheKey ($observedCause); invalidating and re-rendering once",
+                    failure,
+                )
+            },
+        ) {
+            renderOverlayOnce(configJson, cacheKey)
+        }
+    }
+
+    private fun renderOverlayOnce(configJson: String, cacheKey: String): String {
         val outputFile = File(cacheDir, "$cacheKey.png")
 
         if (outputFile.exists()) {

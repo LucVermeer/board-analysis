@@ -97,7 +97,36 @@ public class BoardRendererModule: Module {
     }
   }
 
+  /// #4107: `retryOnceAfterRecreatingCacheDir` already retries the write once
+  /// if the cache directory vanishes mid-request, but under sustained storage
+  /// pressure that single retry can lose too — the recreated directory (or a
+  /// fresh temp file inside it) can vanish again before the retried write
+  /// lands, and that second file-not-found error was previously unguarded,
+  /// reaching JS as a rejected `renderHoldsOverlay` promise. This wraps the
+  /// *entire* pipeline — fast-path check, render, and write — in one more
+  /// bounded retry: on a vanished-file failure, treat the cache entry as
+  /// invalidated and re-run the whole thing exactly once from scratch.
+  ///
+  /// Deliberately narrow, mirroring the Android twin `CacheMissRecovery`:
+  /// only a file-not-found-shaped error is retried. The classification —
+  /// Cocoa no-such-file codes, POSIX `ENOENT`, and a bounded unwrap of
+  /// `NSUnderlyingErrorKey` for Cocoa wrappers that carry the POSIX cause —
+  /// lives in `BoardRendererErrorClassification`, which is compiled into the
+  /// `BoardseshTests` XCTest target and verified there against the error a
+  /// real `Data.write(to:options:.atomic)` into a deleted directory throws.
   private func renderOverlay(configJson: String, cacheKey: String) throws -> String {
+    do {
+      return try renderOverlayOnce(configJson: configJson, cacheKey: cacheKey)
+    } catch {
+      guard BoardRendererErrorClassification.isFileVanishedError(error) else { throw error }
+      NSLog(
+        "[BoardRenderer] Overlay cache file vanished mid-request for \(cacheKey) (\(error)); invalidating and re-rendering once"
+      )
+      return try renderOverlayOnce(configJson: configJson, cacheKey: cacheKey)
+    }
+  }
+
+  private func renderOverlayOnce(configJson: String, cacheKey: String) throws -> String {
     _ = self.pruneOnce
     let outputUrl = self.cacheDir.appendingPathComponent("\(cacheKey).png")
 
