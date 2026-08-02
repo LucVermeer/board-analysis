@@ -1028,11 +1028,33 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
         return;
       }
 
-      // Existing files indicate a decode/format failure, not stale JS cache.
-      // Unknown validation (the web twin) is also terminal: guessing would turn
+      // A present file can still be a transient native image decode failure.
+      // Keep the exact generated entry, but remount expo-image once with a new
+      // attempt key so it retries the same URI without triggering a render.
+      if (entryExists === true) {
+        reportOverlayLoadOnce('cache_entry_present', boardName);
+        if (retryBudgetRef.current.key !== expected.key || retryBudgetRef.current.used >= 1) {
+          reportOverlayLoadOnce('retry_exhausted', boardName);
+          setNativeRender((previous) => (isExactNativeRender(previous, expected) ? null : previous));
+          return;
+        }
+        retryBudgetRef.current.used += 1;
+        setNativeRender((previous) =>
+          isExactNativeRender(previous, expected)
+            ? {
+                key: expected.key,
+                entry: expectedEntry,
+                loadAttempt: expected.loadAttempt + 1,
+              }
+            : previous,
+        );
+        return;
+      }
+
+      // Unknown validation (the web twin) is terminal: guessing would turn
       // every unsupported image into a render loop.
-      if (entryExists !== false) {
-        reportOverlayLoadOnce(entryExists === true ? 'cache_entry_present' : 'validation_unsupported', boardName);
+      if (entryExists === null) {
+        reportOverlayLoadOnce('validation_unsupported', boardName);
         setNativeRender((previous) => (isExactNativeRender(previous, expected) ? null : previous));
         return;
       }
@@ -1090,7 +1112,10 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
         return null;
       }
       try {
-        if (overlayCacheEntryExists(requestedUri) === true) return requestedUri;
+        if (overlayCacheEntryExists(requestedUri) === true) {
+          onOverlayLoad(requestedLoadKey);
+          return requestedUri;
+        }
       } catch {
         // The exact-attempt handler below classifies and reports validation
         // failures without including the private cache URI.
@@ -1098,7 +1123,7 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
       onOverlayError({ error: 'Generated overlay failed native-use validation' }, requestedLoadKey);
       return null;
     },
-    [currentCacheKey, onOverlayError, verifyOverlayFile],
+    [currentCacheKey, onOverlayError, onOverlayLoad, verifyOverlayFile],
   );
 
   // Only surface the native URI if it matches the *current* cache key —

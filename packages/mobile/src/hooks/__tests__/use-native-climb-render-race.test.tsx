@@ -214,6 +214,35 @@ describe('useNativeClimbRender in-flight race', () => {
     await waitFor(() => expect(pendingRenders.has(cacheKey)).toBe(true));
   });
 
+  it('repairs two same-key native-use evictions after each exact replacement verifies', async () => {
+    const cacheKey = cacheKeyFor(FRAMES_CACHED);
+    const overlayUri = 'file:///notification-evicted-twice.png';
+    existingOverlayUris.add(overlayUri);
+    _cacheRenderedOverlayForTests(cacheKey, overlayUri);
+    const view = renderHook(() => useNativeClimbRender({ ...BASE, frames: FRAMES_CACHED, verifyOverlayFile: true }));
+    await waitFor(() => expect(view.result.current.overlayUri).toBe(overlayUri));
+
+    existingOverlayUris.delete(overlayUri);
+    view.rerender();
+    await waitFor(() => expect(fakeNativeModule.renderHoldsOverlay).toHaveBeenCalledTimes(1));
+    existingOverlayUris.add(overlayUri);
+    await act(async () => {
+      resolveNextRender(cacheKey, overlayUri);
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(view.result.current.overlayUri).toBe(overlayUri));
+
+    existingOverlayUris.delete(overlayUri);
+    view.rerender();
+    await waitFor(() => expect(fakeNativeModule.renderHoldsOverlay).toHaveBeenCalledTimes(2));
+    existingOverlayUris.add(overlayUri);
+    await act(async () => {
+      resolveNextRender(cacheKey, overlayUri);
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(view.result.current.overlayUri).toBe(overlayUri));
+  });
+
   it('deduplicates simultaneous repairs across mounted consumers', async () => {
     const cacheKey = cacheKeyFor(FRAMES_CACHED);
     const overlayUri = 'file:///shared.png';
@@ -337,6 +366,7 @@ describe('useNativeClimbRender in-flight race', () => {
     const { result } = renderHook(() => useNativeClimbRender({ ...BASE, frames: FRAMES_CACHED }));
     const initialOnLoad = result.current.onOverlayLoad;
     const initialOnError = result.current.onOverlayError;
+    const initialVerifyForNativeUse = result.current.verifyOverlayForNativeUse;
     const initialLoadKey = result.current.overlayLoadKey;
 
     act(() => result.current.onOverlayError({ error: 'Failed to load resource' }, initialLoadKey));
@@ -349,27 +379,27 @@ describe('useNativeClimbRender in-flight race', () => {
 
     expect(result.current.onOverlayLoad).toBe(initialOnLoad);
     expect(result.current.onOverlayError).toBe(initialOnError);
+    expect(result.current.verifyOverlayForNativeUse).toBe(initialVerifyForNativeUse);
   });
 
-  it('ignores a queued error from the prior generation of the same Image consumer', async () => {
+  it('remounts a present-file decode failure with the same URI and ignores its stale old attempt', () => {
     const cacheKey = cacheKeyFor(FRAMES_CACHED);
     const overlayUri = 'file:///stale-same-consumer.png';
+    existingOverlayUris.add(overlayUri);
     _cacheRenderedOverlayForTests(cacheKey, overlayUri);
     const { result } = renderHook(() => useNativeClimbRender({ ...BASE, frames: FRAMES_CACHED }));
     const stableOnError = result.current.onOverlayError;
     const staleLoadKey = result.current.overlayLoadKey;
 
-    act(() => stableOnError({ error: 'Generation one failed' }, staleLoadKey));
-    await waitFor(() => expect(pendingRenders.has(cacheKey)).toBe(true));
-    await act(async () => {
-      resolveNextRender(cacheKey, overlayUri);
-      await Promise.resolve();
-    });
-    await waitFor(() => expect(result.current.overlayLoadKey).not.toBe(staleLoadKey));
+    act(() => stableOnError({ error: 'Transient decode failure' }, staleLoadKey));
     const replacementLoadKey = result.current.overlayLoadKey;
-    existingOverlayUris.add(overlayUri);
 
-    act(() => stableOnError({ error: 'Queued generation-one failure' }, staleLoadKey));
+    expect(result.current.overlayUri).toBe(overlayUri);
+    expect(replacementLoadKey).not.toBe(staleLoadKey);
+    expect(_renderedOverlaysForTests.get(cacheKey)?.uri).toBe(overlayUri);
+    expect(fakeNativeModule.renderHoldsOverlay).not.toHaveBeenCalled();
+
+    act(() => stableOnError({ error: 'Queued old-attempt failure' }, staleLoadKey));
 
     expect(result.current.overlayUri).toBe(overlayUri);
     expect(result.current.overlayLoadKey).toBe(replacementLoadKey);
@@ -396,46 +426,53 @@ describe('useNativeClimbRender in-flight race', () => {
     expect(fakeNativeModule.renderHoldsOverlay).toHaveBeenCalledTimes(1);
   });
 
-  it('replenishes the retry budget after the exact replacement loads', async () => {
+  it('replenishes the retry budget when native-use validation acknowledges the exact remount', async () => {
     const cacheKey = cacheKeyFor(FRAMES_CACHED);
     const overlayUri = 'file:///retry-reset.png';
+    existingOverlayUris.add(overlayUri);
     _cacheRenderedOverlayForTests(cacheKey, overlayUri);
-    const { result } = renderHook(() => useNativeClimbRender({ ...BASE, frames: FRAMES_CACHED }));
+    const { result } = renderHook(() =>
+      useNativeClimbRender({ ...BASE, frames: FRAMES_CACHED, verifyOverlayFile: true }),
+    );
     const firstLoadKey = result.current.overlayLoadKey;
 
     act(() => result.current.onOverlayError({ error: 'Failed to load resource' }, firstLoadKey));
-    await waitFor(() => expect(pendingRenders.has(cacheKey)).toBe(true));
-    await act(async () => {
-      resolveNextRender(cacheKey, overlayUri);
-      await Promise.resolve();
-    });
-    await waitFor(() => expect(result.current.overlayUri).toBe(overlayUri));
-    act(() => result.current.onOverlayLoad(result.current.overlayLoadKey));
-    act(() => result.current.onOverlayError({ error: 'Failed to load resource' }, result.current.overlayLoadKey));
+    await waitFor(() => expect(result.current.overlayLoadKey).not.toBe(firstLoadKey));
+    const verifiedRetryLoadKey = result.current.overlayLoadKey;
+    act(() => result.current.onOverlayError({ error: 'Failed to load resource' }, verifiedRetryLoadKey));
 
-    await waitFor(() => expect(fakeNativeModule.renderHoldsOverlay).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(result.current.overlayLoadKey).not.toBe(verifiedRetryLoadKey));
+    expect(result.current.overlayUri).toBe(overlayUri);
+    expect(fakeNativeModule.renderHoldsOverlay).not.toHaveBeenCalled();
   });
 
-  it('treats an existing-file decode failure as terminal and reports it once without identifiers', () => {
+  it('stops a persistent existing-file decode failure after one remount and reports both classes without identifiers', () => {
     const cacheKey = cacheKeyFor(FRAMES_CACHED);
     const overlayUri = 'file:///private/cache/path.png';
     existingOverlayUris.add(overlayUri);
     _cacheRenderedOverlayForTests(cacheKey, overlayUri);
-    const first = renderHook(() => useNativeClimbRender({ ...BASE, frames: FRAMES_CACHED }));
-    const second = renderHook(() => useNativeClimbRender({ ...BASE, frames: FRAMES_CACHED }));
-    const firstLoadKey = first.result.current.overlayLoadKey;
-    const secondLoadKey = second.result.current.overlayLoadKey;
+    const { result } = renderHook(() => useNativeClimbRender({ ...BASE, frames: FRAMES_CACHED }));
+    const firstLoadKey = result.current.overlayLoadKey;
 
-    act(() => {
-      first.result.current.onOverlayError({ error: `decode failed at ${overlayUri}` }, firstLoadKey);
-      second.result.current.onOverlayError({ error: `decode failed at ${overlayUri}` }, secondLoadKey);
-    });
+    act(() => result.current.onOverlayError({ error: `decode failed at ${overlayUri}` }, firstLoadKey));
+    expect(result.current.overlayUri).toBe(overlayUri);
+    expect(result.current.overlayLoadKey).not.toBe(firstLoadKey);
 
-    expect(first.result.current.overlayUri).toBeNull();
-    expect(second.result.current.overlayUri).toBeNull();
+    act(() =>
+      result.current.onOverlayError(
+        { error: `persistent decode failed at ${overlayUri}` },
+        result.current.overlayLoadKey,
+      ),
+    );
+
+    expect(result.current.overlayUri).toBeNull();
     expect(fakeNativeModule.renderHoldsOverlay).not.toHaveBeenCalled();
-    expect(reportErrorMock).toHaveBeenCalledTimes(1);
-    expect(JSON.stringify(reportErrorMock.mock.calls[0])).not.toContain(overlayUri);
-    expect(JSON.stringify(reportErrorMock.mock.calls[0])).not.toContain(cacheKey);
+    expect(reportErrorMock).toHaveBeenCalledTimes(2);
+    expect(reportErrorMock.mock.calls.map(([error]) => (error as Error).message)).toEqual([
+      'Generated overlay image load failed: cache_entry_present',
+      'Generated overlay image load failed: retry_exhausted',
+    ]);
+    expect(JSON.stringify(reportErrorMock.mock.calls)).not.toContain(overlayUri);
+    expect(JSON.stringify(reportErrorMock.mock.calls)).not.toContain(cacheKey);
   });
 });
