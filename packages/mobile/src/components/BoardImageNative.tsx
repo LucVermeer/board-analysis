@@ -88,16 +88,17 @@ const BoardImageNative = React.memo(function BoardImageNative({
   suppressOverlayTransition,
   overlayTestID,
 }: BoardImageNativeProps) {
-  const { overlayUri, backgroundPaths, missingBackgroundCount } = useNativeClimbRender({
-    frames,
-    boardName,
-    layoutId,
-    sizeId,
-    setIds,
-    filledStyle,
-    renderWidth,
-    backgroundVariant,
-  });
+  const { overlayUri, overlayLoadKey, onOverlayLoad, onOverlayError, backgroundPaths, missingBackgroundCount } =
+    useNativeClimbRender({
+      frames,
+      boardName,
+      layoutId,
+      sizeId,
+      setIds,
+      filledStyle,
+      renderWidth,
+      backgroundVariant,
+    });
 
   const containerStyle: ViewStyle = {
     width: '100%',
@@ -109,6 +110,9 @@ const BoardImageNative = React.memo(function BoardImageNative({
     <View style={containerStyle}>
       <LayeredClimbImage
         overlayUri={overlayUri}
+        overlayLoadKey={overlayLoadKey}
+        onOverlayLoad={onOverlayLoad}
+        onOverlayError={onOverlayError}
         backgroundPaths={backgroundPaths}
         missingBackgroundCount={missingBackgroundCount}
         mirrored={mirrored}

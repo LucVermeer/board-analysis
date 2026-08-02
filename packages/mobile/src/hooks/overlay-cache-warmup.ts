@@ -1,4 +1,4 @@
-import { Directory, Paths } from 'expo-file-system';
+import { Directory, File, Paths } from 'expo-file-system';
 
 /**
  * A single entry from the native overlay PNG cache directory. Structurally the
@@ -27,6 +27,17 @@ export function listOverlayCacheEntries(cacheDirName: string): OverlayCacheEntry
   const cacheDir = new Directory(Paths.cache, cacheDirName);
   if (!cacheDir.exists) return null;
   return cacheDir.list() as OverlayCacheEntry[];
+}
+
+/**
+ * Confirm that a URI handed back by the native renderer still names a file.
+ * Cache-pruning and OS storage pressure can remove an individual PNG after the
+ * one-time directory warm-up populated JS's synchronous cache. This check is
+ * intentionally made only after expo-image reports a load failure, keeping the
+ * normal cache-hit path synchronous and free of filesystem I/O.
+ */
+export function overlayCacheEntryExists(uri: string): boolean {
+  return new File(uri).exists;
 }
 
 /**

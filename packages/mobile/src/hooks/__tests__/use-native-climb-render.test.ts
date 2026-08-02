@@ -66,6 +66,9 @@ const {
   getOrStartInflightRender,
   _inflightRendersForTests,
   _renderedOverlaysForTests,
+  _cacheRenderedOverlayForTests,
+  _getRenderedOverlayForTests,
+  _invalidateRenderedOverlayForTests,
   _resetWarmupForTests,
   _runWarmupForTests,
   _getBoardConfigForTests,
@@ -360,7 +363,7 @@ describe('getOrStartInflightRender', () => {
   it('starts a render and returns its promise on first call', async () => {
     const startRender = vi.fn().mockResolvedValue('file:///out/a.png');
     const result = await getOrStartInflightRender('key-a', startRender);
-    expect(result).toBe('file:///out/a.png');
+    expect(result.uri).toBe('file:///out/a.png');
     expect(startRender).toHaveBeenCalledTimes(1);
   });
 
@@ -380,7 +383,7 @@ describe('getOrStartInflightRender', () => {
     expect(startRender).toHaveBeenCalledTimes(1);
 
     resolveFn?.('file:///out/a.png');
-    expect(await first).toBe('file:///out/a.png');
+    expect((await first).uri).toBe('file:///out/a.png');
   });
 
   it('removes the entry once the render settles successfully', async () => {
@@ -431,9 +434,39 @@ describe('renderedOverlays warm-up from disk cache', () => {
 
   it('exposes the populated map so a fresh hook init can hit it synchronously', () => {
     expect(_renderedOverlaysForTests).toBeInstanceOf(Map);
-    _renderedOverlaysForTests.set('v5_kilter_1_10_24_deadbeef', 'file:///prior/session.png');
-    expect(_renderedOverlaysForTests.get('v5_kilter_1_10_24_deadbeef')).toBe('file:///prior/session.png');
+    _cacheRenderedOverlayForTests('v5_kilter_1_10_24_deadbeef', 'file:///prior/session.png');
+    expect(_renderedOverlaysForTests.get('v5_kilter_1_10_24_deadbeef')?.uri).toBe('file:///prior/session.png');
     _renderedOverlaysForTests.delete('v5_kilter_1_10_24_deadbeef');
+  });
+
+  it('mints a new generation when a render replaces the same URI', () => {
+    const first = _cacheRenderedOverlayForTests('key-a', 'file:///same.png');
+    const replacement = _cacheRenderedOverlayForTests('key-a', 'file:///same.png');
+
+    expect(replacement.generation).toBeGreaterThan(first.generation);
+    expect(replacement.uri).toBe(first.uri);
+  });
+
+  it('invalidates only an exact URI and generation', () => {
+    const stale = _cacheRenderedOverlayForTests('key-a', 'file:///same.png');
+    const replacement = _cacheRenderedOverlayForTests('key-a', 'file:///same.png');
+
+    expect(_invalidateRenderedOverlayForTests('key-a', stale)).toBe(false);
+    expect(_getRenderedOverlayForTests('key-a')).toEqual(replacement);
+    expect(_invalidateRenderedOverlayForTests('key-a', replacement)).toBe(true);
+    expect(_renderedOverlaysForTests.has('key-a')).toBe(false);
+  });
+
+  it('bounds the sync cache and promotes reads in LRU order', () => {
+    for (let entryIndex = 0; entryIndex < 200; entryIndex++) {
+      _cacheRenderedOverlayForTests(`key-${entryIndex}`, `file:///overlay-${entryIndex}.png`);
+    }
+    _getRenderedOverlayForTests('key-0');
+    _cacheRenderedOverlayForTests('key-200', 'file:///overlay-200.png');
+
+    expect(_renderedOverlaysForTests.size).toBe(200);
+    expect(_renderedOverlaysForTests.has('key-0')).toBe(true);
+    expect(_renderedOverlaysForTests.has('key-1')).toBe(false);
   });
 
   it('only loads PNGs whose name starts with the current RENDERER_VERSION prefix', () => {

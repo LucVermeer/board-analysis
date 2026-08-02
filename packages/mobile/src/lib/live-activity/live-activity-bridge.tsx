@@ -45,7 +45,7 @@ export function LiveActivityBridge({ boardName, layoutId, sizeId, setIds }: Live
   // frames — useNativeClimbRender then no-ops its render effect instead of doing
   // work iOS discards.
   const displayClimb = state.currentClimbQueueItem?.climb ?? state.queue[0]?.climb ?? null;
-  const { overlayUri, backgroundPaths } = useNativeClimbRender({
+  const { overlayUri, overlayLoadKey, verifyOverlayForNativeUse, backgroundPaths } = useNativeClimbRender({
     frames: isAndroidSessionPresence ? (displayClimb?.frames ?? '') : '',
     boardName: toBoardName(boardName) ?? 'kilter',
     layoutId,
@@ -57,6 +57,9 @@ export function LiveActivityBridge({ boardName, layoutId, sizeId, setIds }: Live
     // transaction limit.
     filledStyle: true,
     renderWidth: 384,
+    // This path goes straight to native bitmap compositing and never mounts an
+    // expo-image with onError, so validate/recover it in JS before forwarding.
+    verifyOverlayFile: isAndroidSessionPresence,
   });
 
   // Localized strings for the Android foreground-service notification (channel +
@@ -94,6 +97,8 @@ export function LiveActivityBridge({ boardName, layoutId, sizeId, setIds }: Live
     holderDisplayName,
     androidNotification,
     androidThumbnailOverlayPath: overlayUri,
+    androidThumbnailOverlayLoadKey: overlayLoadKey,
+    validateAndroidThumbnailOverlay: verifyOverlayForNativeUse,
     androidThumbnailBackgroundPaths: backgroundPaths,
   });
 

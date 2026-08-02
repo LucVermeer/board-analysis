@@ -226,12 +226,24 @@ remote URL.
 **Why:** The removed SVG background renderer parsed the frames string, built an SVG hold overlay,
 and painted N `<Circle>`s in `react-native-svg` on every render, on top of a remote image fetch for
 board art that should be on disk. The native path renders the holds once into a cached PNG (deduped
-by cache key, warmed from disk on launch — see the `renderedOverlays` map and
+by cache key, warmed from disk on launch — see the generation-tracked, 200-entry JS LRU and
 `warmupRenderedOverlaysOnce` in `use-native-climb-render.ts`) and stacks
 it over bundled background images via `expo-image` with `cachePolicy="memory-disk"`, so a scrolled-
 past climb is an instant cache hit with zero network and zero per-row SVG work. It also satisfies
 the no-network offline rule — missing layers render as visible gray blocks rather than silently
 fetching.
+
+The JS LRU is only a fast-path hint; native cache pruning or the OS can remove a PNG after warm-up.
+If expo-image reports an overlay load failure, the hook validates that exact managed file URI. A
+missing file invalidates only the matching `{ uri, generation }`, then all mounted consumers share
+one bounded native regeneration. The replacement receives a new generation even though native
+writes it to the same URI, and `LayeredClimbImage` uses that generation in the React `key` so
+Android performs a real reload. An existing-file decode failure gets one bounded same-URI remount
+and is terminal on the second failure; each consumer holds a single retry budget shared across both
+failure classes (a present-file remount consumes the same budget as a missing-file regeneration),
+replenished only after the exact replacement's `onLoad`.
+The Android session notification has no expo-image callback, so it opts into synchronous file
+preflight, withholds a missing path, and keys native notification refreshes on the same generation.
 
 **Cache key shape (`buildCacheKey` in `use-native-climb-render.ts`):**
 `v<RENDERER_VERSION>_<style>_w<width>_<board>_<layout>_<size>_<setIds>_<framesHash>`. Each token is

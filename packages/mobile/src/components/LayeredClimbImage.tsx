@@ -1,11 +1,20 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Platform, View, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
+import type { ImageErrorEventData } from 'expo-image';
 import { useIsAppBackgrounded } from '../lib/app-visibility';
 import { useBoardArtVisible } from './board-art-visibility-context';
 
 type LayeredClimbImageProps = {
   overlayUri: string | null;
+  /**
+   * Generation + per-consumer attempt identity. React's key must change when a
+   * missing overlay is regenerated at the same URI: Android expo-image does not
+   * reliably reload that case from recyclingKey alone.
+   */
+  overlayLoadKey?: string | null;
+  onOverlayLoad?: (loadKey: string | null) => void;
+  onOverlayError?: (event: ImageErrorEventData, loadKey: string | null) => void;
   backgroundPaths: string[];
   /**
    * Number of background layers the cache couldn't resolve. Each missing
@@ -59,6 +68,9 @@ export function backgroundImageUri(path: string): string {
  */
 const LayeredClimbImage = React.memo(function LayeredClimbImage({
   overlayUri,
+  overlayLoadKey,
+  onOverlayLoad,
+  onOverlayError,
   backgroundPaths,
   missingBackgroundCount = 0,
   mirrored,
@@ -76,6 +88,13 @@ const LayeredClimbImage = React.memo(function LayeredClimbImage({
   // blank drawer. Gating on onLoad makes the anchor mean "the lit board is on
   // screen".
   const [overlayPainted, setOverlayPainted] = useState(false);
+  // Native image events can already be queued when React replaces an overlay.
+  // Keep the currently rendered attempt in a ref so an old image cannot expose
+  // the screenshot anchor after the replacement reset it. The recovery owner
+  // still receives the captured key below and independently rejects stale cache
+  // events; this guard owns the component-local painted marker.
+  const latestOverlayAttemptRef = useRef({ uri: overlayUri, loadKey: overlayLoadKey ?? null });
+  latestOverlayAttemptRef.current = { uri: overlayUri, loadKey: overlayLoadKey ?? null };
 
   // Drop the decoded board-art bitmaps whenever this surface is hidden: render an
   // empty stack so expo-image releases their GPU textures + native-heap bitmaps
@@ -93,6 +112,9 @@ const LayeredClimbImage = React.memo(function LayeredClimbImage({
   useEffect(() => {
     if (hidden) setOverlayPainted(false);
   }, [hidden]);
+  useEffect(() => {
+    setOverlayPainted(false);
+  }, [overlayUri, overlayLoadKey]);
   if (hidden) {
     return <View style={[styles.stack, mirrored && styles.mirrored]} />;
   }
@@ -134,6 +156,7 @@ const LayeredClimbImage = React.memo(function LayeredClimbImage({
       {dimBackground && <View style={[styles.layer, styles.dim]} pointerEvents="none" />}
       {overlayUri && (
         <Image
+          key={overlayLoadKey ?? overlayUri}
           source={{ uri: overlayUri }}
           style={styles.layer}
           contentFit="contain"
@@ -144,7 +167,15 @@ const LayeredClimbImage = React.memo(function LayeredClimbImage({
           // list/accessory, native for play) so no main-thread downscale
           // is needed — skip expo-image's resample.
           allowDownscaling={false}
-          onLoad={overlayTestID ? () => setOverlayPainted(true) : undefined}
+          onLoad={() => {
+            const emittingLoadKey = overlayLoadKey ?? null;
+            const latestAttempt = latestOverlayAttemptRef.current;
+            if (overlayTestID && latestAttempt.uri === overlayUri && latestAttempt.loadKey === emittingLoadKey) {
+              setOverlayPainted(true);
+            }
+            onOverlayLoad?.(emittingLoadKey);
+          }}
+          onError={(event) => onOverlayError?.(event, overlayLoadKey ?? null)}
         />
       )}
       {/* Screenshot/e2e anchor — see overlayPainted above. Transparent, full-bleed

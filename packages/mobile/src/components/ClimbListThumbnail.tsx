@@ -51,24 +51,28 @@ const ClimbListThumbnail = React.memo(function ClimbListThumbnail({
 }: ClimbListThumbnailProps) {
   const cellWidth = size?.width ?? THUMBNAIL_WIDTH;
   const cellHeight = size?.height ?? THUMBNAIL_HEIGHT;
-  const { overlayUri, backgroundPaths, missingBackgroundCount } = useNativeClimbRender({
-    frames,
-    boardName,
-    layoutId,
-    sizeId,
-    setIds,
-    filledStyle: true,
-    // Render the overlay + resolve the background at ~5× the cell width (≥400px,
-    // covering the default 76px cell at up to ~3× DPR and a ~100px hero cell at
-    // ~4×) so expo-image never has to downscale a ~1080px source on the main
-    // thread while scrolling.
-    renderWidth: Math.max(400, Math.round(cellWidth * 5)),
-  });
+  const { overlayUri, overlayLoadKey, onOverlayLoad, onOverlayError, backgroundPaths, missingBackgroundCount } =
+    useNativeClimbRender({
+      frames,
+      boardName,
+      layoutId,
+      sizeId,
+      setIds,
+      filledStyle: true,
+      // Render the overlay + resolve the background at ~5× the cell width (≥400px,
+      // covering the default 76px cell at up to ~3× DPR and a ~100px hero cell at
+      // ~4×) so expo-image never has to downscale a ~1080px source on the main
+      // thread while scrolling.
+      renderWidth: Math.max(400, Math.round(cellWidth * 5)),
+    });
 
   return (
     <View style={[styles.container, size ? { width: cellWidth, height: cellHeight } : null]}>
       <LayeredClimbImage
         overlayUri={overlayUri}
+        overlayLoadKey={overlayLoadKey}
+        onOverlayLoad={onOverlayLoad}
+        onOverlayError={onOverlayError}
         backgroundPaths={backgroundPaths}
         missingBackgroundCount={missingBackgroundCount}
         mirrored={mirrored}

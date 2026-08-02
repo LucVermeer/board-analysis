@@ -57,3 +57,12 @@ export function listOverlayCacheEntries(_cacheDirName: string): OverlayCacheEntr
   const entries = snapshotOverlayEntries();
   return entries.length > 0 ? entries : null;
 }
+
+/**
+ * Browser object URLs cannot be synchronously mapped back to a Cache API entry.
+ * Returning null makes an image failure terminal instead of guessing that a
+ * persisted entry vanished and entering a retry loop.
+ */
+export function overlayCacheEntryExists(_uri: string): null {
+  return null;
+}

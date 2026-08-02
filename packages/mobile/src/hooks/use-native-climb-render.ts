@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import type { BoardName } from '@boardsesh/shared-schema';
-import { listOverlayCacheEntries, onOverlayCacheHydrated } from './overlay-cache-warmup';
+import { listOverlayCacheEntries, onOverlayCacheHydrated, overlayCacheEntryExists } from './overlay-cache-warmup';
 import { RENDERER_VERSION } from './renderer-version';
 import { HOLD_STATE_MAP, getBoardStrokeWidthMultiplier } from '@boardsesh/board-constants/hold-states';
 import { getBoardRenderData } from '../lib/board-details';
@@ -77,6 +77,12 @@ type NativeClimbRenderParams = {
    * `full` otherwise.
    */
   backgroundVariant?: BackgroundVariant;
+  /**
+   * Synchronously verify a generated file before exposing its URI. Used by the
+   * Android session notification, which hands the path to native compositing
+   * without mounting an expo-image that could report onError.
+   */
+  verifyOverlayFile?: boolean;
 };
 
 type NativeClimbRenderResult = {
@@ -86,6 +92,16 @@ type NativeClimbRenderResult = {
    * Expo Go). Consumers stack this on top of `backgroundPaths`.
    */
   overlayUri: string | null;
+  /**
+   * Changes whenever this consumer must make expo-image perform a fresh load,
+   * including a regeneration that writes back to the same file:// URI.
+   */
+  overlayLoadKey: string | null;
+  /** Exact-attempt callbacks consumed by LayeredClimbImage's overlay Image. */
+  onOverlayLoad: (loadKey: string | null) => void;
+  onOverlayError: (event: { error: string }, loadKey: string | null) => void;
+  /** Revalidate immediately before a non-Image native consumer uses the path. */
+  verifyOverlayForNativeUse: (uri: string | null, loadKey: string | null) => string | null;
   /**
    * Filesystem paths (no scheme) of the bundled board background images
    * that resolved successfully. Returned synchronously when bundled-asset
@@ -111,7 +127,37 @@ type NativeClimbRenderResult = {
  * huge list scrolled before any render completes) leaving stale entries
  * if components unmount mid-render.
  */
-const inflightRenders = new Map<string, Promise<string>>();
+export type RenderedOverlayEntry = {
+  uri: string;
+  generation: number;
+};
+
+type NativeRenderState = {
+  key: string;
+  entry: RenderedOverlayEntry | null;
+  loadAttempt: number;
+};
+
+type LoadedNativeRenderState = NativeRenderState & { entry: RenderedOverlayEntry };
+
+function isLoadedNativeRender(state: NativeRenderState | null): state is LoadedNativeRenderState {
+  return state?.entry != null;
+}
+
+function isExactNativeRender(
+  current: NativeRenderState | null,
+  expected: LoadedNativeRenderState,
+): current is LoadedNativeRenderState {
+  return (
+    isLoadedNativeRender(current) &&
+    current.key === expected.key &&
+    current.entry.uri === expected.entry.uri &&
+    current.entry.generation === expected.entry.generation &&
+    current.loadAttempt === expected.loadAttempt
+  );
+}
+
+const inflightRenders = new Map<string, Promise<RenderedOverlayEntry>>();
 const INFLIGHT_RENDERS_MAX = 50;
 const unsupportedRenderSignatures = new Set<string>();
 
@@ -128,7 +174,68 @@ const BOARD_CONFIG_CACHE_MAX = 20;
  * from this map, so a cache hit displays the overlay on the very first
  * render with no useEffect-driven update.
  */
-const renderedOverlays = new Map<string, string>();
+const renderedOverlays = new Map<string, RenderedOverlayEntry>();
+const RENDERED_OVERLAYS_MAX = 200;
+let nextOverlayGeneration = 1;
+
+/**
+ * The only insertion path for the synchronous overlay cache. A generation is
+ * minted even when native rewrites the same URI, which lets mounted consumers
+ * distinguish the replacement from the missing file they just failed to load.
+ */
+function cacheRenderedOverlay(cacheKey: string, uri: string): RenderedOverlayEntry {
+  const entry = { uri, generation: nextOverlayGeneration };
+  nextOverlayGeneration += 1;
+
+  // Delete first so replacing an entry also promotes it to most-recently used.
+  renderedOverlays.delete(cacheKey);
+  if (renderedOverlays.size >= RENDERED_OVERLAYS_MAX) {
+    const oldestKey = renderedOverlays.keys().next().value;
+    if (oldestKey !== undefined) renderedOverlays.delete(oldestKey);
+  }
+  renderedOverlays.set(cacheKey, entry);
+  return entry;
+}
+
+function getRenderedOverlay(cacheKey: string): RenderedOverlayEntry | undefined {
+  const entry = renderedOverlays.get(cacheKey);
+  if (!entry) return undefined;
+  // Map iteration order is the LRU order. Reads promote without changing the
+  // immutable entry identity used by exact failure guards.
+  renderedOverlays.delete(cacheKey);
+  renderedOverlays.set(cacheKey, entry);
+  return entry;
+}
+
+function invalidateRenderedOverlay(cacheKey: string, expected: RenderedOverlayEntry): boolean {
+  const current = renderedOverlays.get(cacheKey);
+  if (!current || current.uri !== expected.uri || current.generation !== expected.generation) return false;
+  renderedOverlays.delete(cacheKey);
+  return true;
+}
+
+type OverlayLoadTelemetryKind =
+  | 'cache_entry_missing'
+  | 'retry_exhausted'
+  | 'cache_entry_present'
+  | 'validation_failed'
+  | 'validation_unsupported';
+
+const reportedOverlayLoadTelemetry = new Set<OverlayLoadTelemetryKind>();
+
+/** One privacy-safe, low-cardinality event per failure class and JS lifetime. */
+function reportOverlayLoadOnce(kind: OverlayLoadTelemetryKind, boardName: BoardName): void {
+  if (reportedOverlayLoadTelemetry.has(kind)) return;
+  reportedOverlayLoadTelemetry.add(kind);
+  reportError(new Error(`Generated overlay image load failed: ${kind}`), {
+    level: 'warning',
+    tags: {
+      feature: 'mobile_board_renderer',
+      boardName,
+      overlayLoadFailure: kind,
+    },
+  });
+}
 
 /**
  * One-time eager scan of the native module's PNG cache directory. The
@@ -174,7 +281,7 @@ function warmupRenderedOverlaysOnce(): void {
         continue;
       }
       const cacheKey = name.slice(0, -'.png'.length);
-      renderedOverlays.set(cacheKey, entry.uri);
+      cacheRenderedOverlay(cacheKey, entry.uri);
     }
   } catch {
     // Filesystem errors at startup shouldn't break the app — the hook's
@@ -198,6 +305,8 @@ onOverlayCacheHydrated(() => {
 export function _resetWarmupForTests(): void {
   warmupRun = false;
   renderedOverlays.clear();
+  nextOverlayGeneration = 1;
+  reportedOverlayLoadTelemetry.clear();
 }
 
 /** Test-only handle to invoke the warm-up explicitly (it normally runs lazily on first render). */
@@ -210,7 +319,10 @@ export function _runWarmupForTests(): void {
  * (alongside _inflightRendersForTests) so the dedup + cap contract can be
  * unit tested without spinning up a React renderer.
  */
-export function getOrStartInflightRender(cacheKey: string, startRender: () => Promise<string>): Promise<string> {
+export function getOrStartInflightRender(
+  cacheKey: string,
+  startRender: () => Promise<string>,
+): Promise<RenderedOverlayEntry> {
   const existing = inflightRenders.get(cacheKey);
   if (existing) return existing;
 
@@ -223,14 +335,14 @@ export function getOrStartInflightRender(cacheKey: string, startRender: () => Pr
     }
   }
 
-  const promise = startRender();
+  const promise = startRender().then((uri) => cacheRenderedOverlay(cacheKey, uri));
   inflightRenders.set(cacheKey, promise);
   // Run cleanup as a detached handler so it doesn't change the promise
   // returned to callers, and so callers that only attach .then can still
   // observe rejections.
   void promise
     .finally(() => {
-      inflightRenders.delete(cacheKey);
+      if (inflightRenders.get(cacheKey) === promise) inflightRenders.delete(cacheKey);
     })
     .catch(() => {
       // Swallow — the original promise's rejection is observed by the
@@ -243,6 +355,9 @@ export function getOrStartInflightRender(cacheKey: string, startRender: () => Pr
 /** Test-only handles. Not part of the public API. */
 export const _inflightRendersForTests = inflightRenders;
 export const _renderedOverlaysForTests = renderedOverlays;
+export const _cacheRenderedOverlayForTests = cacheRenderedOverlay;
+export const _getRenderedOverlayForTests = getRenderedOverlay;
+export const _invalidateRenderedOverlayForTests = invalidateRenderedOverlay;
 
 /**
  * Test-only: inject a fake native module. The real one loads via a literal
@@ -533,7 +648,17 @@ function getNativeModule() {
  * and the component shows backgrounds alone.
  */
 export function useNativeClimbRender(params: NativeClimbRenderParams): NativeClimbRenderResult {
-  const { frames, boardName, layoutId, sizeId, setIds, filledStyle = false, renderWidth, backgroundVariant } = params;
+  const {
+    frames,
+    boardName,
+    layoutId,
+    sizeId,
+    setIds,
+    filledStyle = false,
+    renderWidth,
+    backgroundVariant,
+    verifyOverlayFile = false,
+  } = params;
   const {
     overrides: holdColorOverrides,
     shapes: holdShapeOverrides,
@@ -583,10 +708,16 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
   // available on the first frame (Asset.localUri pre-populated); the
   // overlay is available if a previous render in this session — or a
   // prior app launch — produced its file.
-  const [nativeRender, setNativeRender] = useState<{ key: string; uri: string } | null>(() => {
-    const existing = renderedOverlays.get(currentCacheKey);
-    return existing ? { key: currentCacheKey, uri: existing } : null;
+  const [nativeRender, setNativeRender] = useState<NativeRenderState | null>(() => {
+    const existing = getRenderedOverlay(currentCacheKey);
+    return existing ? { key: currentCacheKey, entry: existing, loadAttempt: 0 } : null;
   });
+  const [verifiedOverlay, setVerifiedOverlay] = useState<{
+    cacheKey: string;
+    uri: string;
+    loadKey: string;
+  } | null>(null);
+  const [recoveryRequest, setRecoveryRequest] = useState(0);
   // Background state combines two guards:
   //   - `key`: locks the value to a specific board config so a FlashList
   //     row recycled to a different climb can't surface the previous
@@ -622,6 +753,13 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
   // whose overlay is already cached (sync branch, no new promise) while the
   // previous climb's render is still in flight.
   const latestCacheKeyRef = useRef(currentCacheKey);
+  latestCacheKeyRef.current = currentCacheKey;
+  const nativeRenderRef = useRef(nativeRender);
+  nativeRenderRef.current = nativeRender;
+  const retryBudgetRef = useRef({ key: currentCacheKey, used: 0 });
+  if (retryBudgetRef.current.key !== currentCacheKey) {
+    retryBudgetRef.current = { key: currentCacheKey, used: 0 };
+  }
 
   useEffect(() => {
     mountedRef.current = true;
@@ -709,17 +847,27 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
   // Overlay-render effect: kick off the native render if we don't already
   // have one for this cache key in the sync map.
   useEffect(() => {
-    latestCacheKeyRef.current = currentCacheKey;
     if (!frames || unsupportedRenderSignatures.has(holdRenderSignature)) return;
 
-    if (renderedOverlays.has(currentCacheKey)) {
+    const cachedEntry = getRenderedOverlay(currentCacheKey);
+    if (cachedEntry) {
       // Sync map already has it — make sure local state reflects that
       // (covers prop changes mid-mount that pick up a previously rendered
       // overlay).
-      const uri = renderedOverlays.get(currentCacheKey);
-      if (uri && nativeRender?.key !== currentCacheKey) {
-        setNativeRender({ key: currentCacheKey, uri });
-      }
+      setNativeRender((previous) => {
+        if (
+          previous?.key === currentCacheKey &&
+          previous.entry?.uri === cachedEntry.uri &&
+          previous.entry.generation === cachedEntry.generation
+        ) {
+          return previous;
+        }
+        return {
+          key: currentCacheKey,
+          entry: cachedEntry,
+          loadAttempt: previous?.key === currentCacheKey ? previous.loadAttempt : 0,
+        };
+      });
       return;
     }
 
@@ -750,13 +898,16 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
     });
 
     renderPromise
-      .then((fileUri) => {
-        renderedOverlays.set(currentCacheKey, fileUri);
+      .then((renderedEntry) => {
         // Discard a stale resolution (props moved on while this render was in
         // flight) — see latestCacheKeyRef. The sync map above still keeps the
         // file, so swiping back to this climb is an instant cache hit.
         if (mountedRef.current && latestCacheKeyRef.current === currentCacheKey) {
-          setNativeRender({ key: currentCacheKey, uri: fileUri });
+          setNativeRender((previous) => ({
+            key: currentCacheKey,
+            entry: renderedEntry,
+            loadAttempt: previous?.key === currentCacheKey ? previous.loadAttempt : 0,
+          }));
         }
       })
       .catch((error: unknown) => {
@@ -789,8 +940,9 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
           },
         });
       });
-    // nativeRender is intentionally excluded from deps: this effect *sets* it,
-    // and the only meaningful re-trigger is a cacheKey change.
+    // nativeRender is intentionally excluded from deps: this effect *sets* it.
+    // recoveryRequest is the explicit same-key re-trigger after an exact stale
+    // entry is invalidated.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     currentCacheKey,
@@ -806,14 +958,226 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
     brushThickness,
     shapeSize,
     holdRenderSignature,
+    recoveryRequest,
   ]);
+
+  const onOverlayLoad = useCallback(
+    (emittingLoadKey: string | null) => {
+      const expected = nativeRenderRef.current;
+      if (
+        !isLoadedNativeRender(expected) ||
+        expected.key !== currentCacheKey ||
+        `${expected.entry.generation}:${expected.loadAttempt}` !== emittingLoadKey
+      )
+        return;
+
+      // A successful replacement is the only event that replenishes this
+      // consumer's retry budget. Merely finishing the native render is not proof
+      // that expo-image could load the regenerated file.
+      if (expected.loadAttempt > 0 && retryBudgetRef.current.key === expected.key) {
+        retryBudgetRef.current.used = 0;
+      }
+    },
+    [currentCacheKey],
+  );
+
+  const onOverlayError = useCallback(
+    (_event: { error: string }, emittingLoadKey: string | null) => {
+      const expected = nativeRenderRef.current;
+      if (
+        !isLoadedNativeRender(expected) ||
+        expected.key !== currentCacheKey ||
+        `${expected.entry.generation}:${expected.loadAttempt}` !== emittingLoadKey
+      )
+        return;
+      const expectedEntry = expected.entry;
+
+      const peerReplacement = getRenderedOverlay(expected.key);
+      if (
+        peerReplacement &&
+        (peerReplacement.uri !== expectedEntry.uri || peerReplacement.generation !== expectedEntry.generation)
+      ) {
+        // A peer may have rewritten the same URI before this consumer's
+        // delayed onError arrives. The file then exists because it belongs to
+        // the newer generation, so compare generations before classifying an
+        // existing file as a terminal decode failure.
+        if (retryBudgetRef.current.key !== expected.key || retryBudgetRef.current.used >= 1) {
+          reportOverlayLoadOnce('retry_exhausted', boardName);
+          setNativeRender((previous) => (isExactNativeRender(previous, expected) ? null : previous));
+          return;
+        }
+        retryBudgetRef.current.used += 1;
+        setNativeRender((previous) =>
+          isExactNativeRender(previous, expected)
+            ? {
+                key: expected.key,
+                entry: peerReplacement,
+                loadAttempt: expected.loadAttempt + 1,
+              }
+            : previous,
+        );
+        return;
+      }
+
+      let entryExists: boolean | null;
+      try {
+        entryExists = overlayCacheEntryExists(expectedEntry.uri);
+      } catch {
+        reportOverlayLoadOnce('validation_failed', boardName);
+        setNativeRender((previous) => (isExactNativeRender(previous, expected) ? null : previous));
+        return;
+      }
+
+      // A present file can still be a transient native image decode failure.
+      // Keep the exact generated entry, but remount expo-image once with a new
+      // attempt key so it retries the same URI without triggering a render.
+      if (entryExists === true) {
+        reportOverlayLoadOnce('cache_entry_present', boardName);
+        if (retryBudgetRef.current.key !== expected.key || retryBudgetRef.current.used >= 1) {
+          reportOverlayLoadOnce('retry_exhausted', boardName);
+          setNativeRender((previous) => (isExactNativeRender(previous, expected) ? null : previous));
+          return;
+        }
+        retryBudgetRef.current.used += 1;
+        setNativeRender((previous) =>
+          isExactNativeRender(previous, expected)
+            ? {
+                key: expected.key,
+                entry: expectedEntry,
+                loadAttempt: expected.loadAttempt + 1,
+              }
+            : previous,
+        );
+        return;
+      }
+
+      // Unknown validation (the web twin) is terminal: guessing would turn
+      // every unsupported image into a render loop.
+      if (entryExists === null) {
+        reportOverlayLoadOnce('validation_unsupported', boardName);
+        setNativeRender((previous) => (isExactNativeRender(previous, expected) ? null : previous));
+        return;
+      }
+
+      reportOverlayLoadOnce('cache_entry_missing', boardName);
+      if (retryBudgetRef.current.key !== expected.key || retryBudgetRef.current.used >= 1) {
+        reportOverlayLoadOnce('retry_exhausted', boardName);
+        setNativeRender((previous) => (isExactNativeRender(previous, expected) ? null : previous));
+        return;
+      }
+      retryBudgetRef.current.used += 1;
+
+      invalidateRenderedOverlay(expected.key, expectedEntry);
+      const latePeerReplacement = getRenderedOverlay(expected.key);
+      if (
+        latePeerReplacement &&
+        (latePeerReplacement.uri !== expectedEntry.uri || latePeerReplacement.generation !== expectedEntry.generation)
+      ) {
+        // Another mounted surface already repaired this key. Never delete its
+        // newer generation; remount only this failed consumer against it.
+        setNativeRender((previous) =>
+          isExactNativeRender(previous, expected)
+            ? {
+                key: expected.key,
+                entry: latePeerReplacement,
+                loadAttempt: expected.loadAttempt + 1,
+              }
+            : previous,
+        );
+        return;
+      }
+
+      // Unmount the failed Image while the shared in-flight render repairs the
+      // cache. The nonce re-runs the effect without changing the climb key.
+      setNativeRender((previous) =>
+        isExactNativeRender(previous, expected)
+          ? { key: expected.key, entry: null, loadAttempt: expected.loadAttempt + 1 }
+          : previous,
+      );
+      setRecoveryRequest((request) => request + 1);
+    },
+    [boardName, currentCacheKey],
+  );
+
+  const verifyOverlayForNativeUse = useCallback(
+    (requestedUri: string | null, requestedLoadKey: string | null): string | null => {
+      if (!verifyOverlayFile || !requestedUri) return requestedUri;
+      const expected = nativeRenderRef.current;
+      if (
+        !isLoadedNativeRender(expected) ||
+        expected.key !== currentCacheKey ||
+        expected.entry.uri !== requestedUri ||
+        `${expected.entry.generation}:${expected.loadAttempt}` !== requestedLoadKey
+      ) {
+        return null;
+      }
+      try {
+        if (overlayCacheEntryExists(requestedUri) === true) {
+          onOverlayLoad(requestedLoadKey);
+          return requestedUri;
+        }
+      } catch {
+        // The exact-attempt handler below classifies and reports validation
+        // failures without including the private cache URI.
+      }
+      onOverlayError({ error: 'Generated overlay failed native-use validation' }, requestedLoadKey);
+      return null;
+    },
+    [currentCacheKey, onOverlayError, onOverlayLoad, verifyOverlayFile],
+  );
 
   // Only surface the native URI if it matches the *current* cache key —
   // a stale render (from before a prop change) would otherwise show.
-  const overlayUri = frames && nativeRender?.key === currentCacheKey ? nativeRender.uri : null;
+  const candidateOverlayUri =
+    frames && nativeRender?.key === currentCacheKey ? (nativeRender.entry?.uri ?? null) : null;
+  const overlayLoadKey =
+    frames && nativeRender?.key === currentCacheKey && nativeRender.entry
+      ? `${nativeRender.entry.generation}:${nativeRender.loadAttempt}`
+      : null;
+  const verifiedOverlayFile =
+    !verifyOverlayFile ||
+    !candidateOverlayUri ||
+    (overlayLoadKey != null &&
+      verifiedOverlay?.cacheKey === currentCacheKey &&
+      verifiedOverlay.uri === candidateOverlayUri &&
+      verifiedOverlay.loadKey === overlayLoadKey);
+  const overlayUri = verifiedOverlayFile ? candidateOverlayUri : null;
+
+  useEffect(() => {
+    if (!verifyOverlayFile || !candidateOverlayUri || !overlayLoadKey) {
+      setVerifiedOverlay(null);
+      return;
+    }
+
+    if (verifyOverlayForNativeUse(candidateOverlayUri, overlayLoadKey)) {
+      setVerifiedOverlay((previous) => {
+        if (
+          previous?.cacheKey === currentCacheKey &&
+          previous.uri === candidateOverlayUri &&
+          previous.loadKey === overlayLoadKey
+        ) {
+          return previous;
+        }
+        return { cacheKey: currentCacheKey, uri: candidateOverlayUri, loadKey: overlayLoadKey };
+      });
+      return;
+    }
+
+    setVerifiedOverlay(null);
+    // verifyOverlayForNativeUse owns exact-attempt recovery. This state change
+    // withholds the stale path from subsequent notification renders.
+  }, [candidateOverlayUri, currentCacheKey, overlayLoadKey, verifyOverlayFile, verifyOverlayForNativeUse]);
   // Same guard for backgrounds: a stored entry from a prior boardKey
   // (FlashList row recycle case) must not bleed through to the new climb.
   const backgroundPaths = storedBackgrounds?.key === currentBoardKey ? storedBackgrounds.paths : [];
   const missingBackgroundCount = storedBackgrounds?.key === currentBoardKey ? storedBackgrounds.missingCount : 0;
-  return { overlayUri, backgroundPaths, missingBackgroundCount };
+  return {
+    overlayUri,
+    overlayLoadKey,
+    onOverlayLoad,
+    onOverlayError,
+    verifyOverlayForNativeUse,
+    backgroundPaths,
+    missingBackgroundCount,
+  };
 }
