@@ -464,6 +464,10 @@ function setConcurrencyGateBuildSettings(project, targetUuid) {
     buildSettings.SKIP_INSTALL = 'YES';
     buildSettings.SUPPORTED_PLATFORMS = '"iphoneos iphonesimulator"';
     buildSettings.SWIFT_STRICT_CONCURRENCY = 'complete';
+    // Deliberate policy: ALL Swift warnings on this gate target become errors, not
+    // just concurrency ones — a new SDK/Xcode bump can red the suite on unrelated
+    // deprecations. Accepted because the target compiles a single audited file;
+    // revisit if an SDK bump reds the suite spuriously.
     buildSettings.SWIFT_TREAT_WARNINGS_AS_ERRORS = 'YES';
     buildSettings.SWIFT_VERSION = '5.0';
     buildSettings.TARGETED_DEVICE_FAMILY = '"1,2"';

@@ -192,7 +192,10 @@ private final class BoardBleDisplayWriteOutcome: @unchecked Sendable {
 }
 
 final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
-    static let shared = BoardBleManager()
+    // Strict-concurrency audit: the manager is bleQueue-confined by design — all state
+    // mutation happens on that serial queue — so this global is safe without claiming
+    // (and over-claiming) Sendable for the whole class.
+    nonisolated(unsafe) static let shared = BoardBleManager()
 
     private final class ManagerCancellationBarrier {
         var watchdog: BleOneShotTimer?
