@@ -9,7 +9,7 @@ import { Icon } from '../Icon';
 import { Button } from '../Button';
 import { SwitchRow } from '../SwitchRow';
 import { PlaylistPreviewSquare } from './PlaylistPreviewSquare';
-import { PLAYLIST_COLORS } from './playlist-colors';
+import { normalizePlaylistColor, PLAYLIST_COLORS } from './playlist-colors';
 import { useTheme } from '../../providers/theme-provider';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing } from '../../theme/tokens';
@@ -89,7 +89,7 @@ export function PlaylistFormSheet({
       if (isEdit && playlist) {
         setName(playlist.name);
         setDescription(playlist.description ?? '');
-        setColor(playlist.color);
+        setColor(normalizePlaylistColor(playlist.color) ?? undefined);
         setIcon(playlist.icon);
         setIsPublic(playlist.isPublic);
       } else {

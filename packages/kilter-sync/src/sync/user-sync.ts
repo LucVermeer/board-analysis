@@ -29,6 +29,7 @@ import {
   upstreamPlaylistSkipLogLine,
   type UpstreamPlaylistWriteDecision,
 } from '@boardsesh/sync-runtime';
+import { normalizePlaylistColor } from '@boardsesh/shared-schema';
 
 import { KILTER_BOARD_TYPE } from '../api/types';
 import { KilterApiError } from '../api/errors';
@@ -1335,6 +1336,7 @@ export async function applyCircuits(
 
     const playlistUuid = randomUUID();
     const now = new Date();
+    const normalizedColor = normalizePlaylistColor(raw.color);
 
     // Upsert playlist row keyed on kilter_id, return the bigserial id so
     // we can attach climbs + ownership.
@@ -1347,7 +1349,7 @@ export async function applyCircuits(
         name: raw.name,
         description: raw.description ?? null,
         isPublic: !!raw.is_public,
-        color: raw.color ?? null,
+        color: normalizedColor,
         kilterType: 'circuits',
         kilterId: raw.circuit_uuid,
         kilterSyncedAt: now,
@@ -1358,7 +1360,7 @@ export async function applyCircuits(
           name: raw.name,
           description: raw.description ?? null,
           isPublic: !!raw.is_public,
-          color: raw.color ?? null,
+          color: normalizedColor,
           kilterSyncedAt: now,
           updatedAt: now,
         },

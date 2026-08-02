@@ -7,6 +7,7 @@ import { GET } from '../route';
 const playlistRouteState = vi.hoisted(() => ({
   getPlaylistOgSummaryMock: vi.fn(),
   capturedElement: null as unknown,
+  capturedOptions: null as ({ emoji?: string } & ResponseInit) | null,
 }));
 
 vi.mock('@/app/lib/seo/dynamic-og-data', () => ({
@@ -56,8 +57,9 @@ vi.mock('@/app/lib/seo/og', () => ({
 }));
 
 vi.mock('@vercel/og', () => ({
-  ImageResponse: vi.fn(function ImageResponse(element: unknown, init?: ResponseInit) {
+  ImageResponse: vi.fn(function ImageResponse(element: unknown, init?: { emoji?: string } & ResponseInit) {
     playlistRouteState.capturedElement = element;
+    playlistRouteState.capturedOptions = init ?? null;
     return new Response('mock-image', {
       status: 200,
       headers: new Headers(init?.headers),
@@ -94,6 +96,7 @@ describe('api/og/playlist route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     playlistRouteState.capturedElement = null;
+    playlistRouteState.capturedOptions = null;
   });
 
   it('renders a playlist OG image with ASCII-safe fallback markup and truncated copy', async () => {
@@ -141,5 +144,61 @@ describe('api/og/playlist route', () => {
     const response = await GET(makeRequest({ uuid: 'private-playlist' }));
 
     expect(response.status).toBe(404);
+  });
+
+  it.each([
+    ['a ZWJ emoji', '🧗‍♀️'],
+    ['a flag', '🇫🇷'],
+    ['a keycap', '1️⃣'],
+  ])('keeps %s as one grapheme in the playlist mark', async (_label, icon) => {
+    playlistRouteState.getPlaylistOgSummaryMock.mockResolvedValue({
+      name: 'Emoji Playlist',
+      description: null,
+      color: '#123456',
+      icon: `${icon} extra`,
+      isPublic: true,
+      boardType: 'kilter',
+      climbCount: 1,
+      version: 'emoji-test',
+    });
+
+    const response = await GET(makeRequest({ uuid: 'emoji-playlist' }));
+    const textContent = collectText(playlistRouteState.capturedElement);
+
+    expect(response.status).toBe(200);
+    expect(playlistRouteState.capturedOptions?.emoji).toBe('twemoji');
+    expect(textContent).toContain(icon);
+  });
+
+  it('retains ASCII identifiers in the playlist mark', async () => {
+    playlistRouteState.getPlaylistOgSummaryMock.mockResolvedValue({
+      name: 'Steep Projects',
+      description: null,
+      color: '#123456',
+      icon: 'StarOutlined',
+      isPublic: true,
+      boardType: 'kilter',
+      climbCount: 1,
+      version: 'ascii-test',
+    });
+
+    await GET(makeRequest({ uuid: 'ascii-playlist' }));
+    expect(collectText(playlistRouteState.capturedElement)).toContain('ST');
+  });
+
+  it('falls back to playlist initials when the icon is empty', async () => {
+    playlistRouteState.getPlaylistOgSummaryMock.mockResolvedValue({
+      name: 'Steep Projects',
+      description: null,
+      color: '#123456',
+      icon: '',
+      isPublic: true,
+      boardType: 'kilter',
+      climbCount: 1,
+      version: 'initials-test',
+    });
+
+    await GET(makeRequest({ uuid: 'initials-playlist' }));
+    expect(collectText(playlistRouteState.capturedElement)).toContain('SP');
   });
 });

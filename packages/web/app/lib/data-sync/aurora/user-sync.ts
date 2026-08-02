@@ -14,6 +14,7 @@ import {
   canWriteUpstreamPlaylist,
   upstreamPlaylistSkipLogLine,
 } from '@boardsesh/sync-runtime';
+import { normalizePlaylistColor } from '@boardsesh/shared-schema';
 import { UNIFIED_TABLES } from '../../db/queries/util/table-select';
 import { auroraCredentials, playlists, playlistClimbs, playlistOwnership } from '../../db/schema';
 // Narrow subpath import (not the `./sync` barrel) so the web bundle doesn't
@@ -280,8 +281,9 @@ export async function upsertTableData(
             continue;
           }
 
-          // Format color - Aurora uses hex without #, we store with #
-          const formattedColor = item.color ? `#${item.color}` : null;
+          // Aurora may omit the hash and legacy payloads may use shorthand;
+          // persist one canonical representation for every downstream client.
+          const formattedColor = normalizePlaylistColor(item.color);
 
           // Insert/update playlist
           const [playlist] = await db

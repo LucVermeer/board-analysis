@@ -3129,7 +3129,7 @@ export type Mutation = {
   removeGymMember: Scalars['Boolean']['output'];
   /** Remove a climb from the queue by its queue item UUID. */
   removeQueueItem: Scalars['Boolean']['output'];
-  /** Reorder a climb within a playlist by moving it to a new index (owner/editor). */
+  /** Reorder a climb within a playlist by moving it to a new index (owner only). */
   reorderPlaylistClimb: Scalars['Boolean']['output'];
   /** Move a queue item from one position to another. */
   reorderQueueItem: Scalars['Boolean']['output'];

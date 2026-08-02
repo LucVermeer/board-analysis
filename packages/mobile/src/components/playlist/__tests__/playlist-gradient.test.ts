@@ -44,8 +44,13 @@ describe('buildHeroGradient', () => {
     expect(gradient.locations).toEqual([0, 0.55, 1]);
   });
 
+  it('expands a legacy three-digit playlist colour before rendering', () => {
+    expect(buildHeroGradient('#aB3').colors[1]).toBe('#AABB33');
+  });
+
   it('falls back to the brand violet for missing or invalid colours', () => {
     expect(buildHeroGradient(undefined).colors[1]).toBe(PLAYLIST_COLORS[0]);
     expect(buildHeroGradient('not-a-colour').colors[1]).toBe(PLAYLIST_COLORS[0]);
+    expect(buildHeroGradient('#abcd').colors[1]).toBe(PLAYLIST_COLORS[0]);
   });
 });

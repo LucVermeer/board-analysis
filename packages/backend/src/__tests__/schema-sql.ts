@@ -632,6 +632,15 @@ export const schemaSQL = `
   );
   CREATE UNIQUE INDEX IF NOT EXISTS "unique_playlist_climb" ON "playlist_climbs" ("playlist_id", "climb_uuid");
 
+  CREATE TABLE IF NOT EXISTS "user_playlist_pins" (
+    "id" bigserial PRIMARY KEY NOT NULL,
+    "user_id" text NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+    "playlist_id" bigint NOT NULL REFERENCES "playlists"("id") ON DELETE CASCADE,
+    "created_at" timestamp DEFAULT now() NOT NULL,
+    "updated_at" timestamp DEFAULT now() NOT NULL
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS "unique_user_playlist_pin" ON "user_playlist_pins" ("user_id", "playlist_id");
+
   CREATE TABLE IF NOT EXISTS "user_favorites" (
     "id" bigserial PRIMARY KEY NOT NULL,
     "user_id" text NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,

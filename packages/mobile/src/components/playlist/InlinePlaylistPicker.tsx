@@ -31,7 +31,7 @@ import { reportHandledError } from '../../lib/error-reporting';
 import { sortPlaylistsByName } from '../../lib/sort-filter-playlists';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { borderRadius, spacing } from '../../theme/tokens';
-import { PLAYLIST_COLORS, isValidHexColor } from './playlist-colors';
+import { PLAYLIST_COLORS, normalizePlaylistColor } from './playlist-colors';
 import { NAME_MAX } from './playlist-form-values';
 
 // One-tap emoji shortcuts for the compact inline create form. The full emoji
@@ -446,7 +446,7 @@ export function InlinePlaylistPicker({
 
   const renderPlaylistRow = useCallback<ListRenderItem<Playlist>>(
     ({ item, index }) => {
-      const accent = item.color && isValidHexColor(item.color) ? item.color : brandColors.primary;
+      const accent = normalizePlaylistColor(item.color) ?? brandColors.primary;
       const member = members.has(item.uuid);
       return (
         <ListRow

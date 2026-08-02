@@ -8,6 +8,7 @@ import {
   canWriteUpstreamPlaylist,
   upstreamPlaylistSkipLogLine,
 } from '@boardsesh/sync-runtime';
+import { normalizePlaylistColor } from '@boardsesh/shared-schema';
 import { DUPLICATE_BOARD_ACCOUNT_CIRCUITS_SYNC_ERROR } from '@boardsesh/shared-schema/sync-error-codes';
 import { foreignPlaylistOwnerGuard, selectUpstreamPlaylistOwners } from '@boardsesh/db/queries';
 import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
@@ -361,7 +362,7 @@ export async function upsertTableData(
             continue;
           }
 
-          const formattedColor = item.color ? `#${item.color}` : null;
+          const formattedColor = normalizePlaylistColor(item.color);
 
           const [playlist] = await db
             .insert(playlists)

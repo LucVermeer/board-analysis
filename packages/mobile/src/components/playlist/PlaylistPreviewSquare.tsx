@@ -4,7 +4,7 @@ import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { borderRadius } from '../../theme/tokens';
-import { PLAYLIST_COLORS, isValidHexColor } from './playlist-colors';
+import { PLAYLIST_COLORS, normalizePlaylistColor } from './playlist-colors';
 import { PlaylistBoardBackdrop } from './PlaylistBoardBackdrop';
 import { resolvePlaylistEmojiIcon } from './playlist-icon';
 
@@ -43,8 +43,7 @@ export function PlaylistPreviewSquare({
   showBoardBackdrop = false,
 }: PlaylistPreviewSquareProps) {
   const backgroundColor = useMemo(() => {
-    if (color && isValidHexColor(color)) return color;
-    return PLAYLIST_COLORS[index % PLAYLIST_COLORS.length];
+    return normalizePlaylistColor(color) ?? PLAYLIST_COLORS[index % PLAYLIST_COLORS.length];
   }, [color, index]);
 
   // Scale the centred glyph with the tile so the 96px hero and the 64px card
