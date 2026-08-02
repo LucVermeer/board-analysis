@@ -16,6 +16,9 @@ A new version shipped to the App Store and Play Store.
 
 ### Fixed
 
+- Board hold overlays recover instead of erroring when the phone reclaims cache storage mid-render. ([#4114](https://github.com/boardsesh/boardsesh/pull/4114))
+- See send counts update as soon as you log a climb, then stay in sync with the crew. ([#4146](https://github.com/boardsesh/boardsesh/pull/4146))
+- Keep an iPhone board reconnect from being knocked out by a late Bluetooth failure from the previous attempt. ([#4173](https://github.com/boardsesh/boardsesh/pull/4173))
 - Keep controls, lists, and messages tucked above the iOS tab bar without the extra gap. ([#4089](https://github.com/boardsesh/boardsesh/pull/4089))
 - Board feeds now stay tied to real wall layouts and hold sets. ([#4149](https://github.com/boardsesh/boardsesh/pull/4149))
 - Climb hold overlays now recover when storage pressure clears their cached image, instead of leaving a blank board or stale notification thumbnail. ([#4147](https://github.com/boardsesh/boardsesh/pull/4147))

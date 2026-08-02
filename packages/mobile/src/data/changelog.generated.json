@@ -1,6 +1,27 @@
 {
-  "generatedAt": "2026-08-02T07:34:34.071Z",
+  "generatedAt": "2026-08-02T07:41:57.029Z",
   "entries": [
+    {
+      "prNumber": 4114,
+      "category": "fixed",
+      "title": "Board hold overlays recover instead of erroring when the phone reclaims cache storage mid-render.",
+      "mergedAt": "2026-08-02T07:35:44Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4114"
+    },
+    {
+      "prNumber": 4146,
+      "category": "fixed",
+      "title": "See send counts update as soon as you log a climb, then stay in sync with the crew.",
+      "mergedAt": "2026-08-02T07:35:28Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4146"
+    },
+    {
+      "prNumber": 4173,
+      "category": "fixed",
+      "title": "Keep an iPhone board reconnect from being knocked out by a late Bluetooth failure from the previous attempt.",
+      "mergedAt": "2026-08-02T07:34:46Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4173"
+    },
     {
       "prNumber": 4089,
       "category": "fixed",
