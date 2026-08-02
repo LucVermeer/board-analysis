@@ -81,7 +81,7 @@ export function useLogAscentAction(climb: Climb) {
       angle,
       isMirror,
       isBenchmark: climb.benchmark_difficulty != null,
-      baseAscensionistCount: climb.ascensionist_count,
+      baseAscensionistCount: climb.ascensionist_count ?? 0,
       layoutId: boardConfig.layoutId,
       sizeId: boardConfig.sizeId,
       setIds: boardConfig.setIds,

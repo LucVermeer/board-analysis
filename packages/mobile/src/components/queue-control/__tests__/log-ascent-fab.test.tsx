@@ -177,6 +177,21 @@ describe('LogAscentFab', () => {
     });
   });
 
+  it.each([
+    { label: 'null', ascensionistCount: null },
+    { label: 'undefined', ascensionistCount: undefined },
+  ])('normalizes a runtime $label ascensionist count before opening LogAscent', ({ ascensionistCount }) => {
+    const climb = makeClimb({
+      ascensionist_count: ascensionistCount,
+    } as unknown as Partial<Climb>);
+    const { container } = render(<LogAscentFab climb={climb} />);
+    fireEvent.click(fab(container));
+
+    const payload = drawer.openLogAscent.mock.calls[0]?.[0] as LogAscentInput;
+    expect(payload.baseAscensionistCount).toBe(0);
+    expect(Number.isFinite(payload.baseAscensionistCount)).toBe(true);
+  });
+
   it('reports isBenchmark:false and isMirror:false for a plain climb', () => {
     const climb = makeClimb({ mirrored: false, benchmark_difficulty: null });
     const { container } = render(<LogAscentFab climb={climb} />);

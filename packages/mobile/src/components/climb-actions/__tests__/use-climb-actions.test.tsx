@@ -201,18 +201,29 @@ describe('useClimbActions colours and dispatch', () => {
     expect(onAfterAction).toHaveBeenCalledTimes(1);
   });
 
-  it('tick.run opens the root LogAscent sheet and fires onAfterAction by default', () => {
+  it.each([
+    { label: 'null', ascensionistCount: null },
+    { label: 'undefined', ascensionistCount: undefined },
+  ])('tick.run normalizes a runtime $label ascensionist count before opening LogAscent', ({ ascensionistCount }) => {
+    const climbWithNullishCount = { ...climb, ascensionist_count: ascensionistCount } as unknown as Climb;
     const onAfterAction = vi.fn();
-    const { result } = renderActions({ climb, boardConfig: kilterBoard, isAuthenticated: false, onAfterAction });
+    const { result } = renderActions({
+      climb: climbWithNullishCount,
+      boardConfig: kilterBoard,
+      isAuthenticated: false,
+      onAfterAction,
+    });
     result.current.find((action) => action.id === 'tick')?.run();
     expect(openers.openLogAscent).toHaveBeenCalledWith(
       expect.objectContaining({
         climbUuid: 'climb-1',
         boardName: 'kilter',
         angle: 40,
-        baseAscensionistCount: climb.ascensionist_count,
+        baseAscensionistCount: 0,
       }),
     );
+    const payload = openers.openLogAscent.mock.calls[0]?.[0] as { baseAscensionistCount: number };
+    expect(Number.isFinite(payload.baseAscensionistCount)).toBe(true);
     expect(onAfterAction).toHaveBeenCalledTimes(1);
   });
 

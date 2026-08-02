@@ -75,6 +75,17 @@ describe('climb stats external store', () => {
     unsubscribe();
   });
 
+  it('turns a normalized zero base into a finite optimistic floor of one', () => {
+    setClimbStatsAuthEpoch(7);
+    const unsubscribe = subscribeClimbStats(key, vi.fn());
+    beginOptimisticAscent(key, 'first-ascent', 7, 0);
+
+    const optimisticFloor = getClimbStatsSnapshot(key).optimisticFloor;
+    expect(optimisticFloor).toBe(1);
+    expect(Number.isFinite(optimisticFloor)).toBe(true);
+    unsubscribe();
+  });
+
   it('floors from the immutable mutation base without incrementing a newer canonical snapshot', () => {
     setClimbStatsAuthEpoch(7);
     const unsubscribe = subscribeClimbStats(key, vi.fn());

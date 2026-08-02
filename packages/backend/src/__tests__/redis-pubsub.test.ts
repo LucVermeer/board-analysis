@@ -168,6 +168,36 @@ describe('Redis PubSub Adapter', () => {
       await adapter2.unsubscribeClimbStatsChannel(channelKey);
     });
 
+    it('does not echo climb-stats events back to the publishing instance', async () => {
+      const channelKey = 'kilter:self-echo';
+      const receivedEvents: ClimbStatsEvent[] = [];
+      adapter1.onClimbStatsMessage((receivedKey, event) => {
+        if (receivedKey === channelKey) receivedEvents.push(event);
+      });
+      await adapter1.subscribeClimbStatsChannel(channelKey);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const event: ClimbStatsEvent = {
+        boardType: 'kilter',
+        layoutId: 1,
+        climbUuid: 'climb-self-echo',
+        angle: 40,
+        ascensionistCount: 1,
+        qualityAverage: null,
+        difficultyAverage: null,
+        displayDifficulty: null,
+        difficulty: null,
+        faUsername: null,
+        faAt: null,
+        syncSeq: '1',
+      };
+      await adapter1.publishClimbStatsEvent(channelKey, event);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      expect(receivedEvents).toEqual([]);
+      await adapter1.unsubscribeClimbStatsChannel(channelKey);
+    });
+
     it('should NOT deliver messages to the same instance that published them', async () => {
       const sessionId = 'test-session-3';
       const receivedEvents: QueueEvent[] = [];

@@ -1118,7 +1118,7 @@ export function PlayDrawer({
               angle={tickTarget?.boardConfig.angle ?? angle}
               isMirror={isMirrored}
               isBenchmark={tickClimb.benchmark_difficulty != null}
-              baseAscensionistCount={tickClimb.ascensionist_count}
+              baseAscensionistCount={tickClimb.ascensionist_count ?? 0}
               layoutId={tickTarget?.boardConfig.layoutId ?? layoutId}
               sizeId={tickTarget?.boardConfig.sizeId ?? sizeId}
               setIds={tickTarget?.boardConfig.setIds ?? setIds}
