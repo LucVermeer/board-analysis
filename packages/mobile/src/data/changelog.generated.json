@@ -1,6 +1,27 @@
 {
-  "generatedAt": "2026-08-02T00:18:34.450Z",
+  "generatedAt": "2026-08-02T00:24:06.888Z",
   "entries": [
+    {
+      "prNumber": 4091,
+      "category": "fixed",
+      "title": "Remixing or editing a climb now waits for the current board, queue, and player screens to finish closing before the editor opens, preventing stranded sheets and taps that appear to do nothing.",
+      "mergedAt": "2026-08-02T00:19:29Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4091"
+    },
+    {
+      "prNumber": 4096,
+      "category": "fixed",
+      "title": "Board climbs catch up sooner after temporary Aurora sync outages",
+      "mergedAt": "2026-08-02T00:19:06Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4096"
+    },
+    {
+      "prNumber": 4109,
+      "category": "fixed",
+      "title": "Keep empty board angles out of Kilter climb stats after catalog repairs.",
+      "mergedAt": "2026-08-02T00:18:37Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4109"
+    },
     {
       "prNumber": 4132,
       "category": "fixed",
