@@ -1,0 +1,19 @@
+#!/bin/sh
+
+# Keep the Conventional Commit check in the tracked Vite+ hooks directory.
+# Git runs hooks inside their worktree, so resolve that worktree directly rather
+# than relying on $0's invocation-dependent shape.
+set -eu
+
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || {
+  echo "commit-msg hook: could not resolve the repository root." >&2
+  exit 1
+}
+
+commit_message_hook="$repo_root/.githooks/commit-msg"
+if [ ! -x "$commit_message_hook" ]; then
+  echo "commit-msg hook: expected executable hook is missing: $commit_message_hook" >&2
+  exit 1
+fi
+
+exec "$commit_message_hook" "$@"
