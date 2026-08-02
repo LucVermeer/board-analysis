@@ -1,6 +1,21 @@
 {
-  "generatedAt": "2026-08-02T00:09:06.042Z",
+  "generatedAt": "2026-08-02T00:18:34.450Z",
   "entries": [
+    {
+      "prNumber": 4132,
+      "category": "fixed",
+      "title": "Playlist colours and shared-image emoji now stay consistent across your library, including playlists for 90° walls.",
+      "mergedAt": "2026-08-02T00:18:18Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4132",
+      "body": "Playlist collaborators can still read private climbs while owner-only changes stay protected."
+    },
+    {
+      "prNumber": 4138,
+      "category": "fixed",
+      "title": "Report a duplicate gym once without sending repeat reports.",
+      "mergedAt": "2026-08-02T00:17:22Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4138"
+    },
     {
       "prNumber": 4125,
       "category": "fixed",

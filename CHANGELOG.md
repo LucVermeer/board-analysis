@@ -8,6 +8,9 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- Playlist colours and shared-image emoji now stay consistent across your library, including playlists for 90° walls. ([#4132](https://github.com/boardsesh/boardsesh/pull/4132))
+  Playlist collaborators can still read private climbs while owner-only changes stay protected.
+- Report a duplicate gym once without sending repeat reports. ([#4138](https://github.com/boardsesh/boardsesh/pull/4138))
 - Ticks and favorites waiting to sync now stay queued when a mobile connection drops after response headers, instead of being discarded. ([#4125](https://github.com/boardsesh/boardsesh/pull/4125))
 
 ## 2026-08-01
