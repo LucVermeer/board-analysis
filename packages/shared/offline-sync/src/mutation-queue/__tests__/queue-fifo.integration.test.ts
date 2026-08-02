@@ -79,7 +79,7 @@ describe('recordFailure atomic dead-letter', () => {
       "SELECT id FROM pending_mutations WHERE idempotency_key = 'k'",
     );
 
-    await recordFailure(db, before!.id, 'transient 503');
+    await expect(recordFailure(db, before!.id, 'transient 503')).resolves.toBe('pending');
 
     const row = await getRow(before!.id);
     expect(row?.retry_count).toBe(1);
@@ -99,7 +99,7 @@ describe('recordFailure atomic dead-letter', () => {
       "SELECT id FROM pending_mutations WHERE idempotency_key = 'k'",
     );
 
-    await recordFailure(db, before!.id, 'still down');
+    await expect(recordFailure(db, before!.id, 'still down')).resolves.toBe('dead_letter');
 
     const row = await getRow(before!.id);
     expect(row?.retry_count).toBe(3);
@@ -123,8 +123,8 @@ describe('recordFailure atomic dead-letter', () => {
       "SELECT id FROM pending_mutations WHERE idempotency_key = 'healthy'",
     );
 
-    await recordFailure(db, exhausted!.id, 'gone');
-    await recordFailure(db, healthy!.id, 'blip');
+    await expect(recordFailure(db, exhausted!.id, 'gone')).resolves.toBe('dead_letter');
+    await expect(recordFailure(db, healthy!.id, 'blip')).resolves.toBe('pending');
 
     const deadLettered = await db.getAllAsync<PendingMutation>(
       "SELECT * FROM pending_mutations WHERE status = 'dead_letter'",

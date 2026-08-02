@@ -549,6 +549,7 @@
         "graphql-ws": "^6.2.0",
       },
       "devDependencies": {
+        "graphql-request": "^7.4.0",
         "typescript": "~7.0.2",
       },
     },

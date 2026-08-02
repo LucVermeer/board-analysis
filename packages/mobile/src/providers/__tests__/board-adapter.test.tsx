@@ -4,6 +4,13 @@ import { render } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import type { BoardAdapter } from '@boardsesh/board-react';
 
+const wsMocks = vi.hoisted(() => ({
+  getClient: vi.fn(),
+  on: vi.fn(() => vi.fn()),
+  subscribe: vi.fn((_request: unknown, _handlers: { complete: () => void }) => vi.fn()),
+}));
+wsMocks.getClient.mockReturnValue({ on: wsMocks.on, subscribe: wsMocks.subscribe });
+
 // BoardAdapterWrapper is the mobile flag boundary for the tick dual-write:
 // `saveTickOffline` must only exist on the adapter when the offline engine is
 // on — the shared useSaveTick optional-chains it, so `undefined` IS the
@@ -59,8 +66,13 @@ vi.mock('../../lib/graphql/client', () => ({
   getHttpClient: () => ({ request: vi.fn() }),
 }));
 
+vi.mock('../../lib/auth-store', () => ({
+  captureAuthCredentialGeneration: () => 7,
+  isAuthCredentialGenerationCurrent: (generation: number) => generation === 7,
+}));
+
 vi.mock('../../lib/graphql/ws-client', () => ({
-  getWsClient: vi.fn(),
+  getWsClient: wsMocks.getClient,
 }));
 
 vi.mock('../../lib/error-reporting', () => ({
@@ -69,6 +81,7 @@ vi.mock('../../lib/error-reporting', () => ({
 
 vi.mock('../../offline/offline-sync-adapter', () => ({
   drainMutationQueue: vi.fn(async () => {}),
+  subscribeMutationDelivery: vi.fn(() => () => {}),
 }));
 
 vi.mock('../../hooks/use-offline-mutations', () => ({
@@ -78,6 +91,7 @@ vi.mock('../../hooks/use-offline-mutations', () => ({
 import { BoardAdapterWrapper } from '../board-adapter';
 
 beforeEach(() => {
+  vi.clearAllMocks();
   offlineEnabled = false;
   capturedAdapter = undefined;
 });
@@ -97,5 +111,39 @@ describe('BoardAdapterWrapper offline gating', () => {
     // The rest of the adapter contract is unaffected by the gate.
     expect(capturedAdapter?.isAuthenticated).toBe(true);
     expect(typeof capturedAdapter?.executeHttp).toBe('function');
+    expect(capturedAdapter?.supportsClimbStatsOptimism).toBe(true);
+  });
+
+  it('multiplexes live stats over the existing singleton WS client', () => {
+    render(<BoardAdapterWrapper>{null}</BoardAdapterWrapper>);
+    const handlers = { next: vi.fn(), connected: vi.fn(), error: vi.fn() };
+    const unsubscribe = capturedAdapter?.subscribeClimbStats?.('kilter', 1, handlers);
+
+    expect(wsMocks.getClient).toHaveBeenCalledTimes(1);
+    expect(wsMocks.on).toHaveBeenCalledWith('connected', handlers.connected);
+    expect(wsMocks.subscribe).toHaveBeenCalledWith(
+      expect.objectContaining({ variables: { boardType: 'kilter', layoutId: 1 } }),
+      expect.objectContaining({ error: expect.any(Function) }),
+    );
+    expect(typeof unsubscribe).toBe('function');
+  });
+
+  it('cancels a scheduled stats retry when disposed before the timer fires', () => {
+    vi.useFakeTimers();
+    try {
+      render(<BoardAdapterWrapper>{null}</BoardAdapterWrapper>);
+      const handlers = { next: vi.fn(), connected: vi.fn(), error: vi.fn() };
+      const unsubscribe = capturedAdapter?.subscribeClimbStats?.('kilter', 1, handlers);
+      const subscriptionHandlers = wsMocks.subscribe.mock.calls.at(-1)?.[1] as { complete: () => void } | undefined;
+
+      expect(subscriptionHandlers).toBeDefined();
+      subscriptionHandlers?.complete();
+      unsubscribe?.();
+      vi.advanceTimersByTime(1_000);
+
+      expect(wsMocks.subscribe).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

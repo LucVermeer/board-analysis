@@ -88,6 +88,21 @@ const DEFAULT_MAX_CYCLE_ATTEMPTS = 6;
 const DEFAULT_BASE_DELAY_MS = 500;
 const DEFAULT_MAX_DELAY_MS = 30_000;
 
+// Intentionally mirrored by OfflineMutationDelivery in @boardsesh/board-react.
+// The dependency boundary prevents either package importing the other; keep
+// both event contracts in sync when fields change.
+export type MutationDeliveryEvent = {
+  tableName: string;
+  operation: string;
+  idempotencyKey: string;
+  status: 'acknowledged' | 'dead_letter';
+};
+
+export type MutationStatusListenerFailure = {
+  error: unknown;
+  event: MutationDeliveryEvent;
+};
+
 export type DrainOptions = {
   /** Injectable sleep for deterministic tests. Defaults to setTimeout. */
   sleep?: (ms: number) => Promise<void>;
@@ -107,7 +122,32 @@ export type DrainOptions = {
    * packages/mobile/src/offline/offline-sync-adapter.ts; tests pass a literal.
    */
   isOnline: () => boolean;
+  /**
+   * Delivery seam for optimistic UI that must distinguish a durable local
+   * enqueue from server acknowledgement or permanent rejection. The
+   * idempotency key is the entity UUID for tick creates.
+   */
+  onMutationStatus?: (event: MutationDeliveryEvent) => void;
+  /** Platform-owned telemetry for a throwing delivery callback. */
+  onMutationStatusError?: (failure: MutationStatusListenerFailure) => void;
 };
+
+function notifyMutationStatus(options: DrainOptions, event: MutationDeliveryEvent): void {
+  try {
+    options.onMutationStatus?.(event);
+  } catch (error) {
+    try {
+      options.onMutationStatusError?.({ error, event });
+    } catch (reportingError) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[MutationQueue] mutation-status error reporter failed:', reportingError);
+      }
+    }
+    if (!options.onMutationStatusError && process.env.NODE_ENV !== 'production') {
+      console.warn('[MutationQueue] mutation-status listener failed:', error);
+    }
+  }
+}
 
 function defaultSleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -219,6 +259,12 @@ export async function drainMutationQueue(
           }
           await markCompleted(db, mutation.id);
           invalidateForTable(queryClient, mutation.table_name);
+          notifyMutationStatus(options, {
+            tableName: mutation.table_name,
+            operation: mutation.operation,
+            idempotencyKey: mutation.idempotency_key,
+            status: 'acknowledged',
+          });
         } catch (error: unknown) {
           const errorMessage = formatError(error);
 
@@ -253,10 +299,18 @@ export async function drainMutationQueue(
             // One atomic UPDATE bumps the retry and, when the bumped count hits
             // max_retries, flips to dead_letter — no window where the row is
             // exhausted-but-still-pending.
-            await recordFailure(db, mutation.id, errorMessage);
+            const status = await recordFailure(db, mutation.id, errorMessage);
             // The row may have just flipped to dead_letter; refresh the pending
             // badges either way (an extra COUNT requery is harmless).
             invalidateForTable(queryClient, mutation.table_name);
+            if (status === 'dead_letter') {
+              notifyMutationStatus(options, {
+                tableName: mutation.table_name,
+                operation: mutation.operation,
+                idempotencyKey: mutation.idempotency_key,
+                status,
+              });
+            }
             retryableHit = true;
             break;
           } else {
@@ -264,6 +318,12 @@ export async function drainMutationQueue(
             // dead-letter immediately regardless of retry_count.
             await markDeadLetter(db, mutation.id, errorMessage);
             invalidateForTable(queryClient, mutation.table_name);
+            notifyMutationStatus(options, {
+              tableName: mutation.table_name,
+              operation: mutation.operation,
+              idempotencyKey: mutation.idempotency_key,
+              status: 'dead_letter',
+            });
           }
         }
       }

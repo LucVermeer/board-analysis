@@ -246,4 +246,26 @@ export const climbTypeDefs = /* GraphQL */ `
     "Number of climbs authored by this setter for the board configuration"
     climbCount: Int!
   }
+
+  """
+  Complete canonical statistics for one climb and angle. Published after the
+  debounced tick recompute. The layout-scoped subscription carries full rows,
+  not deltas, so one event repairs a missed optimistic update without a second
+  read. syncSeq is decimal text because JavaScript numbers cannot safely carry
+  PostgreSQL bigint revisions.
+  """
+  type ClimbStatsEvent {
+    boardType: String!
+    layoutId: Int!
+    climbUuid: ID!
+    angle: Int!
+    ascensionistCount: Int!
+    qualityAverage: Float
+    difficultyAverage: Float
+    displayDifficulty: Float
+    difficulty: String
+    faUsername: String
+    faAt: String
+    syncSeq: String!
+  }
 `;

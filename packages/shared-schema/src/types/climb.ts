@@ -198,6 +198,22 @@ export type SetterStat = {
   climbCount: number;
 };
 
+/** Complete canonical row emitted by the layout-scoped live-stats stream. */
+export type ClimbStatsEvent = {
+  boardType: string;
+  layoutId: number;
+  climbUuid: string;
+  angle: number;
+  ascensionistCount: number;
+  qualityAverage: number | null;
+  difficultyAverage: number | null;
+  displayDifficulty: number | null;
+  difficulty: string | null;
+  faUsername: string | null;
+  faAt: string | null;
+  syncSeq: string;
+};
+
 export type SaveClimbInput = {
   boardType: string;
   layoutId: number;

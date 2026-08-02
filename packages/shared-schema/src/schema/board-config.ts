@@ -61,6 +61,36 @@ export const boardConfigTypeDefs = /* GraphQL */ `
     faUsername: String
     "When the first ascent was logged (ISO timestamp)"
     faAt: String
+    "Monotonic database revision, encoded as decimal text to preserve bigint precision"
+    syncSeq: String!
+  }
+
+  """
+  Current statistics for one climb at one angle in a batched primary read.
+  The climb UUID is repeated on every row so clients can route a flat response
+  without relying on request order. Requested climbs with no stats have no row.
+  """
+  type ClimbStatsForClimb {
+    "Climb whose statistics this row describes"
+    climbUuid: ID!
+    "Board angle in degrees"
+    angle: Int!
+    "Number of people who have completed this climb at this angle"
+    ascensionistCount: Int
+    "Average quality rating"
+    qualityAverage: Float
+    "Average difficulty rating"
+    difficultyAverage: Float
+    "Display difficulty value"
+    displayDifficulty: Float
+    "Human-readable grade label derived from displayDifficulty (e.g., 'V5', '6B+')"
+    difficulty: String
+    "Username of the first ascensionist"
+    faUsername: String
+    "When the first ascent was logged (ISO timestamp)"
+    faAt: String
+    "Monotonic database revision, encoded as decimal text to preserve bigint precision"
+    syncSeq: String!
   }
 
   """

@@ -126,6 +126,31 @@ export type ParsedRateLimit = {
   retryAfterSeconds: number | null;
 };
 
+function parseRateLimitExtensions(extensions: unknown): ParsedRateLimit | null {
+  if (typeof extensions !== 'object' || extensions === null) return null;
+  const code = (extensions as { code?: unknown }).code;
+  if (code !== 'RATE_LIMITED') return null;
+  const retryAfterSeconds = (extensions as { retryAfterSeconds?: unknown }).retryAfterSeconds;
+  return { retryAfterSeconds: typeof retryAfterSeconds === 'number' ? retryAfterSeconds : null };
+}
+
+function parseGraphqlRequestClientError(error: unknown): ParsedRateLimit | null {
+  // graphql-request's ClientError is intentionally matched structurally so
+  // this renderer-neutral package does not need that HTTP client at runtime.
+  // Its response carries the original GraphQL errors and extensions.
+  if (typeof error !== 'object' || error === null) return null;
+  const response = (error as { response?: unknown }).response;
+  if (typeof response !== 'object' || response === null) return null;
+  const errors = (response as { errors?: unknown }).errors;
+  if (!Array.isArray(errors)) return null;
+  for (const graphqlError of errors) {
+    if (typeof graphqlError !== 'object' || graphqlError === null) continue;
+    const parsed = parseRateLimitExtensions((graphqlError as { extensions?: unknown }).extensions);
+    if (parsed) return parsed;
+  }
+  return null;
+}
+
 /**
  * Classify an error thrown by `execute()`/`subscribe()` as a rate-limit
  * rejection. Prefers the structured `RATE_LIMITED` extension (with
@@ -147,6 +172,8 @@ export function parseRateLimitError(error: unknown): ParsedRateLimit | null {
     const messageMatch = error.message.match(RATE_LIMIT_MESSAGE_RE);
     return messageMatch ? { retryAfterSeconds: Number(messageMatch[1]) } : null;
   }
+  const clientErrorRateLimit = parseGraphqlRequestClientError(error);
+  if (clientErrorRateLimit) return clientErrorRateLimit;
   if (error instanceof Error) {
     const messageMatch = error.message.match(RATE_LIMIT_MESSAGE_RE);
     if (messageMatch) return { retryAfterSeconds: Number(messageMatch[1]) };

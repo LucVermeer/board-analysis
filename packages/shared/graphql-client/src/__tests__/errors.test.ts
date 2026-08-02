@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { ClientError } from 'graphql-request';
 import {
   GraphQLOperationError,
   parseRateLimitError,
@@ -39,6 +40,21 @@ describe('parseRateLimitError', () => {
     expect(parseRateLimitError(new Error('Rate limit exceeded. Try again in 2 seconds.'))).toEqual({
       retryAfterSeconds: 2,
     });
+  });
+
+  it('reads structured extensions from an actual graphql-request ClientError', () => {
+    const response = {
+      errors: [
+        { message: 'other', extensions: { code: 'BAD_USER_INPUT' } },
+        { message: 'slow down', extensions: { code: 'RATE_LIMITED', retryAfterSeconds: 7 } },
+      ],
+      status: 429,
+      headers: new Headers(),
+      body: '',
+    } as unknown as ConstructorParameters<typeof ClientError>[0];
+    const error = new ClientError(response, { query: 'query Test { __typename }' });
+
+    expect(parseRateLimitError(error)).toEqual({ retryAfterSeconds: 7 });
   });
 
   it('returns null for a non-rate-limit GraphQL error', () => {

@@ -1,4 +1,4 @@
-import { eq, and, gte, desc, asc } from 'drizzle-orm';
+import { eq, and, gte, desc, asc, inArray, sql } from 'drizzle-orm';
 import {
   type CheckMoonBoardClimbDuplicatesInput,
   type ClimbSearchInput,
@@ -20,13 +20,14 @@ import {
   mapSearchInputToParams,
 } from '../../../db/queries/climbs/index';
 import { isValidBoardName } from '../../../db/queries/util/table-select';
-import { applyRateLimit, validateInput } from '../shared/helpers';
+import { applyRateLimit, requireAuthenticated, validateInput } from '../shared/helpers';
 import { findMoonBoardDuplicateMatches } from './moonboard-duplicates';
 import { findSimilarClimbs, parseFramesToHoldEntries, type NormalizedHold } from './climb-similarity';
 import {
   BoardNameSchema,
   CheckMoonBoardClimbDuplicatesInputSchema,
   ClimbSearchInputSchema,
+  ClimbStatsForClimbsUuidsSchema,
   ExternalUUIDSchema,
   SetterStatsInputSchema,
   SimilarClimbsInputSchema,
@@ -364,7 +365,10 @@ export const climbQueries = {
       throw new Error(`Invalid board name: ${boardName}. Must be one of: ${SUPPORTED_BOARDS.join(', ')}`);
     }
 
-    const rows = await dbRead
+    // This query is the reconciliation read for optimistic live stats. Use the
+    // primary so a reconnect immediately after saveTick cannot replace a newer
+    // optimistic floor with replica-lagged numbers.
+    const rows = await db
       .select({
         angle: dbSchema.boardClimbStats.angle,
         ascensionistCount: dbSchema.boardClimbStats.ascensionistCount,
@@ -373,6 +377,9 @@ export const climbQueries = {
         displayDifficulty: dbSchema.boardClimbStats.displayDifficulty,
         faUsername: dbSchema.boardClimbStats.faUsername,
         faAt: dbSchema.boardClimbStats.faAt,
+        // The schema's historical Drizzle mapping uses JS number mode. Cast in
+        // PostgreSQL so revisions above MAX_SAFE_INTEGER reach the client intact.
+        syncSeq: sql<string>`${dbSchema.boardClimbStats.syncSeq}::text`,
       })
       .from(dbSchema.boardClimbStats)
       .where(and(eq(dbSchema.boardClimbStats.boardType, boardName), eq(dbSchema.boardClimbStats.climbUuid, climbUuid)))
@@ -382,6 +389,58 @@ export const climbQueries = {
       ...row,
       // Mirror the REST endpoint: round display difficulty to a grade id and label it.
       difficulty: row.displayDifficulty == null ? null : getGradeLabel(Math.round(row.displayDifficulty)),
+      syncSeq: row.syncSeq,
+    }));
+  },
+
+  /**
+   * Batch form of climbStatsForAngles for mount/reconnect/post-ack repair.
+   * It deliberately shares the legacy resolver's limiter bucket: switching
+   * clients from N single reads to one batch must not create a second budget.
+   */
+  climbStatsForClimbs: async (
+    _: unknown,
+    { boardName, climbUuids }: { boardName: string; climbUuids: string[] },
+    ctx: ConnectionContext,
+  ) => {
+    requireAuthenticated(ctx);
+    await applyRateLimit(ctx, 60, 'climb-stats-for-angles');
+    validateInput(BoardNameSchema, boardName, 'boardName');
+    const validatedClimbUuids = validateInput(ClimbStatsForClimbsUuidsSchema, climbUuids, 'climbUuids');
+
+    if (!isValidBoardName(boardName)) {
+      throw new Error(`Invalid board name: ${boardName}. Must be one of: ${SUPPORTED_BOARDS.join(', ')}`);
+    }
+
+    const uniqueClimbUuids = [...new Set(validatedClimbUuids)];
+    // This is one physical primary query for the whole batch. Empty climbs are
+    // represented by the absence of rows; the client records cooldowns from
+    // the requested UUID list rather than inferring them from this response.
+    const rows = await db
+      .select({
+        climbUuid: dbSchema.boardClimbStats.climbUuid,
+        angle: dbSchema.boardClimbStats.angle,
+        ascensionistCount: dbSchema.boardClimbStats.ascensionistCount,
+        qualityAverage: dbSchema.boardClimbStats.qualityAverage,
+        difficultyAverage: dbSchema.boardClimbStats.difficultyAverage,
+        displayDifficulty: dbSchema.boardClimbStats.displayDifficulty,
+        faUsername: dbSchema.boardClimbStats.faUsername,
+        faAt: dbSchema.boardClimbStats.faAt,
+        syncSeq: sql<string>`${dbSchema.boardClimbStats.syncSeq}::text`,
+      })
+      .from(dbSchema.boardClimbStats)
+      .where(
+        and(
+          eq(dbSchema.boardClimbStats.boardType, boardName),
+          inArray(dbSchema.boardClimbStats.climbUuid, uniqueClimbUuids),
+        ),
+      )
+      .orderBy(asc(dbSchema.boardClimbStats.climbUuid), asc(dbSchema.boardClimbStats.angle));
+
+    return rows.map((row) => ({
+      ...row,
+      difficulty: row.displayDifficulty == null ? null : getGradeLabel(Math.round(row.displayDifficulty)),
+      syncSeq: row.syncSeq,
     }));
   },
 

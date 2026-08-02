@@ -29,6 +29,13 @@ export const subscriptionsTypeDefs = /* GraphQL */ `
     newClimbCreated(boardType: String!, layoutId: Int!): NewClimbCreatedEvent!
 
     """
+    Subscribe to canonical climb-stat rows for a board layout. Authenticated
+    users only. Each event is a complete replacement row and carries a decimal
+    bigint revision for stale-event rejection.
+    """
+    climbStatsUpdated(boardType: String!, layoutId: Int!): ClimbStatsEvent!
+
+    """
     Subscribe to the live "now on the wall" feed for a shared board (board_id
     resolved from the BLE serial). Membership-free: any authenticated user who
     has connected to the board can watch. Sessions are not involved.

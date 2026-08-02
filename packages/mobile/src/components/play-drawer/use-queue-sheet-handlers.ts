@@ -102,6 +102,7 @@ export function useQueueSheetHandlers({
         angle: storedBoardConfig.angle,
         isMirror: item.climb.mirrored === true,
         isBenchmark: !!item.climb.benchmark_difficulty,
+        baseAscensionistCount: item.climb.ascensionist_count ?? 0,
         layoutId: storedBoardConfig.layoutId,
         sizeId: storedBoardConfig.sizeId,
         setIds: storedBoardConfig.setIds,

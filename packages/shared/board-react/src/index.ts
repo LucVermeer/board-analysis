@@ -5,7 +5,14 @@
 // source, side-effects, error UI) is supplied by `BoardAdapter` —
 // each app mounts a `BoardAdapterProvider` once near the root.
 
-export type { BoardAdapter, BoardErrorReason, ExecuteHttp, ExecuteWs } from './adapter';
+export type {
+  BoardAdapter,
+  BoardErrorReason,
+  ExecuteHttp,
+  ExecuteWs,
+  ClimbStatsSubscriptionHandlers,
+  OfflineMutationDelivery,
+} from './adapter';
 export { BoardAdapterProvider, useBoardAdapter } from './adapter';
 
 export {
@@ -14,6 +21,7 @@ export {
   accumulatedLogbookQueryKey,
   fetchLogbookQueryKey,
   fetchLogbookQueryKeyPrefix,
+  fetchedLogbookClimbUuidsQueryKey,
   logbookQueryKey,
   logbookClimbAngleKey,
 } from './logbook-keys';
@@ -27,6 +35,25 @@ export type { SaveClimbOptions, SaveClimbResponse, UpdateClimbResponse } from '.
 
 export { useLogbook, useInvalidateLogbook } from './use-logbook';
 export { useSaveTick } from './use-save-tick';
+export { useEffectiveClimbStats } from './use-effective-climb-stats';
+export type { EffectiveClimbStats, EffectiveClimbStatsBase } from './use-effective-climb-stats';
+export {
+  applyCanonicalClimbStats,
+  getClimbStatsSnapshot,
+  beginOptimisticAscent,
+  acknowledgeOptimisticAscent,
+  rejectOptimisticAscent,
+  markOptimisticAscentQueued,
+  retireAcknowledgedOptimisticAscents,
+  settleOfflineTickAscent,
+  setClimbStatsAuthEpoch,
+} from './climb-stats-store';
+export type {
+  ClimbStatsKey,
+  ClimbStatsSnapshot,
+  CanonicalClimbStats,
+  SettledOfflineTickAscent,
+} from './climb-stats-store';
 export { useUpdateTick, useDeleteTick } from './use-mutate-tick';
 export { useSaveClimb, useUpdateClimb } from './use-save-climb';
 

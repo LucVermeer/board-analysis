@@ -169,6 +169,7 @@ function renderBar(overrides: Partial<QuickTickBarProps> = {}) {
       angle: ANGLE,
       isMirror: false,
       isBenchmark: false,
+      baseAscensionistCount: 37,
       onDismiss: vi.fn(),
       ...overrides,
     }),
@@ -228,6 +229,15 @@ afterEach(() => {
 });
 
 describe('QuickTickBar hasPriorHistory', () => {
+  it('threads the immutable climb count into SaveTickOptions', () => {
+    boardState.current = boardWithoutHistory();
+    const { container } = renderBar({ baseAscensionistCount: 37 });
+
+    fireEvent.click(buttonWithText(container, 'playView.tickBar.flashSaveLabel') as Element);
+
+    expect(saveMock.mutate.mock.calls[0][0]).toMatchObject({ baseAscensionistCount: 37 });
+  });
+
   it('reads the logbookByClimbAngle index, not the raw logbook array', () => {
     const tick = { climb_uuid: CLIMB_UUID, angle: ANGLE } as unknown as LogbookEntry;
     boardState.current = {

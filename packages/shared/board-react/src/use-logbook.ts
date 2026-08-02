@@ -6,6 +6,7 @@ import { useBoardAdapter } from './adapter';
 import {
   accumulatedLogbookQueryKey,
   fetchLogbookQueryKey,
+  fetchedLogbookClimbUuidsQueryKey,
   mergeLogbookEntries,
   toLogbookEntry,
   type LogbookEntry,
@@ -118,7 +119,16 @@ export function useLogbook(boardName: BoardName | null, climbUuids: string[]) {
     // on the volatile logbook context, so a fresh identity re-renders every
     // subscriber — not worth paying for a re-fetch that added nothing.
     if (fetchedUuidsRef.current.size !== sizeBefore) {
-      setFetchedUuids(new Set(fetchedUuidsRef.current));
+      const nextFetchedUuids = new Set(fetchedUuidsRef.current);
+      setFetchedUuids(nextFetchedUuids);
+      // Several consumers can fetch disjoint climb batches at once (the root
+      // board provider plus an open drawer). Coverage is monotonic until the
+      // accumulated cache is removed, so merge rather than letting the last
+      // hook to finish clobber other hooks' authoritative markers.
+      queryClient.setQueryData<ReadonlySet<string>>(
+        fetchedLogbookClimbUuidsQueryKey(boardName),
+        (existing) => new Set([...(existing ?? []), ...nextFetchedUuids]),
+      );
     }
 
     queryClient.setQueryData<LogbookEntry[]>(accumulatedKey, (existing = []) =>
@@ -138,6 +148,7 @@ export function useLogbook(boardName: BoardName | null, climbUuids: string[]) {
       fetchedUuidsRef.current = new Set();
       lastMergedRef.current = undefined;
       setFetchedUuids(new Set());
+      queryClient.removeQueries({ queryKey: fetchedLogbookClimbUuidsQueryKey(boardName), exact: true });
       setInvalidationCount((c) => c + 1);
     });
     return unsubscribe;

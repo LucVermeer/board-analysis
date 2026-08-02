@@ -40,5 +40,5 @@ export function createWrapper(adapter: Partial<BoardAdapter> = {}) {
       <BoardAdapterProvider value={fullAdapter}>{children}</BoardAdapterProvider>
     </QueryClientProvider>
   );
-  return { wrapper, queryClient };
+  return { wrapper, queryClient, adapter: fullAdapter };
 }

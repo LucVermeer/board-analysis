@@ -1,6 +1,8 @@
 import { memo, useMemo, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import type { BoardName, Climb } from '@boardsesh/shared-schema';
+import { useEffectiveClimbStats } from '@boardsesh/board-react';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import { formatSends, formatQuality } from '../../lib/format-climb-stats';
 import { Text } from '../Text';
@@ -8,6 +10,7 @@ import { MarqueeText } from '../MarqueeText';
 import { DrawerHeader } from '../DrawerHeader';
 import { ClimbAttributeIcons } from '../ClimbAttributeIcons';
 import { iosSystemColors } from '../../theme/ios-colors';
+import { useDisplayGrade } from '../../hooks/use-display-grade';
 
 type PlayDrawerHeaderProps = {
   name: string;
@@ -15,13 +18,13 @@ type PlayDrawerHeaderProps = {
   difficulty: string;
   /** Raw difficulty (e.g. "6a/V3") used for grade-color lookup. Optional —
    *  falls back to `difficulty` if not provided. */
-  rawDifficulty?: string;
+  rawDifficulty?: string | null;
   /** Explicit grade colour, overriding the internal `getGradeColor` lookup. The
    *  play drawer passes this so the colour matches the shown grade when the "Show
    *  Boardsesh grades" toggle swaps the label to the Boardsesh grade. Falls back
    *  to `getGradeColor(rawDifficulty ?? difficulty)` when omitted. */
   gradeColor?: string;
-  qualityAverage: string;
+  qualityAverage: string | null;
   ascensionistCount: number;
   setterUsername: string;
   /** Intrinsic attributes shown as grey glyphs after the name. */
@@ -57,8 +60,8 @@ export const PlayDrawerHeader = memo(function PlayDrawerHeader({
 
   const subtitleParts: string[] = [];
   if (ascensionistCount > 0) subtitleParts.push(formatSends(ascensionistCount, t));
-  const qualityNum = parseFloat(qualityAverage);
-  if (qualityNum > 0) subtitleParts.push(`${formatQuality(qualityAverage)}★`);
+  const qualityNum = qualityAverage == null ? Number.NaN : parseFloat(qualityAverage);
+  if (qualityAverage != null && qualityNum > 0) subtitleParts.push(`${formatQuality(qualityAverage)}★`);
   if (setterUsername) subtitleParts.push(setterUsername);
 
   return (
@@ -95,6 +98,52 @@ export const PlayDrawerHeader = memo(function PlayDrawerHeader({
           {difficulty}
         </Text>
       }
+    />
+  );
+});
+
+type LivePlayDrawerHeaderProps = {
+  climb: Climb;
+  boardName: BoardName;
+  layoutId: number;
+  angle: number;
+  leading?: ReactNode;
+  onLongPressName?: () => void;
+};
+
+/** The only play-header child subscribed to the exact live-stat key. */
+export const LivePlayDrawerHeader = memo(function LivePlayDrawerHeader({
+  climb,
+  boardName,
+  layoutId,
+  angle,
+  leading,
+  onLongPressName,
+}: LivePlayDrawerHeaderProps) {
+  const { resolveGrade } = useDisplayGrade();
+  const liveStats = useEffectiveClimbStats(boardName, layoutId, climb.uuid, angle, {
+    ascensionistCount: climb.ascensionist_count,
+    qualityAverage: climb.quality_average,
+    difficulty: climb.difficulty,
+  });
+  const displayedGrade = resolveGrade({
+    ...climb,
+    difficulty: liveStats.difficulty,
+  });
+
+  return (
+    <PlayDrawerHeader
+      name={climb.name}
+      difficulty={displayedGrade.label}
+      rawDifficulty={liveStats.difficulty}
+      gradeColor={displayedGrade.color}
+      qualityAverage={liveStats.qualityAverage}
+      ascensionistCount={liveStats.ascensionistCount}
+      setterUsername={climb.setter_username}
+      benchmarkDifficulty={climb.benchmark_difficulty}
+      characteristics={climb.characteristics}
+      leading={leading}
+      onLongPressName={onLongPressName}
     />
   );
 });

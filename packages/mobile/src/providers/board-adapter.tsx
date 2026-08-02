@@ -8,15 +8,22 @@ import { useTranslation } from 'react-i18next';
 import { randomUUID } from 'expo-crypto';
 import { BoardAdapterProvider, type BoardAdapter } from '@boardsesh/board-react';
 import { execute } from '@boardsesh/graphql-client';
+import {
+  CLIMB_STATS_FOR_CLIMBS,
+  CLIMB_STATS_UPDATED_SUBSCRIPTION,
+  type ClimbStatsForClimbsResponse,
+  type ClimbStatsUpdatedSubscriptionResponse,
+} from '@boardsesh/graphql/operations';
 import { useAuth } from './auth-provider';
 import { useOfflineDownloadsEnabled } from './feature-flags-provider';
 import { useQueueSessionId } from './queue-provider';
 import { useToast } from './toast-provider';
 import { getDatabaseHandle } from '../db';
 import { getHttpClient } from '../lib/graphql/client';
+import { captureAuthCredentialGeneration, isAuthCredentialGenerationCurrent } from '../lib/auth-store';
 import { reportHandledError } from '../lib/error-reporting';
 import { getWsClient } from '../lib/graphql/ws-client';
-import { drainMutationQueue } from '../offline/offline-sync-adapter';
+import { drainMutationQueue, subscribeMutationDelivery } from '../offline/offline-sync-adapter';
 import { writeTickLocal } from '../hooks/use-offline-mutations';
 
 export function BoardAdapterWrapper({ children }: { children: ReactNode }) {
@@ -50,6 +57,71 @@ export function BoardAdapterWrapper({ children }: { children: ReactNode }) {
       executeHttp: (query, variables) => getHttpClient().request(query, variables),
       executeWs: ({ query, variables }) => execute(getWsClient(), { query, variables }),
       resolveActiveSessionId: () => sessionIdRef.current,
+      captureAuthEpoch: captureAuthCredentialGeneration,
+      isAuthEpochCurrent: isAuthCredentialGenerationCurrent,
+      supportsClimbStatsOptimism: true,
+      fetchClimbStatsForClimbs: async (boardType, climbUuids) => {
+        const response = await getHttpClient().request<ClimbStatsForClimbsResponse>(CLIMB_STATS_FOR_CLIMBS, {
+          boardName: boardType,
+          climbUuids,
+        });
+        return response.climbStatsForClimbs;
+      },
+      subscribeClimbStats: (boardType, layoutId, handlers) => {
+        const wsClient = getWsClient();
+        let disposed = false;
+        let retryAttempt = 0;
+        let retryTimer: ReturnType<typeof setTimeout> | null = null;
+        let unsubscribeStats: (() => void) | null = null;
+
+        const scheduleRetry = () => {
+          if (disposed || retryTimer) return;
+          const delayMs = Math.min(30_000, 1_000 * 2 ** retryAttempt);
+          retryAttempt += 1;
+          retryTimer = setTimeout(() => {
+            retryTimer = null;
+            startSubscription();
+          }, delayMs);
+        };
+        const startSubscription = () => {
+          if (disposed) return;
+          unsubscribeStats = wsClient.subscribe<ClimbStatsUpdatedSubscriptionResponse>(
+            {
+              query: CLIMB_STATS_UPDATED_SUBSCRIPTION,
+              variables: { boardType, layoutId },
+            },
+            {
+              next: (result) => {
+                retryAttempt = 0;
+                const event = result.data?.climbStatsUpdated;
+                if (event) handlers.next(event);
+              },
+              error: (error) => {
+                unsubscribeStats = null;
+                handlers.error(error);
+                scheduleRetry();
+              },
+              complete: () => {
+                unsubscribeStats = null;
+                scheduleRetry();
+              },
+            },
+          );
+        };
+        const unsubscribeConnected = wsClient.on('connected', handlers.connected);
+        startSubscription();
+        return () => {
+          disposed = true;
+          if (retryTimer) clearTimeout(retryTimer);
+          unsubscribeStats?.();
+          unsubscribeConnected();
+        };
+      },
+      subscribeOfflineMutationDelivery: subscribeMutationDelivery,
+      scheduleTask: (callback, delayMs) => {
+        const timer = setTimeout(callback, delayMs);
+        return () => clearTimeout(timer);
+      },
       // Undefined when the offline flag is off: useSaveTick optional-chains it
       // and falls through to the direct network save — pre-offline behavior.
       saveTickOffline: !offlineEnabled

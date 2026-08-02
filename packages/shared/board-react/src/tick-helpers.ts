@@ -16,6 +16,13 @@ export type SaveTickOptions = {
   climbedAt: string;
   sessionId?: string;
   layoutId?: number;
+  /**
+   * Immutable community send count from the climb snapshot that opened the
+   * tick form. Mobile uses it to raise a first-send display floor even when no
+   * live-stat selector is mounted on the saving surface. This is local-only and
+   * is never sent in SaveTickInput.
+   */
+  baseAscensionistCount?: number;
   sizeId?: number;
   setIds?: string;
   /**

@@ -239,6 +239,8 @@ export const DeferredSections = memo(function DeferredSections({
             <CommunitySection
               climbUuid={climb.uuid}
               boardName={boardName}
+              layoutId={layoutId}
+              angle={angle}
               qualityAverage={climb.quality_average}
               ascensionistCount={climb.ascensionist_count}
             />

@@ -174,6 +174,50 @@ The web and mobile queue providers are thin wrappers around a small stack of sha
 
 `RedisClientManager.onRedisReady` runs registered recovery handlers after all three connections are ready and before request handlers see Redis as connected. A handler registered during an in-flight readiness pass joins that same barrier; one registered after Redis is connected runs immediately. Failures are isolated so Redis can still become available. Duplicate-gym report claims drain generation-stamped snapshots through the end of readiness recovery, including claims accepted while an earlier Redis write is awaiting a response. Request-path retries remain opportunistic and back off to once per minute during a persistent partition.
 
+### Live climb-stat stream
+
+The Expo native/browser climbing surface holds one authenticated
+`climbStatsUpdated(boardType, layoutId)` subscription for the active layout on
+the existing mobile `graphql-ws` singleton. The backend caps this at eight
+layout subscriptions per connection and validates both inputs before joining
+the `boardsesh:climb-stats-layout:{boardType}:{layoutId}` Redis channel.
+
+After a tick recompute commits, the publisher reads the complete canonical
+`board_climb_stats` row and layout from the primary database, then publishes a
+full snapshot. `syncSeq` is decimal text rather than a JavaScript number;
+clients compare it with `BigInt` and discard duplicate/stale revisions. Redis
+fan-out is multi-instance, while the existing fail-open recompute behavior is
+preserved: if Redis coordination fails, duplicate recomputes/events are safe
+because the revision gate makes them idempotent.
+
+`@boardsesh/board-react` stores only exact keys retained by mounted selectors or
+optimistic mutations, so a layout-wide stream cannot grow an unbounded client
+map. Mobile microtask-coalesces mount/reconnect/error and post-ack repair work
+into `climbStatsForClimbs` primary reads, with one physical batch in flight and
+at most 50 deduplicated UUIDs per query. Forced post-ack work runs before normal
+catch-up work. Rate limiting pauses the whole adapter-and-board lane behind one
+server-directed timer, including chunks queued after the rejected batch. The
+affected UUIDs retry in one coalesced batch exactly once; other boards and
+adapter instances may use the global single-flight slot while that lane waits.
+The retry is fenced by the auth generation, and a second rejection ends the
+lane attempt instead of amplifying timers or immediately draining later chunks.
+Same-auth reads that arrive during that retry end with the exhausted attempt;
+reads from a newer auth generation wait for the old physical retry to settle,
+then start independently without inheriting its terminal backoff.
+
+The server-rendered base is bootstrap-only. Once a revision-gated canonical row
+exists, the visible send count is `max(canonical, outstanding optimistic floor)`
+even when canonical decreased to zero. Acknowledged optimistic mutations are
+the durable repair obligations: cancellation or a failed post-ack request leaves
+them discoverable by the next primary read. Each physical request snapshots the
+exact acknowledged tokens immediately before dispatch, and only a successful
+response retires that snapshot. A stale absolute floor therefore cannot stick
+forever, while a later mutation cannot be cleared by an earlier response.
+Canonical quality and community
+difficulty update in memoized row/header children without re-rendering the
+board art or gesture shell. Boardsesh-grade fields still win when that display
+preference is active.
+
 ---
 
 ## Connection Flow

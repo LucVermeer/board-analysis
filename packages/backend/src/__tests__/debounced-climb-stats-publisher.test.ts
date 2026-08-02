@@ -2,18 +2,42 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test'
 import { queueClimbStatsRecompute } from '../graphql/resolvers/ticks/debounced-climb-stats-publisher';
 import { logger } from '../utils/logger';
 
-const { recomputeClimbStatsMock, redisSetMock, redisGetMock, redisDelMock } = vi.hoisted(() => ({
-  recomputeClimbStatsMock: vi.fn(),
-  redisSetMock: vi.fn().mockResolvedValue('OK'),
-  redisGetMock: vi.fn(),
-  redisDelMock: vi.fn().mockResolvedValue(1),
-}));
+const { recomputeClimbStatsMock, redisSetMock, redisGetMock, redisDelMock, canonicalState, publishStatsMock, dbMock } =
+  vi.hoisted(() => {
+    const canonicalState = { rows: [] as unknown[] };
+    const selectChain = {
+      from: vi.fn(() => selectChain),
+      innerJoin: vi.fn(() => selectChain),
+      where: vi.fn(() => selectChain),
+      limit: vi.fn(async () => canonicalState.rows),
+    };
+    return {
+      recomputeClimbStatsMock: vi.fn(),
+      redisSetMock: vi.fn().mockResolvedValue('OK'),
+      redisGetMock: vi.fn(),
+      redisDelMock: vi.fn().mockResolvedValue(1),
+      canonicalState,
+      publishStatsMock: vi.fn(),
+      dbMock: { select: vi.fn(() => selectChain) },
+    };
+  });
 
 let mockRedisConnected = true;
 
 vi.mock('../graphql/resolvers/ticks/recompute-climb-stats', () => ({
   recomputeClimbStats: recomputeClimbStatsMock,
 }));
+
+vi.mock('../db/client', () => ({ db: dbMock }));
+
+vi.mock('../pubsub/index', () => ({
+  pubsub: { publishClimbStatsEvent: publishStatsMock },
+}));
+
+vi.mock('@boardsesh/db/queries', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@boardsesh/db/queries')>();
+  return { ...actual, getGradeLabel: (difficulty: number) => `V${difficulty}` };
+});
 
 vi.mock('../redis/client', () => ({
   redisClientManager: {
@@ -37,6 +61,18 @@ describe('queueClimbStatsRecompute', () => {
     vi.clearAllMocks();
     mockRedisConnected = true;
     recomputeClimbStatsMock.mockResolvedValue(undefined);
+    canonicalState.rows = [
+      {
+        layoutId: 1,
+        ascensionistCount: 12,
+        qualityAverage: 3.5,
+        difficultyAverage: 20.4,
+        displayDifficulty: 20.6,
+        faUsername: 'setter',
+        faAt: '2026-08-01T00:00:00.000Z',
+        syncSeq: '90071992547409930',
+      },
+    ];
   });
 
   afterEach(() => {
@@ -53,6 +89,20 @@ describe('queueClimbStatsRecompute', () => {
     await vi.advanceTimersByTimeAsync(2100);
 
     expect(recomputeClimbStatsMock).toHaveBeenCalledWith('kilter', 'CLIMB-1', 40);
+    expect(publishStatsMock).toHaveBeenCalledWith('kilter:1', {
+      boardType: 'kilter',
+      layoutId: 1,
+      climbUuid: 'CLIMB-1',
+      angle: 40,
+      ascensionistCount: 12,
+      qualityAverage: 3.5,
+      difficultyAverage: 20.4,
+      displayDifficulty: 20.6,
+      difficulty: 'V21',
+      faUsername: 'setter',
+      faAt: '2026-08-01T00:00:00.000Z',
+      syncSeq: '90071992547409930',
+    });
   });
 
   it('resets the timer when called multiple times for the same climb+angle', async () => {

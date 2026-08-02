@@ -24,6 +24,8 @@ import {
   pullSync as pullSyncCore,
   setBackgrounded,
   type DrainOptions,
+  type MutationDeliveryEvent,
+  type MutationStatusListenerFailure,
   type DrainQueue,
   type GraphQLFetch,
   type OfflineDatabase,
@@ -41,6 +43,34 @@ import { reportHandledError } from '../lib/error-reporting';
 import { track } from '../lib/analytics';
 
 const isOnline = () => onlineManager.isOnline();
+
+const mutationDeliveryListeners = new Set<(event: MutationDeliveryEvent) => void>();
+
+function reportMutationStatusListenerFailure({ error, event }: MutationStatusListenerFailure): void {
+  try {
+    reportHandledError(error, {
+      tags: { source: 'offline-sync', kind: 'mutation-status-listener' },
+      extra: { tableName: event.tableName, operation: event.operation, status: event.status },
+    });
+  } catch (reportingError) {
+    if (__DEV__) console.warn('[MutationQueue] delivery-listener error reporter failed:', reportingError);
+  }
+}
+
+export function subscribeMutationDelivery(listener: (event: MutationDeliveryEvent) => void): () => void {
+  mutationDeliveryListeners.add(listener);
+  return () => mutationDeliveryListeners.delete(listener);
+}
+
+function publishMutationDelivery(event: MutationDeliveryEvent): void {
+  for (const listener of mutationDeliveryListeners) {
+    try {
+      listener(event);
+    } catch (error) {
+      reportMutationStatusListenerFailure({ error, event });
+    }
+  }
+}
 
 const reportSchemaDrift: SchemaDriftReporter = ({ tableName, column }) => {
   reportHandledError(new Error(`Sync document for ${tableName} contains unknown column: ${column}`), {
@@ -120,6 +150,14 @@ export function drainMutationQueue(
   return drainMutationQueueCore(db, queryClient, graphqlFetch, {
     ...options,
     isOnline: options?.isOnline ?? isOnline,
+    onMutationStatusError: options?.onMutationStatusError ?? reportMutationStatusListenerFailure,
+    onMutationStatus: (event) => {
+      try {
+        options?.onMutationStatus?.(event);
+      } finally {
+        publishMutationDelivery(event);
+      }
+    },
   });
 }
 

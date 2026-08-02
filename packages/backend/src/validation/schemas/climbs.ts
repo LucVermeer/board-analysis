@@ -9,6 +9,9 @@ import { ExternalUUIDSchema, BoardNameSchema } from './primitives';
 // never rejects a real per-hold selection.
 const MAX_HOLD_FILTER_ENTRIES = 300;
 
+/** One transport batch for primary-backed live climb-stat reconciliation. */
+export const ClimbStatsForClimbsUuidsSchema = z.array(ExternalUUIDSchema).min(1).max(50);
+
 /**
  * Climb validation schema (simplified for input)
  */

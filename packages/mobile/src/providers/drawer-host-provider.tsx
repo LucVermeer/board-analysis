@@ -84,6 +84,8 @@ export type LogAscentInput = {
   angle: number;
   isMirror: boolean;
   isBenchmark: boolean;
+  /** Immutable community send count from the climb snapshot at open time. */
+  baseAscensionistCount: number;
   layoutId?: number;
   sizeId?: number;
   setIds?: string;
@@ -877,6 +879,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
             angle={logAscentData.angle}
             isMirror={logAscentData.isMirror}
             isBenchmark={logAscentData.isBenchmark}
+            baseAscensionistCount={logAscentData.baseAscensionistCount}
             layoutId={logAscentData.layoutId}
             sizeId={logAscentData.sizeId}
             setIds={logAscentData.setIds}

@@ -62,10 +62,12 @@ import {
   triggerSync,
   pullSync,
   startBackgroundTracking,
+  subscribeMutationDelivery,
 } from '../offline-sync-adapter';
 import type {
   OfflineDatabase,
   DrainOptions,
+  MutationDeliveryEvent,
   SchedulerTriggers,
   SchedulerOptions,
   SnapshotSource,
@@ -103,6 +105,59 @@ describe('drainMutationQueue binding', () => {
     expect(customProbe).toHaveBeenCalled();
     expect(onlineManagerIsOnline).not.toHaveBeenCalled();
     expect(options.maxCycleAttempts).toBe(2);
+  });
+
+  it('binds core mutation-status listener failures to handled-error telemetry', async () => {
+    await drainMutationQueue(db, queryClient, graphqlFetch);
+    const options = drainMutationQueueCore.mock.calls[0][3] as DrainOptions;
+    const listenerError = new Error('listener failed');
+    const event: MutationDeliveryEvent = {
+      tableName: 'boardsesh_ticks',
+      operation: 'create',
+      idempotencyKey: 'private-tick-uuid',
+      status: 'acknowledged',
+    };
+
+    options.onMutationStatusError?.({ error: listenerError, event });
+
+    expect(reportHandledError).toHaveBeenCalledTimes(1);
+    expect(reportHandledError).toHaveBeenCalledWith(listenerError, {
+      tags: { source: 'offline-sync', kind: 'mutation-status-listener' },
+      extra: { tableName: 'boardsesh_ticks', operation: 'create', status: 'acknowledged' },
+    });
+  });
+
+  it('reports a throwing delivery listener once and continues to later listeners', async () => {
+    const listenerError = new Error('subscriber failed');
+    const throwingListener = vi.fn(() => {
+      throw listenerError;
+    });
+    const laterListener = vi.fn();
+    const unsubscribeThrowing = subscribeMutationDelivery(throwingListener);
+    const unsubscribeLater = subscribeMutationDelivery(laterListener);
+    const event: MutationDeliveryEvent = {
+      tableName: 'boardsesh_ticks',
+      operation: 'create',
+      idempotencyKey: 'private-tick-uuid',
+      status: 'dead_letter',
+    };
+
+    try {
+      await drainMutationQueue(db, queryClient, graphqlFetch);
+      const options = drainMutationQueueCore.mock.calls[0][3] as DrainOptions;
+      options.onMutationStatus?.(event);
+
+      expect(throwingListener).toHaveBeenCalledWith(event);
+      expect(laterListener).toHaveBeenCalledWith(event);
+      expect(reportHandledError).toHaveBeenCalledTimes(1);
+      expect(reportHandledError).toHaveBeenCalledWith(listenerError, {
+        tags: { source: 'offline-sync', kind: 'mutation-status-listener' },
+        extra: { tableName: 'boardsesh_ticks', operation: 'create', status: 'dead_letter' },
+      });
+    } finally {
+      unsubscribeThrowing();
+      unsubscribeLater();
+    }
   });
 });
 

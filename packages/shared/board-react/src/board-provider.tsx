@@ -13,6 +13,7 @@ import { useSaveClimb as useSaveClimbMutation, useUpdateClimb as useUpdateClimbM
 import { logbookClimbAngleKey, type LogbookEntry } from './logbook-keys';
 import type { SaveTickOptions } from './tick-helpers';
 import type { SaveClimbOptions, SaveClimbResponse, UpdateClimbResponse } from './climb-helpers';
+import { useClimbStatsLayoutSync } from './use-effective-climb-stats';
 
 export type BoardContextType = {
   /**
@@ -86,6 +87,7 @@ const BoardLogbookContext = createContext<BoardLogbookContextType | undefined>(u
 export function BoardProvider({
   boardName,
   boardUuid,
+  layoutId,
   children,
 }: {
   boardName: BoardName | null;
@@ -96,9 +98,12 @@ export function BoardProvider({
    * reference a specific board entity.
    */
   boardUuid?: string;
+  /** Active layout for the authenticated layout-scoped live-stats stream. */
+  layoutId?: number;
   children: ReactNode;
 }) {
   const { isAuthenticated, isAuthLoading, resolveActiveSessionId } = useBoardAdapter();
+  useClimbStatsLayoutSync(boardName, layoutId);
   const [isInitialized, setIsInitialized] = useState(false);
   const [climbUuids, setClimbUuids] = useState<string[]>([]);
 
@@ -155,8 +160,10 @@ export function BoardProvider({
   // Mirror the active board uuid into a ref so the stable empty-dep saveTick
   // callback always injects the latest value without taking boardUuid as a dep.
   const boardUuidRef = useRef(boardUuid);
+  const layoutIdRef = useRef(layoutId);
   useEffect(() => {
     boardUuidRef.current = boardUuid;
+    layoutIdRef.current = layoutId;
   });
 
   const saveTick = useCallback(
@@ -166,6 +173,7 @@ export function BoardProvider({
         ...options,
         sessionId: resolvedSessionId,
         boardUuid: options.boardUuid ?? boardUuidRef.current,
+        layoutId: options.layoutId ?? layoutIdRef.current,
       });
     },
     [resolveActiveSessionId],

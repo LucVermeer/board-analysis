@@ -7,6 +7,7 @@ import type {
   BoardPresenceEvent,
   BoardPresenceClimb,
   BoardQueuePreview,
+  ClimbStatsEvent,
 } from '@boardsesh/shared-schema';
 import { redisClientManager } from '../redis/client';
 import { createRedisPubSubAdapter, type RedisPubSubAdapter } from './redis-adapter';
@@ -31,6 +32,7 @@ type CommentSubscriber = ChannelSubscriber<CommentEvent>;
 type NewClimbSubscriber = ChannelSubscriber<NewClimbCreatedEvent>;
 type BoardPresenceSubscriber = ChannelSubscriber<BoardPresenceEvent>;
 type BoardQueuePreviewSubscriber = ChannelSubscriber<BoardQueuePreview>;
+type ClimbStatsSubscriber = ChannelSubscriber<ClimbStatsEvent>;
 
 /** External hook called after every queue event publish. Fire-and-forget. */
 export type QueueEventHook = (sessionId: string, event: QueueEvent) => void;
@@ -51,8 +53,8 @@ const EVENT_BUFFER_TTL = 300; // 5 minutes
  * - Events are only dispatched to local subscribers
  * - Used when REDIS_URL is not configured
  *
- * The seven domains below (queue, session, notification, comment, new-climb,
- * board-presence, board-queue) all share the exact same subscribe/publish/fan-in mechanics
+ * The eight domains below (queue, session, notification, comment, new-climb,
+ * climb-stats, board-presence, board-queue) all share the exact same subscribe/publish/fan-in mechanics
  * — that generic behavior lives in `PubSubChannel` (./channel.ts). Each
  * `redisSubscribe`/`redisUnsubscribe`/`redisPublish` closure below resolves to
  * a no-op when `redisAdapter` is null (local-only mode or not-yet-initialized),
@@ -103,6 +105,15 @@ class PubSub {
     redisUnsubscribe: (channelKey) => this.redisAdapter?.unsubscribeNewClimbChannel(channelKey) ?? Promise.resolve(),
     redisPublish: (channelKey, event) =>
       this.redisAdapter?.publishNewClimbEvent(channelKey, event) ?? Promise.resolve(),
+    isRedisRequired: () => this.redisRequired,
+    logger,
+  });
+  private readonly climbStatsChannel = new PubSubChannel<ClimbStatsEvent>({
+    label: 'climb stats',
+    redisSubscribe: (channelKey) => this.redisAdapter?.subscribeClimbStatsChannel(channelKey) ?? Promise.resolve(),
+    redisUnsubscribe: (channelKey) => this.redisAdapter?.unsubscribeClimbStatsChannel(channelKey) ?? Promise.resolve(),
+    redisPublish: (channelKey, event) =>
+      this.redisAdapter?.publishClimbStatsEvent(channelKey, event) ?? Promise.resolve(),
     isRedisRequired: () => this.redisRequired,
     logger,
   });
@@ -247,6 +258,10 @@ class PubSub {
 
     this.redisAdapter.onNewClimbMessage((channelKey, event) => {
       this.newClimbChannel.dispatchLocal(channelKey, event);
+    });
+
+    this.redisAdapter.onClimbStatsMessage((channelKey, event) => {
+      this.climbStatsChannel.dispatchLocal(channelKey, event);
     });
 
     this.redisAdapter.onBoardPresenceMessage((boardId, event) => {
@@ -522,6 +537,17 @@ class PubSub {
     this.boardQueueChannel.publish(boardId, preview);
   }
 
+  /** Subscribe once per board layout; events route to exact climb/angle keys. */
+  async subscribeClimbStats(channelKey: string, callback: ClimbStatsSubscriber): Promise<() => void> {
+    this.ensureRedisIfRequired();
+    return this.climbStatsChannel.subscribe(channelKey, callback);
+  }
+
+  /** Publish a complete canonical stats row locally and across Redis. */
+  publishClimbStatsEvent(channelKey: string, event: ClimbStatsEvent): void {
+    this.climbStatsChannel.publish(channelKey, event);
+  }
+
   // The methods below delegate to `boardPresenceStore` (board-presence-store.ts)
   // — Redis KV bookkeeping for the board-presence domain (seq counter, durable
   // history, proof-of-presence, writer holder, session→board) that sits
@@ -634,6 +660,11 @@ class PubSub {
    */
   getBoardQueuePreviewSubscriberCount(boardId: string): number {
     return this.boardQueueChannel.count(boardId);
+  }
+
+  /** @internal Subscription cleanup coverage. */
+  getClimbStatsSubscriberCount(channelKey: string): number {
+    return this.climbStatsChannel.count(channelKey);
   }
 }
 

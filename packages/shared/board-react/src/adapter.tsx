@@ -1,6 +1,24 @@
 import { createContext, useContext, type ReactNode } from 'react';
 import type { QueryClient } from '@tanstack/react-query';
 import type { SaveTickMutationResponse, SaveTickMutationVariables } from '@boardsesh/graphql/operations';
+import type { ClimbStatsForClimbEntry } from '@boardsesh/graphql/operations';
+import type { ClimbStatsEvent } from '@boardsesh/shared-schema';
+
+export type ClimbStatsSubscriptionHandlers = {
+  next: (event: ClimbStatsEvent) => void;
+  connected: () => void;
+  error: (error: unknown) => void;
+};
+
+// Intentional structural mirror of MutationDeliveryEvent in
+// @boardsesh/offline-sync. board-react cannot depend on offline-sync; keep both
+// event contracts in sync when fields change.
+export type OfflineMutationDelivery = {
+  tableName: string;
+  operation: string;
+  idempotencyKey: string;
+  status: 'acknowledged' | 'dead_letter';
+};
 
 // HTTP transport for tick + logbook operations. Query is a `string` since
 // the `gql` template tag in `graphql-request` returns the source string at
@@ -34,6 +52,23 @@ export type BoardAdapter = {
    * captured for the next mutation without re-renders.
    */
   resolveActiveSessionId: () => string | null | undefined;
+  /** Monotonic platform auth generation used to fence late mutation callbacks. */
+  captureAuthEpoch?: () => number;
+  isAuthEpochCurrent?: (epoch: number) => boolean;
+  /**
+   * Explicit platform capability for optimistic community-stat floors. Mobile
+   * supplies the immutable climb count on every tick entry point; legacy Next
+   * does not, so it must not create tokens accidentally.
+   */
+  supportsClimbStatsOptimism?: true;
+  /** Primary-backed canonical batch read; one response covers every requested climb and angle. */
+  fetchClimbStatsForClimbs?: (boardType: string, climbUuids: string[]) => Promise<ClimbStatsForClimbEntry[]>;
+  /** Layout-wide stream multiplexed over the platform's singleton graphql-ws client. */
+  subscribeClimbStats?: (boardType: string, layoutId: number, handlers: ClimbStatsSubscriptionHandlers) => () => void;
+  /** Offline outbox acknowledgement/dead-letter notifications keyed by tick UUID. */
+  subscribeOfflineMutationDelivery?: (listener: (event: OfflineMutationDelivery) => void) => () => void;
+  /** Renderer timer seam; returns cancellation for the scheduled one-shot task. */
+  scheduleTask?: (callback: () => void, delayMs: number) => () => void;
   /**
    * Optional platform-local save path. Mobile uses this to commit a tick to
    * SQLite and enqueue the GraphQL replay before falling back to network-only
