@@ -1,16 +1,19 @@
-Cette mise à jour, c'est surtout du Bluetooth plus stable, et une nouvelle façon de mettre ton mur en valeur sur iPad.
+Trois grosses nouveautés dans cette mise à jour : grimper sans réseau, une cotation qui se lit pareil sur toutes les boards, et ta salle sur Boardsesh.
 
-Plus stable sur le mur :
-- iOS 26.5 : corrigé les boards Kilter et Tension qui ne s'allumaient plus, fini le mur vide en pleine séance et le yo-yo connexion-déconnexion.
-- Une voie d'une autre board dans ta file ? Ton mur ne clignote plus dans le noir : Boardsesh la saute et allume la suivante qui correspond à ton install.
-- Éteins les lumières de ton MoonBoard directement depuis l'appli en Bluetooth.
+Grimpe hors ligne :
+- Télécharge une board et continue sans réseau : cherche des voies, enregistre tes croix, mets des favoris. Tout se met en file sur ton téléphone et se synchronise dès que tu reviens. Les téléchargements prennent maintenant quelques secondes, et Stockage te montre ce que pèse chaque board pour effacer celles que tu ne grimpes plus.
 
-Nouveau, Sur le mur sur iPad :
-- Pose un iPad près du mur pour voir en plein écran ce qui est allumé en ce moment, qui est dessus et la plus grosse croix de la séance, lisible depuis l'autre bout de la salle. Reviens en arrière et en avant dans l'historique du mur et touche pour rallumer une voie que quelqu'un a changée. L'écran reste allumé toute la séance.
+La cotation Boardsesh :
+- Une cotation qui se lit pareil sur Kilter, Tension et MoonBoard, construite à partir de toutes les croix enregistrées, avec un niveau de confiance. Active « Afficher les grades Boardsesh » dans les Réglages. Les blocs que personne n'a encore enregistrés reçoivent une estimation à partir de leurs prises, au lieu de rester sans cotation.
+
+Ta salle :
+- Chaque salle a maintenant sa page publique : abonne-toi, ou revendique-la si c'est la tienne. Mets tes murs sur un écran avec boardsesh.com/kiosk/ta-salle : ce qui est allumé sur chaque board, avec ton logo et tes couleurs, et un code que les grimpeurs scannent pour installer Boardsesh.
 
 Aussi :
-- Masque les voies MoonBoard montées sur des prises que tu n'as pas : désélectionne un set et ces blocs disparaissent de tes résultats.
-- Les croix sur MoonBoard s'ajoutent maintenant au nombre de répétitions de la communauté au lieu de l'effacer, donc les benchmarks affichent leurs vrais chiffres et remontent en haut.
-- Ajoute une voie à une playlist en appuyant longuement dessus, et crée une nouvelle playlist ici même sans que le panneau disparaisse en plein milieu.
+- Mélange tes résultats avec le nouveau tri Aléatoire, filtre sur les projets que tu as essayés sans les enchaîner, et épingle les filtres que tu utilises vraiment.
+- L'écran de grimpe s'ouvre sur ton propre historique de la voie : tes croix et tes essais, là où tu peux les voir.
+- Ton logbook compte juste : les ascensions Aurora en double ne comptent qu'une fois, les essais importés de Tension restent des essais, et les croix MoonBoard 2024 s'importent correctement.
+- Les lignes de la file et des voies fonctionnent maintenant avec VoiceOver.
+- Bluetooth plus stable, séances avec tes potes plus stables, et moins de plantages mémoire sur les longues journées iPad.
 
 Gratuit, sans pub, open source.
