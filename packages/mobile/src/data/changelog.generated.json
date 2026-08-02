@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-08-02T06:17:16.987Z",
+  "generatedAt": "2026-08-02T07:34:34.071Z",
   "entries": [
+    {
+      "prNumber": 4089,
+      "category": "fixed",
+      "title": "Keep controls, lists, and messages tucked above the iOS tab bar without the extra gap.",
+      "mergedAt": "2026-08-02T07:33:24Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4089"
+    },
     {
       "prNumber": 4149,
       "category": "fixed",
@@ -2749,6 +2756,17 @@
     }
   ],
   "nativeReleases": [
+    {
+      "kind": "native-release",
+      "date": "2026-08-02T16:09:01+10:00",
+      "sha": "3847f2331d52b4b6f5043d9a1dd079ab89ef97e6",
+      "platforms": [
+        "ios"
+      ],
+      "fingerprints": {
+        "ios": "7957ff92b389226c46ec479f82a119709c63f7e5"
+      }
+    },
     {
       "kind": "native-release",
       "date": "2026-08-02T13:30:57+10:00",

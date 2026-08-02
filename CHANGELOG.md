@@ -16,6 +16,7 @@ A new version shipped to the App Store and Play Store.
 
 ### Fixed
 
+- Keep controls, lists, and messages tucked above the iOS tab bar without the extra gap. ([#4089](https://github.com/boardsesh/boardsesh/pull/4089))
 - Board feeds now stay tied to real wall layouts and hold sets. ([#4149](https://github.com/boardsesh/boardsesh/pull/4149))
 - Climb hold overlays now recover when storage pressure clears their cached image, instead of leaving a blank board or stale notification thumbnail. ([#4147](https://github.com/boardsesh/boardsesh/pull/4147))
 - Reconnecting to the same board on iPhone no longer lets a late disconnect from the old connection knock the new link offline. ([#4152](https://github.com/boardsesh/boardsesh/pull/4152))
