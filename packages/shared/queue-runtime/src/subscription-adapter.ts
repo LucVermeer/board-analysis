@@ -16,6 +16,7 @@ import {
   type MapEventContext,
   type SyncQueueEvent,
 } from '@boardsesh/queue';
+import type { PlaybackStateChangedEvent } from '@boardsesh/shared-schema';
 
 /**
  * The wire envelope shape we accept. Structurally compatible with both web's
@@ -89,7 +90,8 @@ export type SubscriptionWireEnvelope<TWireItem> =
       sequence?: number | null;
       stateHash?: string | null;
       stateHashOrdered?: string | null;
-    };
+    }
+  | PlaybackStateChangedEvent;
 
 export type MapEnvelopeOptions<TWireItem> = {
   /** Lift the wire item shape to the reducer's `ClimbQueueItem`. Defaults
@@ -100,6 +102,10 @@ export type MapEnvelopeOptions<TWireItem> = {
   context?: MapEventContext;
 };
 
+export type SubscriptionEventMappingResult =
+  | EventMappingResult
+  | { kind: 'ignore'; eventType: 'PlaybackStateChanged'; reason: 'transient event' };
+
 /**
  * Normalise a wire subscription envelope into a reducer dispatch decision.
  * Combines the per-platform item lift with the shared
@@ -108,14 +114,26 @@ export type MapEnvelopeOptions<TWireItem> = {
 export function mapSubscriptionEnvelopeToAction<TWireItem>(
   envelope: SubscriptionWireEnvelope<TWireItem>,
   options: MapEnvelopeOptions<TWireItem> = {},
-): EventMappingResult {
+): SubscriptionEventMappingResult {
+  // Current mobile and web callers split transient playback events before
+  // invoking this reducer adapter. Keep this guard as defense-in-depth for a
+  // future or direct caller so playback can never enter item lifting or the
+  // queue reducer even if that boundary narrowing is accidentally skipped.
+  if (envelope.__typename === 'PlaybackStateChanged') {
+    return { kind: 'ignore', eventType: 'PlaybackStateChanged', reason: 'transient event' };
+  }
   const lift = options.mapItem ?? ((item: TWireItem) => item as unknown as ClimbQueueItem);
   const syncEvent = liftEnvelopeToSyncEvent(envelope, lift);
   return mapQueueEventToAction(syncEvent, options.context);
 }
 
+type QueueStateWireEnvelope<TWireItem> = Exclude<
+  SubscriptionWireEnvelope<TWireItem>,
+  { __typename: 'PlaybackStateChanged' }
+>;
+
 function liftEnvelopeToSyncEvent<TWireItem>(
-  envelope: SubscriptionWireEnvelope<TWireItem>,
+  envelope: QueueStateWireEnvelope<TWireItem>,
   lift: (item: TWireItem) => ClimbQueueItem,
 ): SyncQueueEvent {
   switch (envelope.__typename) {

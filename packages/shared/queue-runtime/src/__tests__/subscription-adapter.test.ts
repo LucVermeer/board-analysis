@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { ClimbQueueItem } from '@boardsesh/queue';
+import type { PlaybackStateChangedEvent } from '@boardsesh/shared-schema';
 import { mapSubscriptionEnvelopeToAction, type SubscriptionWireEnvelope } from '../subscription-adapter';
 
 type WireClimb = {
@@ -184,5 +185,30 @@ describe('mapSubscriptionEnvelopeToAction', () => {
     if (result.kind === 'dispatch' && result.action.type === 'DELTA_REORDER_QUEUE_ITEM') {
       expect(result.action.payload).toEqual({ uuid: 'q-1', oldIndex: 2, newIndex: 0 });
     }
+  });
+
+  it('defensively ignores PlaybackStateChanged when a caller skips boundary narrowing', () => {
+    const envelope = {
+      __typename: 'PlaybackStateChanged',
+      sequence: 7,
+      climbUuid: 'climb-1',
+      frameIndex: 3,
+      isPlaying: true,
+      speed: 1.5,
+      paceMs: 250,
+      anchorTimestamp: '1700000000000',
+      clientId: 'peer-client',
+    } satisfies PlaybackStateChangedEvent;
+    let liftCalls = 0;
+
+    const result = mapSubscriptionEnvelopeToAction<WireItem>(envelope, {
+      mapItem: (item) => {
+        liftCalls += 1;
+        return liftToClimbItem(item);
+      },
+    });
+
+    expect(result).toEqual({ kind: 'ignore', eventType: 'PlaybackStateChanged', reason: 'transient event' });
+    expect(liftCalls).toBe(0);
   });
 });
