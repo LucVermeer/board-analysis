@@ -200,7 +200,10 @@ Source locations:
 The RN app's `packages/mobile/ios/` directory is generated and gitignored, so tracked Swift
 unit tests live in `packages/mobile/ios-tests/`. The CI workflow runs Expo prebuild, then
 `scripts/prepare-rn-ios-tests.mjs` creates a generated `BoardseshTests` XCTest target and
-stages the Live Activity Swift sources into that target before invoking `xcodebuild`.
+a `LiveActivityIntentDiagnosticsConcurrencyGate` static-library target. It stages the Live
+Activity Swift sources into the test target and stages the diagnostics source alone in the
+strict-concurrency gate. The subsequent `xcodebuild build-for-testing` invocation builds both
+targets.
 
 Swift test coverage runs in CI:
 

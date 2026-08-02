@@ -183,7 +183,7 @@ final class LiveActivityIntentDiagnosticStore: @unchecked Sendable {
         maxRecords: Int = defaultMaxRecords,
         timeToLive: TimeInterval = defaultTimeToLive,
         incompleteGrace: TimeInterval = defaultIncompleteGrace,
-        now: @escaping @Sendable () -> Date = Date.init
+        now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.defaults = defaults
         self.storageKey = storageKey

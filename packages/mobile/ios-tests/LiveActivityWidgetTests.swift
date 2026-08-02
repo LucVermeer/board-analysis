@@ -633,7 +633,9 @@ private final class IntentDiagnosticTestClock: @unchecked Sendable {
 final class LiveActivityIntentDiagnosticStoreTests: XCTestCase {
     private var suiteName: String!
     private var defaults: UserDefaults!
-    private var clock: IntentDiagnosticTestClock!
+    private var clock = IntentDiagnosticTestClock(
+        currentDate: Date(timeIntervalSince1970: 2_000_000_000)
+    )
 
     override func setUp() {
         super.setUp()
@@ -647,7 +649,6 @@ final class LiveActivityIntentDiagnosticStoreTests: XCTestCase {
         defaults.removePersistentDomain(forName: suiteName)
         defaults = nil
         suiteName = nil
-        clock = nil
         super.tearDown()
     }
 
@@ -659,7 +660,7 @@ final class LiveActivityIntentDiagnosticStoreTests: XCTestCase {
         timeToLive: TimeInterval = 24 * 60 * 60,
         incompleteGrace: TimeInterval = 30
     ) -> LiveActivityIntentDiagnosticStore {
-        let clock = clock!
+        let clock = self.clock
         return LiveActivityIntentDiagnosticStore(
             defaults: defaults,
             storageKey: "intent-diagnostic-tests",
