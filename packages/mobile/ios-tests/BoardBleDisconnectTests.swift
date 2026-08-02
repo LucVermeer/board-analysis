@@ -540,6 +540,307 @@ final class BoardBleDisconnectTests: XCTestCase {
         XCTAssertEqual(disconnectEventCount, 0)
     }
 
+    func testConnectTimeoutThenExpiredBarrierSwallowsAmbiguousDidFailUntilRetryTimesOut() {
+        let peripheral = FakeWritablePeripheral()
+        let lateFailure = NSError(
+            domain: "BoardBleDisconnectTests",
+            code: 92,
+            userInfo: [NSLocalizedDescriptionKey: "Ambiguous terminal failure"]
+        )
+        var firstConnectError: Error?
+        var retryResults: [Result<Void, Error>] = []
+        var disconnectEventCount = 0
+        var connectedEventCount = 0
+        manager.testHooks.sync {
+            manager.setEventHandlers(
+                onScanResult: nil,
+                onDisconnect: { _, _ in disconnectEventCount += 1 },
+                onConnected: { _, _ in connectedEventCount += 1 }
+            )
+            manager.testHooks.setDiscoveredPeripheral(peripheral)
+            manager.connect(deviceId: peripheral.identifier.uuidString) { result in
+                if case .failure(let error) = result { firstConnectError = error }
+            }
+        }
+
+        // Attempt A times out, its cancellation barrier expires without a
+        // terminal callback, and retry B displaces the expired barrier.
+        fireLatestOneShot(label: "connectTimeout")
+        XCTAssertEqual(
+            firstConnectError?.localizedDescription,
+            BoardBleError.connectTimedOut.localizedDescription
+        )
+        fireLatestOneShot(label: "managerCancellationBarrierWatchdog")
+        manager.testHooks.sync {
+            manager.connect(deviceId: peripheral.identifier.uuidString) { retryResults.append($0) }
+        }
+
+        let retryGeneration = manager.testHooks.sync {
+            manager.testHooks.peripheralGeneration(for: peripheral.identifier)
+        }
+        let retryTimeout = scheduler.lastOneShot(label: "connectTimeout")
+        XCTAssertNotNil(retryGeneration)
+        XCTAssertFalse(retryTimeout?.cancelled ?? true)
+        XCTAssertEqual(
+            manager.testHooks.sync { manager.testHooks.displacedCancellationPeripheralIds },
+            Set([peripheral.identifier])
+        )
+
+        // CoreBluetooth supplies no attempt identity. This first terminal
+        // callback after displacement is unattributable and conservatively
+        // swallowed, even though it could be B's genuine failure. B keeps its
+        // generation, timeout, pending completion, and concrete OS-level connect;
+        // B's still-live timeout settles it once.
+        manager.testHooks.fireDidFailToConnect(peripheral: peripheral, error: lateFailure)
+
+        XCTAssertTrue(retryResults.isEmpty)
+        XCTAssertTrue(manager.testHooks.sync { manager.testHooks.hasPendingConnect })
+        XCTAssertEqual(manager.connectedDeviceId, peripheral.identifier.uuidString)
+        XCTAssertEqual(
+            manager.testHooks.sync { manager.testHooks.peripheralGeneration(for: peripheral.identifier) },
+            retryGeneration
+        )
+        XCTAssertFalse(retryTimeout?.cancelled ?? true)
+        XCTAssertEqual(disconnectEventCount, 0)
+        XCTAssertEqual(connectedEventCount, 0)
+        XCTAssertEqual(cancelledPeripheralIds, [peripheral.identifier])
+        XCTAssertTrue(
+            manager.testHooks.sync { manager.testHooks.displacedCancellationPeripheralIds.isEmpty }
+        )
+        XCTAssertTrue(manager.testHooks.sync { manager.testHooks.managerCancellationBarrierIds.isEmpty })
+
+        // The still-live retry timeout is the only settlement path. It fails B
+        // exactly once, issues B's one required cancellation, clears the
+        // tombstone, and installs B's new cancellation barrier for the next
+        // terminal callback.
+        manager.testHooks.sync {
+            retryTimeout?.fire()
+        }
+        XCTAssertEqual(retryResults.count, 1)
+        if case .failure(let error) = retryResults[0] {
+            XCTAssertEqual(error.localizedDescription, BoardBleError.connectTimedOut.localizedDescription)
+        } else {
+            XCTFail("expected retry B to time out")
+        }
+        XCTAssertFalse(manager.testHooks.sync { manager.testHooks.hasPendingConnect })
+        XCTAssertNil(manager.connectedDeviceId)
+        XCTAssertNil(
+            manager.testHooks.sync { manager.testHooks.peripheralGeneration(for: peripheral.identifier) }
+        )
+        XCTAssertTrue(
+            manager.testHooks.sync { manager.testHooks.displacedCancellationPeripheralIds.isEmpty }
+        )
+        XCTAssertEqual(
+            manager.testHooks.sync { manager.testHooks.managerCancellationBarrierIds },
+            Set([peripheral.identifier])
+        )
+        XCTAssertEqual(scheduler.oneShots(label: "managerCancellationBarrierWatchdog").count, 2)
+        XCTAssertFalse(scheduler.lastOneShot(label: "managerCancellationBarrierWatchdog")?.cancelled ?? true)
+        XCTAssertEqual(cancelledPeripheralIds, [peripheral.identifier, peripheral.identifier])
+        XCTAssertEqual(connectedPeripheralIds, [peripheral.identifier, peripheral.identifier])
+        XCTAssertEqual(connectedEventCount, 0)
+        XCTAssertEqual(disconnectEventCount, 0)
+
+        // A duplicate fire is inert at the timer itself (FakeOneShotTimer
+        // mirrors a real one-shot DispatchSourceTimer), so it cannot settle B,
+        // reconnect, disconnect, or cancel again.
+        manager.testHooks.sync {
+            retryTimeout?.fire()
+        }
+        XCTAssertEqual(retryResults.count, 1)
+        XCTAssertEqual(cancelledPeripheralIds, [peripheral.identifier, peripheral.identifier])
+        XCTAssertEqual(connectedEventCount, 0)
+        XCTAssertEqual(disconnectEventCount, 0)
+    }
+
+    func testRetryTimeoutClearsDisplacedTombstoneBeforeRegisteringNewBarrier() {
+        let peripheral = FakeWritablePeripheral()
+        var firstConnectError: Error?
+        var retryResults: [Result<Void, Error>] = []
+        var disconnectEventCount = 0
+        manager.testHooks.sync {
+            manager.setEventHandlers(
+                onScanResult: nil,
+                onDisconnect: { _, _ in disconnectEventCount += 1 },
+                onConnected: nil
+            )
+            manager.testHooks.setDiscoveredPeripheral(peripheral)
+            manager.connect(deviceId: peripheral.identifier.uuidString) { result in
+                if case .failure(let error) = result { firstConnectError = error }
+            }
+        }
+
+        fireLatestOneShot(label: "connectTimeout")
+        XCTAssertEqual(
+            firstConnectError?.localizedDescription,
+            BoardBleError.connectTimedOut.localizedDescription
+        )
+        fireLatestOneShot(label: "managerCancellationBarrierWatchdog")
+        manager.testHooks.sync {
+            manager.connect(deviceId: peripheral.identifier.uuidString) { retryResults.append($0) }
+        }
+        XCTAssertEqual(
+            manager.testHooks.sync { manager.testHooks.displacedCancellationPeripheralIds },
+            Set([peripheral.identifier])
+        )
+
+        // Retry B also times out before either attempt reports a terminal
+        // callback. Its new barrier owns the next callback, so A's displaced
+        // tombstone must not survive alongside it.
+        fireLatestOneShot(label: "connectTimeout")
+
+        XCTAssertEqual(retryResults.count, 1)
+        if case .failure(let error) = retryResults[0] {
+            XCTAssertEqual(error.localizedDescription, BoardBleError.connectTimedOut.localizedDescription)
+        } else {
+            XCTFail("expected retry B to time out")
+        }
+        XCTAssertEqual(cancelledPeripheralIds, [peripheral.identifier, peripheral.identifier])
+        XCTAssertTrue(
+            manager.testHooks.sync { manager.testHooks.displacedCancellationPeripheralIds.isEmpty }
+        )
+        XCTAssertEqual(
+            manager.testHooks.sync { manager.testHooks.managerCancellationBarrierIds },
+            Set([peripheral.identifier])
+        )
+        XCTAssertFalse(manager.testHooks.sync { manager.testHooks.hasPendingConnect })
+        XCTAssertNil(
+            manager.testHooks.sync { manager.testHooks.peripheralGeneration(for: peripheral.identifier) }
+        )
+        XCTAssertEqual(disconnectEventCount, 0)
+
+        manager.testHooks.fireDidFailToConnect(peripheral: peripheral, error: BoardBleError.notConnected)
+        XCTAssertTrue(manager.testHooks.sync { manager.testHooks.managerCancellationBarrierIds.isEmpty })
+        XCTAssertEqual(retryResults.count, 1)
+        XCTAssertEqual(connectedPeripheralIds, [peripheral.identifier, peripheral.identifier])
+        XCTAssertEqual(disconnectEventCount, 0)
+    }
+
+    func testDisplacedDidDisconnectSwallowThenGenuineDidFailSettlesRetryImmediately() {
+        let peripheral = FakeWritablePeripheral()
+        let genuineFailure = NSError(
+            domain: "BoardBleDisconnectTests",
+            code: 93,
+            userInfo: [NSLocalizedDescriptionKey: "Genuine retry failure"]
+        )
+        var firstConnectError: Error?
+        var retryResults: [Result<Void, Error>] = []
+        var disconnectEventCount = 0
+        manager.testHooks.sync {
+            manager.setEventHandlers(
+                onScanResult: nil,
+                onDisconnect: { _, _ in disconnectEventCount += 1 },
+                onConnected: nil
+            )
+            manager.testHooks.setDiscoveredPeripheral(peripheral)
+            manager.connect(deviceId: peripheral.identifier.uuidString) { result in
+                if case .failure(let error) = result { firstConnectError = error }
+            }
+        }
+
+        // Attempt A times out, its cancellation barrier expires without a
+        // terminal callback, and retry B displaces the expired barrier.
+        fireLatestOneShot(label: "connectTimeout")
+        XCTAssertEqual(
+            firstConnectError?.localizedDescription,
+            BoardBleError.connectTimedOut.localizedDescription
+        )
+        fireLatestOneShot(label: "managerCancellationBarrierWatchdog")
+        manager.testHooks.sync {
+            manager.connect(deviceId: peripheral.identifier.uuidString) { retryResults.append($0) }
+        }
+        XCTAssertEqual(connectedPeripheralIds, [peripheral.identifier, peripheral.identifier])
+
+        // A's late didDisconnect is the one unattributable callback after the
+        // displacement: swallowed, tombstone consumed, retry B untouched.
+        manager.testHooks.fireDidDisconnect(peripheral: peripheral, error: nil)
+        XCTAssertTrue(retryResults.isEmpty)
+        XCTAssertTrue(manager.testHooks.sync { manager.testHooks.hasPendingConnect })
+        XCTAssertEqual(disconnectEventCount, 0)
+        XCTAssertEqual(cancelledPeripheralIds, [peripheral.identifier])
+        XCTAssertTrue(
+            manager.testHooks.sync { manager.testHooks.displacedCancellationPeripheralIds.isEmpty }
+        )
+
+        // The swallow is single-shot: B's own genuine didFailToConnect now
+        // settles B immediately with the real error — no timeout wait.
+        manager.testHooks.fireDidFailToConnect(peripheral: peripheral, error: genuineFailure)
+        XCTAssertEqual(retryResults.count, 1)
+        if case .failure(let error) = retryResults[0] {
+            XCTAssertEqual(error.localizedDescription, genuineFailure.localizedDescription)
+        } else {
+            XCTFail("expected retry B to fail with the genuine error")
+        }
+        XCTAssertFalse(manager.testHooks.sync { manager.testHooks.hasPendingConnect })
+        XCTAssertNil(manager.connectedDeviceId)
+        XCTAssertNil(
+            manager.testHooks.sync { manager.testHooks.peripheralGeneration(for: peripheral.identifier) }
+        )
+        XCTAssertTrue(scheduler.lastOneShot(label: "connectTimeout")?.cancelled ?? false)
+        XCTAssertTrue(manager.testHooks.sync { manager.testHooks.managerCancellationBarrierIds.isEmpty })
+        XCTAssertEqual(cancelledPeripheralIds, [peripheral.identifier])
+        XCTAssertEqual(disconnectEventCount, 0)
+    }
+
+    func testDisplacedDidFailSwallowThenRetryDidConnectSucceeds() {
+        let peripheral = FakeWritablePeripheral()
+        let lateFailure = NSError(
+            domain: "BoardBleDisconnectTests",
+            code: 94,
+            userInfo: [NSLocalizedDescriptionKey: "Late displaced failure"]
+        )
+        var firstConnectError: Error?
+        var retryResults: [Result<Void, Error>] = []
+        var disconnectEventCount = 0
+        manager.testHooks.sync {
+            manager.setEventHandlers(
+                onScanResult: nil,
+                onDisconnect: { _, _ in disconnectEventCount += 1 },
+                onConnected: nil
+            )
+            manager.testHooks.setDiscoveredPeripheral(peripheral)
+            manager.connect(deviceId: peripheral.identifier.uuidString) { result in
+                if case .failure(let error) = result { firstConnectError = error }
+            }
+        }
+
+        // Attempt A times out, its cancellation barrier expires without a
+        // terminal callback, and retry B displaces the expired barrier.
+        fireLatestOneShot(label: "connectTimeout")
+        XCTAssertEqual(
+            firstConnectError?.localizedDescription,
+            BoardBleError.connectTimedOut.localizedDescription
+        )
+        fireLatestOneShot(label: "managerCancellationBarrierWatchdog")
+        manager.testHooks.sync {
+            manager.connect(deviceId: peripheral.identifier.uuidString) { retryResults.append($0) }
+        }
+
+        // A late didFailToConnect (the release-note scenario) is swallowed and
+        // must not knock out retry B: no settlement, no OS-level cancel.
+        manager.testHooks.fireDidFailToConnect(peripheral: peripheral, error: lateFailure)
+        XCTAssertTrue(retryResults.isEmpty)
+        XCTAssertTrue(manager.testHooks.sync { manager.testHooks.hasPendingConnect })
+        XCTAssertEqual(cancelledPeripheralIds, [peripheral.identifier])
+        XCTAssertTrue(
+            manager.testHooks.sync { manager.testHooks.displacedCancellationPeripheralIds.isEmpty }
+        )
+
+        // B's own didConnect + readiness completes the reconnect end-to-end.
+        manager.testHooks.fireDidConnect(peripheral: peripheral)
+        manager.testHooks.fireConnectionReady(
+            peripheral: peripheral,
+            characteristic: makeWriteCharacteristic()
+        )
+        XCTAssertEqual(retryResults.count, 1)
+        if case .failure(let error) = retryResults[0] {
+            XCTFail("expected retry B to succeed after the swallowed late failure, got \(error)")
+        }
+        XCTAssertEqual(manager.connectedDeviceId, peripheral.identifier.uuidString)
+        XCTAssertEqual(cancelledPeripheralIds, [peripheral.identifier])
+        XCTAssertEqual(disconnectEventCount, 0)
+    }
+
     func testStaleDidConnectUnderActiveBarrierStillIssuesConcreteCancel() {
         let peripheral = FakeWritablePeripheral()
         var firstConnectError: Error?
