@@ -2,6 +2,7 @@ import type { ComponentType } from 'react';
 import * as Sentry from '@sentry/react-native';
 import { installGlobalErrorCapture } from './global-error-capture';
 import { resolveAppEnvironment } from './app-environment';
+import type { InterruptedLiveActivityIntentDiagnostic } from './live-activity/live-activity-plugin';
 
 /**
  * Triage context attached to a reported error. Defined here (not in
@@ -155,6 +156,71 @@ export function captureToSentry(error: unknown, context?: ErrorReportContext): v
     applyErrorContextToScope(scope, context);
     Sentry.captureException(error);
   });
+}
+
+export const LIVE_ACTIVITY_INTENT_INTERRUPTED_FINGERPRINT = 'live-activity-intent-interrupted';
+
+type LiveActivityIntentDiagnosticScope = {
+  setLevel: (level: 'info') => void;
+  setFingerprint: (fingerprint: string[]) => void;
+  setTag: (key: string, value: string | number | boolean) => void;
+  setExtra: (key: string, value: unknown) => void;
+};
+
+/**
+ * Applies the fixed grouping and bounded, native-sanitized context for one
+ * previous-process Live Activity intent marker. Extracted so CI can prove the
+ * informational-message contract even though Sentry is disabled in tests.
+ */
+export function applyLiveActivityIntentDiagnosticToScope(
+  scope: LiveActivityIntentDiagnosticScope,
+  diagnostic: InterruptedLiveActivityIntentDiagnostic,
+): void {
+  scope.setLevel('info');
+  scope.setFingerprint([LIVE_ACTIVITY_INTENT_INTERRUPTED_FINGERPRINT]);
+  scope.setTag('source', 'live-activity-intent-diagnostics');
+  scope.setTag('intent_kind', diagnostic.intentKind);
+  scope.setTag('last_stage', diagnostic.lastStage);
+  scope.setTag('react_root_mounted', String(diagnostic.reactRootMounted));
+  scope.setTag('intent_schema_version', diagnostic.schemaVersion);
+  scope.setTag('app_version', diagnostic.appVersion);
+  scope.setTag('build_number', diagnostic.buildNumber);
+  // Random recorder IDs are extras rather than high-cardinality indexed tags.
+  // They identify only this diagnostic run/process, never a user or session.
+  scope.setExtra('run_id', diagnostic.runId);
+  scope.setExtra('process_id', diagnostic.processId);
+  scope.setExtra('started_at_ms', diagnostic.startedAtMs);
+  scope.setExtra('updated_at_ms', diagnostic.updatedAtMs);
+  scope.setExtra('elapsed_ms', Math.max(0, diagnostic.updatedAtMs - diagnostic.startedAtMs));
+}
+
+type LiveActivityIntentDiagnosticWithScope = (callback: (scope: LiveActivityIntentDiagnosticScope) => void) => void;
+
+type LiveActivityIntentDiagnosticCaptureMessage = (message: string, level: 'info') => void;
+
+/**
+ * Sends an intent diagnostic through an already-enabled Sentry context.
+ * Kept separate from the production enablement gate so the actual SDK emission
+ * contract remains directly testable in Vitest, where __DEV__ is inlined true.
+ */
+export function captureEnabledLiveActivityIntentDiagnostic(
+  diagnostic: InterruptedLiveActivityIntentDiagnostic,
+  withScope: LiveActivityIntentDiagnosticWithScope,
+  captureMessage: LiveActivityIntentDiagnosticCaptureMessage,
+): void {
+  withScope((scope) => {
+    applyLiveActivityIntentDiagnosticToScope(scope, diagnostic);
+    captureMessage('Live Activity intent did not complete before its process ended', 'info');
+  });
+}
+
+/**
+ * Reports an interrupted native intent as an informational message. It is not
+ * an exception or crash and therefore cannot inflate crash-free statistics.
+ */
+export function captureLiveActivityIntentDiagnostic(diagnostic: InterruptedLiveActivityIntentDiagnostic): void {
+  if (!isSentryEnabled) return;
+  captureEnabledLiveActivityIntentDiagnostic(diagnostic, Sentry.withScope, Sentry.captureMessage);
 }
 
 // The global-scope tag keys written on connect, cleared together on disconnect

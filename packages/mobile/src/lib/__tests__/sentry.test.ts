@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { ComponentType } from 'react';
+import type { InterruptedLiveActivityIntentDiagnostic } from '../../../modules/live-activity/src/index';
 
 // Spy on the SDK so we can assert the disabled-build contract. Under vitest
 // `__DEV__` is true (vite.config define) and no DSN is set, so `isSentryEnabled`
@@ -10,6 +11,7 @@ vi.mock('@sentry/react-native', () => ({
   init: vi.fn(),
   withScope: vi.fn(),
   captureException: vi.fn(),
+  captureMessage: vi.fn(),
   flush: vi.fn(() => Promise.resolve(true)),
   wrap: vi.fn((component: unknown) => component),
   setTag: vi.fn(),
@@ -19,7 +21,10 @@ import * as Sentry from '@sentry/react-native';
 import {
   applyBleDiagnosticsToScope,
   applyErrorContextToScope,
+  applyLiveActivityIntentDiagnosticToScope,
+  captureEnabledLiveActivityIntentDiagnostic,
   applyOtaTagsToScope,
+  captureLiveActivityIntentDiagnostic,
   captureToSentry,
   flushSentry,
   isExpoUiSheetNoHandlerRejection,
@@ -28,6 +33,7 @@ import {
   wrapWithSentry,
   isSentryEnabled,
   toSentryTag,
+  LIVE_ACTIVITY_INTENT_INTERRUPTED_FINGERPRINT,
 } from '../sentry';
 
 describe('isSentryEnabled', () => {
@@ -40,6 +46,71 @@ describe('captureToSentry (disabled build)', () => {
   it('is a no-op — never reaches the Sentry SDK', () => {
     captureToSentry(new Error('boom'), { level: 'error', tags: { source: 'react-query' } });
     expect(Sentry.withScope).not.toHaveBeenCalled();
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+  });
+});
+
+describe('Live Activity intent diagnostic reporting', () => {
+  const diagnostic = {
+    schemaVersion: 1 as const,
+    runId: '30fe8dab-7c3f-4ed0-ae20-291a87390001',
+    processId: 'b5a82684-6a2c-4bbb-a9cc-b7bfc1df0001',
+    intentKind: 'nextClimb' as const,
+    appVersion: '2.0.0',
+    buildNumber: '481',
+    startedAtMs: 1_000,
+    updatedAtMs: 3_500,
+    lastStage: 'bleStarted' as const,
+    reactRootMounted: true,
+  } satisfies InterruptedLiveActivityIntentDiagnostic;
+
+  it('maps to info level, a fixed fingerprint, fixed tags, and generated-id extras', () => {
+    const scope = {
+      setLevel: vi.fn(),
+      setFingerprint: vi.fn(),
+      setTag: vi.fn(),
+      setExtra: vi.fn(),
+    };
+
+    applyLiveActivityIntentDiagnosticToScope(scope, diagnostic);
+
+    expect(scope.setLevel).toHaveBeenCalledWith('info');
+    expect(scope.setFingerprint).toHaveBeenCalledWith([LIVE_ACTIVITY_INTENT_INTERRUPTED_FINGERPRINT]);
+    expect(scope.setTag).toHaveBeenCalledWith('source', 'live-activity-intent-diagnostics');
+    expect(scope.setTag).toHaveBeenCalledWith('intent_kind', 'nextClimb');
+    expect(scope.setTag).toHaveBeenCalledWith('last_stage', 'bleStarted');
+    expect(scope.setTag).toHaveBeenCalledWith('react_root_mounted', 'true');
+    expect(scope.setTag).not.toHaveBeenCalledWith('completion_class', expect.anything());
+    expect(scope.setExtra).toHaveBeenCalledWith('run_id', diagnostic.runId);
+    expect(scope.setExtra).toHaveBeenCalledWith('process_id', diagnostic.processId);
+    expect(scope.setExtra).toHaveBeenCalledWith('elapsed_ms', 2_500);
+  });
+
+  it('is a no-op in disabled builds and never masquerades as an exception', () => {
+    captureLiveActivityIntentDiagnostic(diagnostic);
+    expect(Sentry.withScope).not.toHaveBeenCalled();
+    expect(Sentry.captureMessage).not.toHaveBeenCalled();
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+  });
+
+  it('captures an enabled diagnostic as an informational Sentry message', () => {
+    const scope = {
+      setLevel: vi.fn(),
+      setFingerprint: vi.fn(),
+      setTag: vi.fn(),
+      setExtra: vi.fn(),
+    };
+    vi.mocked(Sentry.withScope).mockImplementation((callback) => callback(scope as never));
+
+    captureEnabledLiveActivityIntentDiagnostic(diagnostic, Sentry.withScope, Sentry.captureMessage);
+
+    expect(Sentry.withScope).toHaveBeenCalledTimes(1);
+    expect(scope.setLevel).toHaveBeenCalledWith('info');
+    expect(scope.setFingerprint).toHaveBeenCalledWith([LIVE_ACTIVITY_INTENT_INTERRUPTED_FINGERPRINT]);
+    expect(Sentry.captureMessage).toHaveBeenCalledWith(
+      'Live Activity intent did not complete before its process ended',
+      'info',
+    );
     expect(Sentry.captureException).not.toHaveBeenCalled();
   });
 });

@@ -65,6 +65,10 @@ const TEST_SOURCE_FILES = [
     projectPath: 'BoardseshTests/LiveActivitySources/WidgetNetworking.swift',
   },
   {
+    sourcePath: '../modules/live-activity/ios/LiveActivityIntentDiagnostics.swift',
+    projectPath: 'BoardseshTests/LiveActivitySources/LiveActivityIntentDiagnostics.swift',
+  },
+  {
     sourcePath: '../modules/live-activity/ios/ClimbNavigationIntent.swift',
     projectPath: 'BoardseshTests/LiveActivitySources/ClimbNavigationIntent.swift',
   },
@@ -79,6 +83,10 @@ const TEST_SOURCE_FILES = [
   {
     sourcePath: '../modules/live-activity/ios/TakeControlIntent.swift',
     projectPath: 'BoardseshTests/LiveActivitySources/TakeControlIntent.swift',
+  },
+  {
+    sourcePath: '../modules/live-activity/ios/ReconnectBoardIntent.swift',
+    projectPath: 'BoardseshTests/LiveActivitySources/ReconnectBoardIntent.swift',
   },
 ];
 

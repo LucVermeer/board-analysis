@@ -16,11 +16,15 @@ enum LiveActivityBleBridge {
     /// main actor for the duration, so main actor is only briefly held at
     /// function entry/exit.
     @MainActor
-    static func writeBoardForIntent(items: [SharedQueueItem], currentIndex: Int) async {
+    /// Returns true only when this display request completed successfully and
+    /// the global write queue drained inside its existing timeout. This is
+    /// diagnostic-only; failed or late writes keep their existing behavior.
+    @discardableResult
+    static func writeBoardForIntent(items: [SharedQueueItem], currentIndex: Int) async -> Bool {
         let task = BleIntentBackgroundTask()
         task.begin(name: "ble-display-intent")
         defer { task.end() }
-        await BoardBleManager.shared.displayCurrentItemAwaitingReady(
+        return await BoardBleManager.shared.displayCurrentItemAwaitingReady(
             items: items,
             currentIndex: currentIndex,
             readyTimeout: 3.0

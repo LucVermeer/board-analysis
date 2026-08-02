@@ -277,6 +277,44 @@ export type WidgetQueueNavigateEvent = {
   correlationId: string;
 };
 
+export type LiveActivityIntentDiagnosticKind = 'nextClimb' | 'previousClimb' | 'takeControl' | 'reconnectBoard';
+
+export type LiveActivityIntentDiagnosticStage =
+  | 'entered'
+  | 'networkStarted'
+  | 'networkFinishedSuccess'
+  | 'networkFinishedRetryable'
+  | 'networkFinishedTerminal'
+  | 'activityKitUpdated'
+  | 'bleStarted'
+  | 'bleFinishedSuccess'
+  | 'bleFinishedFailure'
+  | 'darwinPosted'
+  | 'completed';
+
+export type LiveActivityIntentCompletionClass =
+  | 'success'
+  | 'sharedDefaultsUnavailable'
+  | 'navigationOutOfBounds'
+  | 'serverRejected'
+  | 'retryableNetworkFailure'
+  | 'localNavigationEnabled'
+  | 'alreadyAllowed'
+  | 'bleFailure';
+
+export type InterruptedLiveActivityIntentDiagnostic = {
+  schemaVersion: 1;
+  runId: string;
+  processId: string;
+  intentKind: LiveActivityIntentDiagnosticKind;
+  appVersion: string;
+  buildNumber: string;
+  startedAtMs: number;
+  updatedAtMs: number;
+  lastStage: Exclude<LiveActivityIntentDiagnosticStage, 'completed'>;
+  reactRootMounted: boolean;
+};
+
 /**
  * Android-only: a tap on the foreground-service notification's lightbulb.
  * - `reconnect`: bulb was out (heldByPeer / disconnected) → reconnect to the
@@ -295,6 +333,10 @@ type LiveActivityNativeModule = {
   endSession(): Promise<void>;
   updateActivity(options: LiveActivityUpdateOptions): Promise<void>;
   updateActivityClimb(options: LiveActivityClimbUpdateOptions): Promise<void>;
+  /** Optional for OTA compatibility with binaries predating #4077. */
+  markIntentReactRootMounted?(): Promise<void>;
+  /** Optional for OTA compatibility with binaries predating #4077. */
+  consumeInterruptedIntentRuns?(): Promise<InterruptedLiveActivityIntentDiagnostic[]>;
   addListener(event: 'queueNavigate', listener: (payload: WidgetQueueNavigateEvent) => void): EventSubscription;
 };
 
