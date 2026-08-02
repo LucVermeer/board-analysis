@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-08-02T06:09:27.836Z",
+  "generatedAt": "2026-08-02T06:17:16.987Z",
   "entries": [
+    {
+      "prNumber": 4149,
+      "category": "fixed",
+      "title": "Board feeds now stay tied to real wall layouts and hold sets.",
+      "mergedAt": "2026-08-02T06:10:04Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4149"
+    },
     {
       "prNumber": 4147,
       "category": "fixed",

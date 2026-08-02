@@ -16,6 +16,7 @@ A new version shipped to the App Store and Play Store.
 
 ### Fixed
 
+- Board feeds now stay tied to real wall layouts and hold sets. ([#4149](https://github.com/boardsesh/boardsesh/pull/4149))
 - Climb hold overlays now recover when storage pressure clears their cached image, instead of leaving a blank board or stale notification thumbnail. ([#4147](https://github.com/boardsesh/boardsesh/pull/4147))
 - Reconnecting to the same board on iPhone no longer lets a late disconnect from the old connection knock the new link offline. ([#4152](https://github.com/boardsesh/boardsesh/pull/4152))
 - Keep receiving over-the-air fixes after JavaScript-only dependency updates. ([#4148](https://github.com/boardsesh/boardsesh/pull/4148))
