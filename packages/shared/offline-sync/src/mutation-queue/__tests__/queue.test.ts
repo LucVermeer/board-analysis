@@ -65,16 +65,33 @@ describe('mutation queue', () => {
     expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM pending_mutations WHERE id = ?', [42]);
   });
 
-  it('recordFailure bumps retry_count, stores the error, and conditionally dead-letters in one UPDATE', async () => {
-    await recordFailure(db, 7, 'Connection timeout');
+  it.each(['pending', 'dead_letter'] as const)(
+    'recordFailure returns %s from one UPDATE RETURNING statement',
+    async (status) => {
+      (db.getFirstAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ status });
 
-    const [sql, params] = (db.runAsync as ReturnType<typeof vi.fn>).mock.calls[0];
-    // Single atomic statement: the retry bump and the dead-letter transition
-    // are in the same UPDATE (CASE on retry_count + 1 >= max_retries).
-    expect(sql).toMatch(/retry_count = retry_count \+ 1/);
-    expect(sql).toMatch(/last_error = \?/);
-    expect(sql).toMatch(/status = CASE WHEN retry_count \+ 1 >= max_retries THEN 'dead_letter' ELSE status END/);
-    expect(params).toEqual(['Connection timeout', 7]);
+      await expect(recordFailure(db, 7, 'Connection timeout')).resolves.toBe(status);
+
+      expect(db.getFirstAsync).toHaveBeenCalledTimes(1);
+      const [sql, params] = (db.getFirstAsync as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(sql).toMatch(/^UPDATE pending_mutations/);
+      expect(sql).toMatch(/retry_count = retry_count \+ 1/);
+      expect(sql).toMatch(/last_error = \?/);
+      expect(sql).toMatch(/status = CASE WHEN retry_count \+ 1 >= max_retries THEN 'dead_letter' ELSE status END/);
+      expect(sql).toMatch(/RETURNING status$/);
+      expect(sql).not.toMatch(/\bSELECT\b/);
+      expect(params).toEqual(['Connection timeout', 7]);
+      expect(db.runAsync).not.toHaveBeenCalled();
+    },
+  );
+
+  it('recordFailure treats an already-missing row as pending without a second query', async () => {
+    (db.getFirstAsync as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+
+    await expect(recordFailure(db, 404, 'Already removed')).resolves.toBe('pending');
+
+    expect(db.getFirstAsync).toHaveBeenCalledTimes(1);
+    expect(db.runAsync).not.toHaveBeenCalled();
   });
 
   it('markDeadLetter sets status to dead_letter with error', async () => {

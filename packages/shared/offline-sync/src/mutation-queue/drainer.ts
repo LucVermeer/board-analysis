@@ -88,6 +88,21 @@ const DEFAULT_MAX_CYCLE_ATTEMPTS = 6;
 const DEFAULT_BASE_DELAY_MS = 500;
 const DEFAULT_MAX_DELAY_MS = 30_000;
 
+// Intentionally mirrored by OfflineMutationDelivery in @boardsesh/board-react.
+// The dependency boundary prevents either package importing the other; keep
+// both event contracts in sync when fields change.
+export type MutationDeliveryEvent = {
+  tableName: string;
+  operation: string;
+  idempotencyKey: string;
+  status: 'acknowledged' | 'dead_letter';
+};
+
+export type MutationStatusListenerFailure = {
+  error: unknown;
+  event: MutationDeliveryEvent;
+};
+
 export type DrainOptions = {
   /** Injectable sleep for deterministic tests. Defaults to setTimeout. */
   sleep?: (ms: number) => Promise<void>;
@@ -113,23 +128,22 @@ export type DrainOptions = {
    * idempotency key is the entity UUID for tick creates.
    */
   onMutationStatus?: (event: MutationDeliveryEvent) => void;
-};
-
-// Intentionally mirrored by OfflineMutationDelivery in @boardsesh/board-react.
-// The dependency boundary prevents either package importing the other; keep
-// both event contracts in sync when fields change.
-export type MutationDeliveryEvent = {
-  tableName: string;
-  operation: string;
-  idempotencyKey: string;
-  status: 'acknowledged' | 'dead_letter';
+  /** Platform-owned telemetry for a throwing delivery callback. */
+  onMutationStatusError?: (failure: MutationStatusListenerFailure) => void;
 };
 
 function notifyMutationStatus(options: DrainOptions, event: MutationDeliveryEvent): void {
   try {
     options.onMutationStatus?.(event);
   } catch (error) {
-    if (process.env.NODE_ENV !== 'production') {
+    try {
+      options.onMutationStatusError?.({ error, event });
+    } catch (reportingError) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[MutationQueue] mutation-status error reporter failed:', reportingError);
+      }
+    }
+    if (!options.onMutationStatusError && process.env.NODE_ENV !== 'production') {
       console.warn('[MutationQueue] mutation-status listener failed:', error);
     }
   }

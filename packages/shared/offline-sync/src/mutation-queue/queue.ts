@@ -50,15 +50,18 @@ export async function markCompleted(db: SqlExecutor, id: number): Promise<void> 
  * incrementRetry + markDeadLetter pair could).
  */
 export async function recordFailure(db: SqlExecutor, id: number, error: string): Promise<'pending' | 'dead_letter'> {
-  await db.runAsync(
+  const row = await db.getFirstAsync<{ status: string }>(
     `UPDATE pending_mutations
      SET retry_count = retry_count + 1,
          last_error = ?,
          status = CASE WHEN retry_count + 1 >= max_retries THEN 'dead_letter' ELSE status END
-     WHERE id = ?`,
+     WHERE id = ?
+     RETURNING status`,
     [error, id],
   );
-  const row = await db.getFirstAsync<{ status: string }>('SELECT status FROM pending_mutations WHERE id = ?', [id]);
+  // A missing row means another lifecycle action already completed/discarded
+  // it. There is no durable dead letter to announce, so preserve the existing
+  // conservative contract and report it as pending.
   return row?.status === 'dead_letter' ? 'dead_letter' : 'pending';
 }
 

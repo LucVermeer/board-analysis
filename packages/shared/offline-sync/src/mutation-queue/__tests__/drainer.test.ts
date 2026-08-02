@@ -146,6 +146,32 @@ describe('drainMutationQueue', () => {
     });
   });
 
+  it('reports a throwing mutation-status callback and continues delivering the batch', async () => {
+    const mutationA = makeMutation({ id: 1, idempotency_key: 'tick-a' });
+    const mutationB = makeMutation({ id: 2, idempotency_key: 'tick-b' });
+    mockPeekPending.mockResolvedValueOnce([mutationA, mutationB]).mockResolvedValueOnce([]);
+    const listenerError = new Error('listener failed');
+    const onMutationStatus = vi.fn((event: { idempotencyKey: string }) => {
+      if (event.idempotencyKey === 'tick-a') throw listenerError;
+    });
+    const onMutationStatusError = vi.fn();
+
+    await drainMutationQueue(mockDb, createMockQueryClient(), mockGraphqlFetch, {
+      ...ONLINE,
+      onMutationStatus,
+      onMutationStatusError,
+    });
+
+    expect(onMutationStatus).toHaveBeenCalledTimes(2);
+    expect(onMutationStatus.mock.calls[1]?.[0]).toEqual(expect.objectContaining({ idempotencyKey: 'tick-b' }));
+    expect(onMutationStatusError).toHaveBeenCalledTimes(1);
+    expect(onMutationStatusError).toHaveBeenCalledWith({
+      error: listenerError,
+      event: expect.objectContaining({ idempotencyKey: 'tick-a', status: 'acknowledged' }),
+    });
+    expect(mockMarkCompleted).toHaveBeenCalledTimes(2);
+  });
+
   it('emits dead-letter delivery for exhausted retryable and non-retryable writes', async () => {
     const retryable = makeMutation({ id: 1, idempotency_key: 'retryable-tick' });
     const nonRetryable = makeMutation({ id: 2, idempotency_key: 'invalid-tick' });
