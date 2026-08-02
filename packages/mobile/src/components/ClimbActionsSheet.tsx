@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import * as Clipboard from 'expo-clipboard';
@@ -8,7 +8,7 @@ import { buildReadableClimbViewPath } from '@boardsesh/play-view/readable-url-ut
 import { computeCanUpdate, type SavedClimbSnapshot } from '@boardsesh/create-climb-react';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
 import { ModalSheet } from './ModalSheet';
-import { useCreateClimbNavigation } from './create-climb/use-create-climb-navigation';
+import { useCreateClimbNavigation, type DismissSurfaceAndWait } from './create-climb/use-create-climb-navigation';
 import { ClimbPreviewCard } from './ClimbPreviewCard';
 import { ListRow } from './ListRow';
 import { Icon } from './Icon';
@@ -17,6 +17,7 @@ import { useTheme } from '../providers/theme-provider';
 import { spacing } from '../theme/tokens';
 import { WEB_BASE_URL } from '../lib/env';
 import { track } from '../lib/analytics';
+import { dismissManagedSheetAndWait, type ManagedSheetHandle } from '../providers/sheet-presentation-provider';
 
 type ClimbActionsSheetProps = {
   visible: boolean;
@@ -38,6 +39,8 @@ type ClimbActionsSheetProps = {
   onEditEntry?: () => void;
   /** When provided, shows an "Add beta video" row that opens the share-your-beta sheet. */
   onAddBetaVideo?: () => void;
+  /** Supplied only by the `/play` route; omitted by the persistent iPad pane. */
+  dismissPlayerAndWait?: DismissSurfaceAndWait;
   onClose: () => void;
 };
 
@@ -63,10 +66,22 @@ function ClimbActionsSheet({
   onTick,
   onEditEntry,
   onAddBetaVideo,
+  dismissPlayerAndWait,
   onClose,
 }: ClimbActionsSheetProps) {
   const { t } = useTranslation('climbs');
-  const { openRemix, openEdit } = useCreateClimbNavigation();
+  const managedSheetRef = useRef<ManagedSheetHandle>(null);
+  const dismissActionsSheetAndWait = useCallback(() => dismissManagedSheetAndWait(managedSheetRef.current), []);
+  const { openRemix, openEdit, resetActionGuard } = useCreateClimbNavigation({
+    dismissSourceSheet: dismissActionsSheetAndWait,
+    dismissPlayerAndWait,
+  });
+  // PlayDrawer keeps this sheet mounted after first use. Re-arm only when a NEW
+  // presentation opens; do not reset on close while the old sheet is still
+  // hit-testable during its dismiss animation.
+  useEffect(() => {
+    if (visible) resetActionGuard();
+  }, [visible, resetActionGuard]);
   const { showToast } = useToast();
   const theme = useTheme();
 
@@ -138,20 +153,16 @@ function ClimbActionsSheet({
     }
   }, [climb, boardName, layoutId, sizeId, setIds, angle, onClose, showToast, t]);
 
-  // Close this sub-sheet, then navigate. `openRemix`/`openEdit` decide for themselves
-  // whether a player route needs dismissing first (it does from `/play`; it doesn't from
-  // an iPad detail pane, or anywhere else this sheet might later be reused), so create
-  // opens as the sole top surface instead of stacking underneath.
+  // The navigation hook claims the action before closing this sub-sheet, then awaits
+  // the injected player transition when (and only when) this is the real `/play` route.
   const handleFork = useCallback(() => {
     if (!climb) return;
-    onClose();
-    openRemix(climb, { boardName, layoutId, sizeId, setIds, angle });
+    openRemix(climb, { boardName, layoutId, sizeId, setIds, angle }, onClose);
   }, [climb, boardName, layoutId, sizeId, setIds, angle, openRemix, onClose]);
 
   const handleEdit = useCallback(() => {
     if (!climb) return;
-    onClose();
-    openEdit(climb, { boardName, layoutId, sizeId, setIds, angle });
+    openEdit(climb, { boardName, layoutId, sizeId, setIds, angle }, onClose);
   }, [climb, boardName, layoutId, sizeId, setIds, angle, openEdit, onClose]);
 
   // Edit is owner-only, and only while the climb is still a draft OR within
@@ -182,7 +193,13 @@ function ClimbActionsSheet({
   } = theme.actionColors;
 
   return (
-    <ModalSheet visible={visible && !!climb} snapPoints={snapPoints} onClose={onClose} enablePanDownToClose>
+    <ModalSheet
+      ref={managedSheetRef}
+      visible={visible && !!climb}
+      snapPoints={snapPoints}
+      onClose={onClose}
+      enablePanDownToClose
+    >
       {climb && (
         <ClimbPreviewCard
           climb={climb}
