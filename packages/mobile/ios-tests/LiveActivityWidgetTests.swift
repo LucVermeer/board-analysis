@@ -608,24 +608,47 @@ final class LiveActivityWidgetTests: XCTestCase {
 }
 
 @available(iOS 17.0, *)
+private final class IntentDiagnosticTestClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var currentDate: Date
+
+    init(currentDate: Date) {
+        self.currentDate = currentDate
+    }
+
+    func now() -> Date {
+        lock.lock()
+        defer { lock.unlock() }
+        return currentDate
+    }
+
+    func advance(by interval: TimeInterval) {
+        lock.lock()
+        defer { lock.unlock() }
+        currentDate = currentDate.addingTimeInterval(interval)
+    }
+}
+
+@available(iOS 17.0, *)
 final class LiveActivityIntentDiagnosticStoreTests: XCTestCase {
     private var suiteName: String!
     private var defaults: UserDefaults!
-    private var clockNow: Date!
+    private var clock = IntentDiagnosticTestClock(
+        currentDate: Date(timeIntervalSince1970: 2_000_000_000)
+    )
 
     override func setUp() {
         super.setUp()
         suiteName = "com.boardsesh.rn.intent-diagnostic-tests.\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)
         defaults.removePersistentDomain(forName: suiteName)
-        clockNow = Date(timeIntervalSince1970: 2_000_000_000)
+        clock = IntentDiagnosticTestClock(currentDate: Date(timeIntervalSince1970: 2_000_000_000))
     }
 
     override func tearDown() {
         defaults.removePersistentDomain(forName: suiteName)
         defaults = nil
         suiteName = nil
-        clockNow = nil
         super.tearDown()
     }
 
@@ -637,7 +660,8 @@ final class LiveActivityIntentDiagnosticStoreTests: XCTestCase {
         timeToLive: TimeInterval = 24 * 60 * 60,
         incompleteGrace: TimeInterval = 30
     ) -> LiveActivityIntentDiagnosticStore {
-        LiveActivityIntentDiagnosticStore(
+        let clock = self.clock
+        return LiveActivityIntentDiagnosticStore(
             defaults: defaults,
             storageKey: "intent-diagnostic-tests",
             processId: processId,
@@ -646,7 +670,7 @@ final class LiveActivityIntentDiagnosticStoreTests: XCTestCase {
             maxRecords: maxRecords,
             timeToLive: timeToLive,
             incompleteGrace: incompleteGrace,
-            now: { [unowned self] in self.clockNow }
+            now: { clock.now() }
         )
     }
 
@@ -676,7 +700,7 @@ final class LiveActivityIntentDiagnosticStoreTests: XCTestCase {
         _ = store.begin(kind: .previousClimb)
         let completed = store.begin(kind: .takeControl)
         completed.complete(.alreadyAllowed)
-        clockNow = clockNow.addingTimeInterval(60)
+        clock.advance(by: 60)
 
         XCTAssertTrue(store.consumeInterruptedRuns().isEmpty)
         XCTAssertEqual(store.recordsSnapshot().count, 2)
@@ -686,11 +710,11 @@ final class LiveActivityIntentDiagnosticStoreTests: XCTestCase {
         let firstProcess = makeStore(processId: UUID())
         _ = firstProcess.begin(kind: .nextClimb)
 
-        clockNow = clockNow.addingTimeInterval(29)
+        clock.advance(by: 29)
         let foregroundProcess = makeStore(processId: UUID())
         XCTAssertTrue(foregroundProcess.consumeInterruptedRuns().isEmpty)
 
-        clockNow = clockNow.addingTimeInterval(2)
+        clock.advance(by: 2)
         let consumed = foregroundProcess.consumeInterruptedRuns()
         XCTAssertEqual(consumed.count, 1)
         let interrupted = try XCTUnwrap(consumed.single)
@@ -728,7 +752,7 @@ final class LiveActivityIntentDiagnosticStoreTests: XCTestCase {
     func testTimeToLiveAndBuildValidationDiscardInsteadOfReport() {
         let oldBuild = makeStore(processId: UUID(), buildNumber: "480")
         _ = oldBuild.begin(kind: .nextClimb)
-        clockNow = clockNow.addingTimeInterval(31)
+        clock.advance(by: 31)
 
         let newBuild = makeStore(processId: UUID(), buildNumber: "481")
         XCTAssertTrue(newBuild.consumeInterruptedRuns().isEmpty)
@@ -736,7 +760,7 @@ final class LiveActivityIntentDiagnosticStoreTests: XCTestCase {
 
         let currentBuild = makeStore(processId: UUID(), timeToLive: 60)
         _ = currentBuild.begin(kind: .previousClimb)
-        clockNow = clockNow.addingTimeInterval(61)
+        clock.advance(by: 61)
         let laterProcess = makeStore(processId: UUID(), timeToLive: 60)
         XCTAssertTrue(laterProcess.consumeInterruptedRuns().isEmpty)
         XCTAssertTrue(laterProcess.recordsSnapshot().isEmpty)
@@ -758,7 +782,7 @@ final class LiveActivityIntentDiagnosticStoreTests: XCTestCase {
         let store = makeStore(maxRecords: 4)
         for index in 0..<10 {
             _ = store.begin(kind: index.isMultiple(of: 2) ? .nextClimb : .previousClimb)
-            clockNow = clockNow.addingTimeInterval(1)
+            clock.advance(by: 1)
         }
 
         let records = store.recordsSnapshot()

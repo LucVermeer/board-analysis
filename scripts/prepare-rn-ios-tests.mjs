@@ -6,10 +6,15 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const TEST_TARGET_NAME = 'BoardseshTests';
+const CONCURRENCY_GATE_TARGET_NAME = 'LiveActivityIntentDiagnosticsConcurrencyGate';
 const APP_TARGET_NAME = 'Boardsesh';
 const BUNDLE_IDENTIFIER = 'com.boardsesh.app.tests';
 const DEPLOYMENT_TARGET = '17.0';
 const SWIFT_FLAGS = '"$(inherited) -D WIDGET_EXTENSION -D BOARDSESH_TESTS"';
+const DIAGNOSTICS_SOURCE_PATH = '../modules/live-activity/ios/LiveActivityIntentDiagnostics.swift';
+const TEST_DIAGNOSTICS_PROJECT_PATH = 'BoardseshTests/LiveActivitySources/LiveActivityIntentDiagnostics.swift';
+const CONCURRENCY_GATE_DIAGNOSTICS_PROJECT_PATH =
+  'LiveActivityIntentDiagnosticsConcurrencyGate/LiveActivityIntentDiagnostics.swift';
 
 const TEST_SOURCE_FILES = [
   {
@@ -69,8 +74,8 @@ const TEST_SOURCE_FILES = [
     projectPath: 'BoardseshTests/LiveActivitySources/WidgetNetworking.swift',
   },
   {
-    sourcePath: '../modules/live-activity/ios/LiveActivityIntentDiagnostics.swift',
-    projectPath: 'BoardseshTests/LiveActivitySources/LiveActivityIntentDiagnostics.swift',
+    sourcePath: DIAGNOSTICS_SOURCE_PATH,
+    projectPath: TEST_DIAGNOSTICS_PROJECT_PATH,
   },
   {
     sourcePath: '../modules/live-activity/ios/ClimbNavigationIntent.swift',
@@ -91,6 +96,13 @@ const TEST_SOURCE_FILES = [
   {
     sourcePath: '../modules/live-activity/ios/ReconnectBoardIntent.swift',
     projectPath: 'BoardseshTests/LiveActivitySources/ReconnectBoardIntent.swift',
+  },
+];
+
+const CONCURRENCY_GATE_SOURCE_FILES = [
+  {
+    sourcePath: DIAGNOSTICS_SOURCE_PATH,
+    projectPath: CONCURRENCY_GATE_DIAGNOSTICS_PROJECT_PATH,
   },
 ];
 
@@ -185,17 +197,21 @@ function ensureGroup(project, groupName) {
   return groupKey;
 }
 
-function hasSourceBuildFile(project, targetUuid, sourcePath) {
+function findSourceBuildFile(project, targetUuid, sourcePath) {
   const phase = project.pbxSourcesBuildPhaseObj(targetUuid);
   const fileReferenceSection = project.pbxFileReferenceSection();
   const buildFileSection = project.pbxBuildFileSection();
   const expectedBasename = sourcePath.split('/').at(-1);
 
-  return phase.files.some((entry) => {
+  for (const entry of phase.files) {
     const buildFile = buildFileSection[entry.value];
     const fileReference = buildFile ? fileReferenceSection[buildFile.fileRef] : null;
-    return unquote(fileReference?.path) === sourcePath || entry.comment === `${expectedBasename} in Sources`;
-  });
+    if (unquote(fileReference?.path) === sourcePath || entry.comment === `${expectedBasename} in Sources`) {
+      return buildFile;
+    }
+  }
+
+  return null;
 }
 
 function addSourceFile(project, targetUuid, groupKey, sourcePath) {
@@ -203,13 +219,101 @@ function addSourceFile(project, targetUuid, groupKey, sourcePath) {
   if (!existsSync(absolutePath)) {
     throw new Error(`Missing RN iOS test source: ${absolutePath}`);
   }
-  if (!hasSourceBuildFile(project, targetUuid, sourcePath)) {
+
+  let buildFile = findSourceBuildFile(project, targetUuid, sourcePath);
+  if (!buildFile) {
     project.addSourceFile(sourcePath, { target: targetUuid }, groupKey);
+    buildFile = findSourceBuildFile(project, targetUuid, sourcePath);
+  }
+  if (!buildFile) {
+    throw new Error(`Could not add RN iOS test source to the Sources build phase: ${sourcePath}`);
   }
 }
 
-function pruneUnexpectedSourceFiles(project, targetUuid) {
-  const allowedSourcePaths = new Set(TEST_SOURCE_FILES.map(({ projectPath }) => projectPath));
+function removePerFileCompilerFlags(project, targetUuid) {
+  const phase = project.pbxSourcesBuildPhaseObj(targetUuid);
+  const buildFileSection = project.pbxBuildFileSection();
+
+  for (const entry of phase.files) {
+    const buildFile = buildFileSection[entry.value];
+    if (buildFile?.settings?.COMPILER_FLAGS === undefined) continue;
+
+    delete buildFile.settings.COMPILER_FLAGS;
+    if (Object.keys(buildFile.settings).length === 0) {
+      delete buildFile.settings;
+    }
+  }
+}
+
+function targetBuildConfigurations(project, targetUuid) {
+  const target = project.pbxNativeTargetSection()[targetUuid];
+  const configurationList = project.pbxXCConfigurationList()[target.buildConfigurationList];
+  const buildConfigurationSection = project.pbxXCBuildConfigurationSection();
+
+  return configurationList.buildConfigurations.map((configuration) => buildConfigurationSection[configuration.value]);
+}
+
+function assertNoPerFileCompilerFlags(project, targetUuid, targetName) {
+  const phase = project.pbxSourcesBuildPhaseObj(targetUuid);
+  const buildFileSection = project.pbxBuildFileSection();
+
+  for (const entry of phase.files) {
+    const buildFile = buildFileSection[entry.value];
+    if (buildFile?.settings?.COMPILER_FLAGS !== undefined) {
+      throw new Error(`${targetName} must not use unsupported per-file compiler flags`);
+    }
+  }
+}
+
+function assertSourceFiles(project, targetUuid, targetName, sourceFiles) {
+  const phase = project.pbxSourcesBuildPhaseObj(targetUuid);
+  const fileReferenceSection = project.pbxFileReferenceSection();
+  const buildFileSection = project.pbxBuildFileSection();
+  const expectedPaths = new Set(sourceFiles.map(({ projectPath }) => projectPath));
+  const actualPaths = phase.files.map((entry) => {
+    const buildFile = buildFileSection[entry.value];
+    return unquote(fileReferenceSection[buildFile?.fileRef]?.path);
+  });
+
+  if (actualPaths.length !== expectedPaths.size || actualPaths.some((sourcePath) => !expectedPaths.has(sourcePath))) {
+    throw new Error(`${targetName} Sources phase does not match its generated source list`);
+  }
+}
+
+function assertBuildSettings(project, targetUuid, targetName, expectsStrictConcurrency) {
+  for (const configuration of targetBuildConfigurations(project, targetUuid)) {
+    const buildSettings = configuration.buildSettings;
+    if (buildSettings.OTHER_SWIFT_FLAGS !== SWIFT_FLAGS) {
+      throw new Error(`${targetName} must retain its widget and test Swift defines`);
+    }
+    if (buildSettings.IPHONEOS_DEPLOYMENT_TARGET !== DEPLOYMENT_TARGET || buildSettings.SWIFT_VERSION !== '5.0') {
+      throw new Error(`${targetName} must retain its iOS deployment target and Swift version`);
+    }
+    if (buildSettings.SUPPORTED_PLATFORMS !== '"iphoneos iphonesimulator"') {
+      throw new Error(`${targetName} must support device and simulator builds`);
+    }
+
+    if (expectsStrictConcurrency) {
+      if (
+        buildSettings.SWIFT_STRICT_CONCURRENCY !== 'complete' ||
+        buildSettings.SWIFT_TREAT_WARNINGS_AS_ERRORS !== 'YES' ||
+        buildSettings.EXECUTABLE_PREFIX !== '""'
+      ) {
+        throw new Error(
+          `${targetName} must compile with strict concurrency warnings as errors and an unprefixed executable name`,
+        );
+      }
+    } else if (
+      buildSettings.SWIFT_STRICT_CONCURRENCY !== undefined ||
+      buildSettings.SWIFT_TREAT_WARNINGS_AS_ERRORS !== undefined
+    ) {
+      throw new Error(`${targetName} must not enable strict concurrency`);
+    }
+  }
+}
+
+function pruneUnexpectedSourceFiles(project, targetUuid, sourceFiles) {
+  const allowedSourcePaths = new Set(sourceFiles.map(({ projectPath }) => projectPath));
   const phase = project.pbxSourcesBuildPhaseObj(targetUuid);
   const fileReferenceSection = project.pbxFileReferenceSection();
   const buildFileSection = project.pbxBuildFileSection();
@@ -321,14 +425,12 @@ function addFrameworkToTarget(project, targetUuid, frameworkName) {
   });
 }
 
-function setBuildSettings(project, targetUuid) {
-  const target = project.pbxNativeTargetSection()[targetUuid];
-  const configurationList = project.pbxXCConfigurationList()[target.buildConfigurationList];
-  const buildConfigurationSection = project.pbxXCBuildConfigurationSection();
-
-  for (const configuration of configurationList.buildConfigurations) {
-    const buildSettings = buildConfigurationSection[configuration.value].buildSettings;
+function setTestBuildSettings(project, targetUuid) {
+  for (const configuration of targetBuildConfigurations(project, targetUuid)) {
+    const buildSettings = configuration.buildSettings;
     delete buildSettings.INFOPLIST_FILE;
+    delete buildSettings.SWIFT_STRICT_CONCURRENCY;
+    delete buildSettings.SWIFT_TREAT_WARNINGS_AS_ERRORS;
 
     buildSettings.BUNDLE_LOADER = '""';
     buildSettings.ENABLE_TESTABILITY = 'YES';
@@ -339,8 +441,52 @@ function setBuildSettings(project, targetUuid) {
     buildSettings.OTHER_SWIFT_FLAGS = SWIFT_FLAGS;
     buildSettings.PRODUCT_BUNDLE_IDENTIFIER = BUNDLE_IDENTIFIER;
     buildSettings.PRODUCT_NAME = '"$(TARGET_NAME)"';
+    buildSettings.SUPPORTED_PLATFORMS = '"iphoneos iphonesimulator"';
     buildSettings.SWIFT_VERSION = '5.0';
     buildSettings.TEST_HOST = '""';
+  }
+}
+
+function setConcurrencyGateBuildSettings(project, targetUuid) {
+  for (const configuration of targetBuildConfigurations(project, targetUuid)) {
+    const buildSettings = configuration.buildSettings;
+    delete buildSettings.INFOPLIST_FILE;
+    delete buildSettings.BUNDLE_LOADER;
+    delete buildSettings.TEST_HOST;
+    delete buildSettings.PRODUCT_BUNDLE_IDENTIFIER;
+
+    buildSettings.CLANG_ENABLE_MODULES = 'YES';
+    buildSettings.EXECUTABLE_PREFIX = '""';
+    buildSettings.GENERATE_INFOPLIST_FILE = 'YES';
+    buildSettings.IPHONEOS_DEPLOYMENT_TARGET = DEPLOYMENT_TARGET;
+    buildSettings.OTHER_SWIFT_FLAGS = SWIFT_FLAGS;
+    buildSettings.PRODUCT_NAME = '"$(TARGET_NAME)"';
+    buildSettings.SKIP_INSTALL = 'YES';
+    buildSettings.SUPPORTED_PLATFORMS = '"iphoneos iphonesimulator"';
+    buildSettings.SWIFT_STRICT_CONCURRENCY = 'complete';
+    // Deliberate policy: ALL Swift warnings on this gate target become errors, not
+    // just concurrency ones — a new SDK/Xcode bump can red the suite on unrelated
+    // deprecations. Accepted because the target compiles a single audited file;
+    // revisit if an SDK bump reds the suite spuriously.
+    buildSettings.SWIFT_TREAT_WARNINGS_AS_ERRORS = 'YES';
+    buildSettings.SWIFT_VERSION = '5.0';
+    buildSettings.TARGETED_DEVICE_FAMILY = '"1,2"';
+  }
+}
+
+function assertConcurrencyGateProduct(project, targetUuid) {
+  const target = project.pbxNativeTargetSection()[targetUuid];
+  if (target.productType !== '"com.apple.product-type.library.static"') {
+    throw new Error(`${CONCURRENCY_GATE_TARGET_NAME} must be a static library target`);
+  }
+
+  const productReference = project.pbxFileReferenceSection()[target.productReference];
+  if (
+    !productReference ||
+    unquote(productReference.path) !== `${CONCURRENCY_GATE_TARGET_NAME}.a` ||
+    unquote(productReference.explicitFileType) !== 'archive.ar'
+  ) {
+    throw new Error(`${CONCURRENCY_GATE_TARGET_NAME} must reference its unprefixed static library product`);
   }
 }
 
@@ -377,7 +523,8 @@ function ensureTestTarget(project) {
   ensureBuildPhase(project, targetUuid, 'PBXResourcesBuildPhase', 'Resources');
 
   const groupKey = ensureGroup(project, TEST_TARGET_NAME);
-  pruneUnexpectedSourceFiles(project, targetUuid);
+  pruneUnexpectedSourceFiles(project, targetUuid, TEST_SOURCE_FILES);
+  removePerFileCompilerFlags(project, targetUuid);
   for (const { sourcePath, projectPath } of TEST_SOURCE_FILES) {
     stageSourceFile(sourcePath, projectPath);
     addSourceFile(project, targetUuid, groupKey, projectPath);
@@ -386,24 +533,123 @@ function ensureTestTarget(project) {
     addFrameworkToTarget(project, targetUuid, frameworkName);
   }
 
-  setBuildSettings(project, targetUuid);
+  setTestBuildSettings(project, targetUuid);
+  assertSourceFiles(project, targetUuid, TEST_TARGET_NAME, TEST_SOURCE_FILES);
+  assertNoPerFileCompilerFlags(project, targetUuid, TEST_TARGET_NAME);
+  assertBuildSettings(project, targetUuid, TEST_TARGET_NAME, false);
   return targetUuid;
 }
 
-function testBuildableReference(testTargetUuid, indentation) {
+function removeTargetDependencies(project, targetUuid, dependencyTargetUuid) {
+  const target = project.pbxNativeTargetSection()[targetUuid];
+  const targetDependencySection = project.hash.project.objects.PBXTargetDependency;
+  const containerItemProxySection = project.hash.project.objects.PBXContainerItemProxy;
+
+  const dependenciesToRemove = (target.dependencies ?? []).filter((dependency) => {
+    return targetDependencySection[dependency.value]?.target === dependencyTargetUuid;
+  });
+
+  if (dependenciesToRemove.length === 0) return 0;
+
+  const dependencyUuids = new Set(dependenciesToRemove.map((dependency) => dependency.value));
+  target.dependencies = target.dependencies.filter((dependency) => !dependencyUuids.has(dependency.value));
+  for (const dependencyUuid of dependencyUuids) {
+    const targetDependency = targetDependencySection[dependencyUuid];
+    delete targetDependencySection[dependencyUuid];
+    delete targetDependencySection[`${dependencyUuid}_comment`];
+
+    if (targetDependency?.targetProxy) {
+      delete containerItemProxySection[targetDependency.targetProxy];
+      delete containerItemProxySection[`${targetDependency.targetProxy}_comment`];
+    }
+  }
+
+  return dependenciesToRemove.length;
+}
+
+function ensureConcurrencyGateDependency(project, testTargetUuid, gateTargetUuid) {
+  const nativeTargets = project.pbxNativeTargetSection();
+  for (const [targetUuid] of Object.entries(nativeTargets)) {
+    if (isCommentKey(targetUuid) || targetUuid === testTargetUuid) continue;
+    removeTargetDependencies(project, targetUuid, gateTargetUuid);
+  }
+
+  const targetDependencySection = project.hash.project.objects.PBXTargetDependency;
+  const testTarget = nativeTargets[testTargetUuid];
+  const gateDependencies = (testTarget.dependencies ?? []).filter(
+    (dependency) => targetDependencySection[dependency.value]?.target === gateTargetUuid,
+  );
+
+  if (gateDependencies.length === 1) return;
+
+  removeTargetDependencies(project, testTargetUuid, gateTargetUuid);
+  project.addTargetDependency(testTargetUuid, [gateTargetUuid]);
+}
+
+function assertConcurrencyGateDependency(project, testTargetUuid, gateTargetUuid) {
+  const targetDependencySection = project.hash.project.objects.PBXTargetDependency;
+  const testTarget = project.pbxNativeTargetSection()[testTargetUuid];
+  const gateDependencyCount = (testTarget.dependencies ?? []).filter(
+    (dependency) => targetDependencySection[dependency.value]?.target === gateTargetUuid,
+  ).length;
+
+  if (gateDependencyCount !== 1) {
+    throw new Error(`${TEST_TARGET_NAME} must depend on ${CONCURRENCY_GATE_TARGET_NAME}`);
+  }
+}
+
+function ensureConcurrencyGateTarget(project) {
+  const existingTarget = findNativeTarget(project, CONCURRENCY_GATE_TARGET_NAME);
+  const targetUuid =
+    existingTarget?.uuid ??
+    project.addTarget(CONCURRENCY_GATE_TARGET_NAME, 'static_library', CONCURRENCY_GATE_TARGET_NAME).uuid;
+
+  ensureBuildPhase(project, targetUuid, 'PBXSourcesBuildPhase', 'Sources');
+
+  const groupKey = ensureGroup(project, CONCURRENCY_GATE_TARGET_NAME);
+  pruneUnexpectedSourceFiles(project, targetUuid, CONCURRENCY_GATE_SOURCE_FILES);
+  removePerFileCompilerFlags(project, targetUuid);
+  for (const { sourcePath, projectPath } of CONCURRENCY_GATE_SOURCE_FILES) {
+    stageSourceFile(sourcePath, projectPath);
+    addSourceFile(project, targetUuid, groupKey, projectPath);
+  }
+
+  setConcurrencyGateBuildSettings(project, targetUuid);
+  assertSourceFiles(project, targetUuid, CONCURRENCY_GATE_TARGET_NAME, CONCURRENCY_GATE_SOURCE_FILES);
+  assertNoPerFileCompilerFlags(project, targetUuid, CONCURRENCY_GATE_TARGET_NAME);
+  assertBuildSettings(project, targetUuid, CONCURRENCY_GATE_TARGET_NAME, true);
+  assertConcurrencyGateProduct(project, targetUuid);
+  return targetUuid;
+}
+
+function buildableReference(targetUuid, targetName, buildableName, indentation) {
   return `${indentation}<BuildableReference
 ${indentation}   BuildableIdentifier = "primary"
-${indentation}   BlueprintIdentifier = "${testTargetUuid}"
-${indentation}   BuildableName = "${TEST_TARGET_NAME}.xctest"
-${indentation}   BlueprintName = "${TEST_TARGET_NAME}"
+${indentation}   BlueprintIdentifier = "${targetUuid}"
+${indentation}   BuildableName = "${buildableName}"
+${indentation}   BlueprintName = "${targetName}"
 ${indentation}   ReferencedContainer = "container:Boardsesh.xcodeproj">
 ${indentation}</BuildableReference>`;
 }
 
-function writeTestScheme(testTargetUuid) {
+function buildActionEntry(targetUuid, targetName, buildableName) {
+  return `         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "YES">
+${buildableReference(targetUuid, targetName, buildableName, '            ')}
+         </BuildActionEntry>`;
+}
+
+function writeTestScheme(testTargetUuid, gateTargetUuid) {
   const schemeDirectory = join(projectDir, 'Boardsesh.xcodeproj/xcshareddata/xcschemes');
   const schemePath = join(schemeDirectory, `${TEST_TARGET_NAME}.xcscheme`);
   mkdirSync(schemeDirectory, { recursive: true });
+
+  const testBuildableName = `${TEST_TARGET_NAME}.xctest`;
+  const gateBuildableName = `${CONCURRENCY_GATE_TARGET_NAME}.a`;
 
   const scheme = `<?xml version="1.0" encoding="UTF-8"?>
 <Scheme
@@ -413,14 +659,8 @@ function writeTestScheme(testTargetUuid) {
       parallelizeBuildables = "YES"
       buildImplicitDependencies = "YES">
       <BuildActionEntries>
-         <BuildActionEntry
-            buildForTesting = "YES"
-            buildForRunning = "NO"
-            buildForProfiling = "NO"
-            buildForArchiving = "NO"
-            buildForAnalyzing = "YES">
-${testBuildableReference(testTargetUuid, '            ')}
-         </BuildActionEntry>
+${buildActionEntry(testTargetUuid, TEST_TARGET_NAME, testBuildableName)}
+${buildActionEntry(gateTargetUuid, CONCURRENCY_GATE_TARGET_NAME, gateBuildableName)}
       </BuildActionEntries>
    </BuildAction>
    <TestAction
@@ -431,7 +671,7 @@ ${testBuildableReference(testTargetUuid, '            ')}
       <Testables>
          <TestableReference
             skipped = "NO">
-${testBuildableReference(testTargetUuid, '            ')}
+${buildableReference(testTargetUuid, TEST_TARGET_NAME, testBuildableName, '            ')}
          </TestableReference>
       </Testables>
    </TestAction>
@@ -463,7 +703,10 @@ ${testBuildableReference(testTargetUuid, '            ')}
 </Scheme>
 `;
 
-  if (!scheme.includes(`BlueprintIdentifier = "${testTargetUuid}"`)) {
+  if (
+    !scheme.includes(`BlueprintIdentifier = "${testTargetUuid}"`) ||
+    !scheme.includes(`BlueprintIdentifier = "${gateTargetUuid}"`)
+  ) {
     throw new Error(`Could not write ${TEST_TARGET_NAME} scheme at ${schemePath}`);
   }
 
@@ -483,8 +726,13 @@ if (!findNativeTarget(project, APP_TARGET_NAME)) {
 }
 
 const testTargetUuid = ensureTestTarget(project);
+const concurrencyGateTargetUuid = ensureConcurrencyGateTarget(project);
+ensureConcurrencyGateDependency(project, testTargetUuid, concurrencyGateTargetUuid);
+assertConcurrencyGateDependency(project, testTargetUuid, concurrencyGateTargetUuid);
 removeStaleSdkFrameworkSearchPaths(project);
 writeFileSync(projectFilePath, project.writeSync());
-writeTestScheme(testTargetUuid);
+writeTestScheme(testTargetUuid, concurrencyGateTargetUuid);
 
-console.log(`Prepared ${TEST_TARGET_NAME} (${testTargetUuid}) for RN iOS Swift tests.`);
+console.log(
+  `Prepared ${TEST_TARGET_NAME} (${testTargetUuid}) and ${CONCURRENCY_GATE_TARGET_NAME} (${concurrencyGateTargetUuid}) for RN iOS Swift tests.`,
+);

@@ -4,8 +4,8 @@ import os.log
 
 @available(iOS 17.0, *)
 struct TakeControlIntent: LiveActivityIntent {
-    static var title: LocalizedStringResource = "Take Control"
-    static var description = IntentDescription("Claim wall control for this session")
+    static let title: LocalizedStringResource = "Take Control"
+    static let description = IntentDescription("Claim wall control for this session")
 
     private static let logger = Logger(subsystem: "com.boardsesh.app", category: "LiveActivityIntent")
 

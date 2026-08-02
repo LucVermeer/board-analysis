@@ -12,8 +12,8 @@ import os.log
 /// each Xcode target compiles its own binary, so keep the two copies identical.
 @available(iOS 17.0, *)
 struct ReconnectBoardIntent: LiveActivityIntent {
-    static var title: LocalizedStringResource = "Reconnect Board"
-    static var description = IntentDescription("Reconnect Bluetooth to your last board")
+    static let title: LocalizedStringResource = "Reconnect Board"
+    static let description = IntentDescription("Reconnect Bluetooth to your last board")
 
     private static let logger = Logger(subsystem: "com.boardsesh.app", category: "LiveActivityIntent")
 
