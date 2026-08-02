@@ -1166,7 +1166,7 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
     setVerifiedOverlay(null);
     // verifyOverlayForNativeUse owns exact-attempt recovery. This state change
     // withholds the stale path from subsequent notification renders.
-  });
+  }, [candidateOverlayUri, currentCacheKey, overlayLoadKey, verifyOverlayFile, verifyOverlayForNativeUse]);
   // Same guard for backgrounds: a stored entry from a prior boardKey
   // (FlashList row recycle case) must not bleed through to the new climb.
   const backgroundPaths = storedBackgrounds?.key === currentBoardKey ? storedBackgrounds.paths : [];

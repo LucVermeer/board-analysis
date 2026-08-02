@@ -199,7 +199,7 @@ describe('useNativeClimbRender in-flight race', () => {
     expect(fakeNativeModule.renderHoldsOverlay).toHaveBeenCalledTimes(1);
   });
 
-  it('revalidates an unchanged notification overlay after its verified file is evicted', async () => {
+  it('revalidates an unchanged notification overlay at native use after its verified file is evicted', async () => {
     const cacheKey = cacheKeyFor(FRAMES_CACHED);
     const overlayUri = 'file:///notification-evicted-later.png';
     existingOverlayUris.add(overlayUri);
@@ -209,6 +209,17 @@ describe('useNativeClimbRender in-flight race', () => {
 
     existingOverlayUris.delete(overlayUri);
     view.rerender();
+    expect(view.result.current.overlayUri).toBe(overlayUri);
+    expect(fakeNativeModule.renderHoldsOverlay).not.toHaveBeenCalled();
+
+    act(() => {
+      expect(
+        view.result.current.verifyOverlayForNativeUse(
+          view.result.current.overlayUri,
+          view.result.current.overlayLoadKey,
+        ),
+      ).toBeNull();
+    });
 
     await waitFor(() => expect(view.result.current.overlayUri).toBeNull());
     await waitFor(() => expect(pendingRenders.has(cacheKey)).toBe(true));
@@ -223,7 +234,14 @@ describe('useNativeClimbRender in-flight race', () => {
     await waitFor(() => expect(view.result.current.overlayUri).toBe(overlayUri));
 
     existingOverlayUris.delete(overlayUri);
-    view.rerender();
+    act(() => {
+      expect(
+        view.result.current.verifyOverlayForNativeUse(
+          view.result.current.overlayUri,
+          view.result.current.overlayLoadKey,
+        ),
+      ).toBeNull();
+    });
     await waitFor(() => expect(fakeNativeModule.renderHoldsOverlay).toHaveBeenCalledTimes(1));
     existingOverlayUris.add(overlayUri);
     await act(async () => {
@@ -233,7 +251,14 @@ describe('useNativeClimbRender in-flight race', () => {
     await waitFor(() => expect(view.result.current.overlayUri).toBe(overlayUri));
 
     existingOverlayUris.delete(overlayUri);
-    view.rerender();
+    act(() => {
+      expect(
+        view.result.current.verifyOverlayForNativeUse(
+          view.result.current.overlayUri,
+          view.result.current.overlayLoadKey,
+        ),
+      ).toBeNull();
+    });
     await waitFor(() => expect(fakeNativeModule.renderHoldsOverlay).toHaveBeenCalledTimes(2));
     existingOverlayUris.add(overlayUri);
     await act(async () => {
