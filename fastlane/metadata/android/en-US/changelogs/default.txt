@@ -1,7 +1,8 @@
 New:
-- Full MoonBoard catalog — thousands of problems with grades, stars and send counts, plus Mini 2025 and the original 2010. Original MoonBoard LEDs light up over Bluetooth.
-- Tap any circuit or playlist climb and the whole list drops into your queue in order.
-- See who's on the wall when a crewmate lights up a different climb.
-- Mix your own hold colours with colour-blind previews.
+- Download a board and keep climbing with no signal. Sends sync when you're back.
+- The Boardsesh grade reads the same on Kilter, Tension and MoonBoard, built from real sends.
+- Every gym gets a public page, plus a TV wall screen at boardsesh.com/kiosk/your-gym.
+- Android tablets get the full two-pane wall layout.
+- A Random sort, a projects filter, and pinned filter shortcuts.
 
-Fixed: boards light up more reliably over Bluetooth, and live sessions reconnect after a drop.
+Fixed: faster Bluetooth, and your board shows up again on reconnect.

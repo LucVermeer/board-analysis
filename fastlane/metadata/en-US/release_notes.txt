@@ -1,16 +1,19 @@
-This update is all about steadier Bluetooth, plus a new way to show off your wall on iPad.
+Three big ones this update: climb with no signal, one grade that reads the same on every board, and your gym on Boardsesh.
 
-Steadier on the wall:
-- iOS 26.5: fixed Kilter and Tension boards not lighting up, so no more blank board mid-session or connect-then-disconnect churn.
-- Queued a climb from a different board? Your wall no longer flashes dark. Boardsesh skips it and lights the next one that fits your setup.
-- Clear a MoonBoard's lights straight from the app over Bluetooth.
+Climb offline:
+- Download a board and keep going with no signal — search climbs, log sends, save favorites. Everything queues on your phone and syncs when you're back. Downloads finish in seconds now, and Manage storage shows what each board takes up so you can clear the ones you're not climbing on.
 
-New, On the Wall on iPad:
-- Mount an iPad by the wall for a full-screen view of what's lit right now, who's on it, and the session's hardest send, readable from across the room. Step back and forth through the wall's history and tap to relight a climb someone bumped. The screen stays awake for the whole session.
+The Boardsesh grade:
+- One grade that reads the same across Kilter, Tension and MoonBoard, built from every logged send, with a confidence level. Turn on "Show Boardsesh grades" in Settings. Problems nobody's logged yet get an estimate from their hold layout instead of sitting there ungraded.
+
+Your gym:
+- Every gym has a public page now — follow it, or claim it if it's yours. Put your walls on a TV at boardsesh.com/kiosk/your-gym: what's lit on every board, in your logo and colors, with a code climbers scan to get Boardsesh.
 
 Also:
-- Hide MoonBoard climbs set on holds you don't own: deselect a set and those problems drop out of your results.
-- MoonBoard sends now add to a climb's community repeat count instead of wiping it, so benchmarks show their real numbers and sort back to the top.
-- Add a climb to a playlist by pressing and holding it, and spin up a new playlist right there without the sheet vanishing mid-name.
+- Shuffle your results with the new Random sort, filter down to the projects you've tried but haven't sent, and pin the filter shortcuts you actually reach for.
+- The play screen opens on your own history with the climb — your sends and attempts, right where you can see them.
+- Your logbook counts straight: duplicate Aurora ascents land once, imported Tension attempts stay attempts, and MoonBoard 2024 sends import properly.
+- Queue rows and climb rows now work with VoiceOver.
+- Steadier Bluetooth, steadier sessions with your crew, and fewer memory crashes on long iPad days.
 
 Free, no ads, open source.

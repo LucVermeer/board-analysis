@@ -1,1 +1,8 @@
-Boardsesh 2.0 est refait en natif : listes fluides, recherche instantanée, fini les ralentissements. Cherche une voie et allume les prises en Bluetooth sur Kilter, Tension, MoonBoard, Decoy, Touchstone, Grasshopper et So iLL. Arrive devant un mur et vois en direct ce qui est allumé. Lance une session, tes potes partagent une file, fini de se passer le téléphone. Monte des entraînements Volume, Pyramide, Échelle ou Cotation ciblée. Importe ton carnet Aurora. Gratuit, sans pub, open source.
+Nouveautés :
+- Télécharge une board et grimpe sans réseau. Tes croix se synchronisent à ton retour.
+- La cotation Boardsesh se lit pareil sur Kilter, Tension et MoonBoard, à partir de vraies croix.
+- Chaque salle a sa page publique et un écran de mur pour la télé.
+- Les tablettes Android passent à la vue mur en deux panneaux.
+- Un tri Aléatoire, un filtre projets et des filtres épinglés.
+
+Corrigé : Bluetooth plus rapide et ta board réapparaît à la reconnexion.
