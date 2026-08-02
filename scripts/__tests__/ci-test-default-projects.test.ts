@@ -26,6 +26,7 @@ describe('selectTestDefaultProjects', () => {
     const paths = [
       './packages/web/vite.config.ts',
       './packages/backend/vite.config.ts',
+      './packages/location-sync/vite.config.ts',
       './packages/shared/queue/vite.config.ts',
       './packages/moonboard-ocr/vite.config.ts',
       './scripts/vite.config.ts',
@@ -33,6 +34,7 @@ describe('selectTestDefaultProjects', () => {
     const map = {
       './packages/web/vite.config.ts': projectConfig('web'),
       './packages/backend/vite.config.ts': projectConfig('backend'),
+      './packages/location-sync/vite.config.ts': projectConfig('location-sync'),
       './packages/shared/queue/vite.config.ts': projectConfig('queue'),
       './packages/moonboard-ocr/vite.config.ts': projectConfig('moonboard-ocr'),
       './scripts/vite.config.ts': projectConfig('scripts'),
@@ -95,7 +97,7 @@ describe('selectTestDefaultProjects', () => {
     expect(selectTestDefaultProjects(rootConfig(paths), reader(map), new Set(['web']))).toEqual(['queue']);
   });
 
-  it('documents the two infra projects excluded by default', () => {
-    expect([...INFRA_PROJECTS].sort()).toEqual(['backend', 'moonboard-ocr']);
+  it('documents the infra projects excluded by default', () => {
+    expect([...INFRA_PROJECTS].sort()).toEqual(['backend', 'location-sync', 'moonboard-ocr']);
   });
 });

@@ -1,9 +1,9 @@
 /// <reference types="node" />
 
 // Emit the positive `--project=` flag list for the CI `test-default` job: every
-// Vitest project declared in root `vite.config.ts` EXCEPT the two that run in
+// Vitest project declared in root `vite.config.ts` EXCEPT those that run in
 // their own jobs because they need infra (`backend`: postgres + redis;
-// `moonboard-ocr`: canvas system libs).
+// `location-sync`: migrated PostGIS; `moonboard-ocr`: canvas system libs).
 //
 // Why a positive list instead of `--project '!backend'`? Vitest's `--changed`
 // selects test files from the diff, and that spec set drives project init /
@@ -29,7 +29,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 /** Projects with dedicated CI jobs because they need services/libs `test-default` lacks. */
-export const INFRA_PROJECTS: ReadonlySet<string> = new Set(['backend', 'moonboard-ocr']);
+export const INFRA_PROJECTS: ReadonlySet<string> = new Set(['backend', 'location-sync', 'moonboard-ocr']);
 
 /** Reads a project's `vite.config.ts` source, given its path relative to the repo root. */
 export type ConfigReader = (relativePath: string) => string;
