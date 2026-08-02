@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 
@@ -52,6 +52,13 @@ vi.mock('../../lib/app-visibility', () => ({ useIsAppBackgrounded: () => false }
 import { LayeredClimbImage } from '../LayeredClimbImage';
 
 describe('LayeredClimbImage', () => {
+  beforeEach(() => {
+    // The expo-image mock records every mounted overlay's onLoad; tests that
+    // replay queued native events index into this list, so it must start empty
+    // regardless of which tests rendered an Image before them.
+    imageEvents.loadCallbacks.length = 0;
+  });
+
   it('renders a visible backing layer when no image layer is available yet', () => {
     const { container } = render(createElement(LayeredClimbImage, { overlayUri: null, backgroundPaths: [] }));
 
@@ -174,7 +181,6 @@ describe('LayeredClimbImage', () => {
   });
 
   it('does not expose the painted anchor for a queued load from a replaced overlay generation', () => {
-    imageEvents.loadCallbacks.length = 0;
     const onOverlayLoad = vi.fn();
     const { container, rerender } = render(
       createElement(LayeredClimbImage, {

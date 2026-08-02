@@ -238,8 +238,10 @@ If expo-image reports an overlay load failure, the hook validates that exact man
 missing file invalidates only the matching `{ uri, generation }`, then all mounted consumers share
 one bounded native regeneration. The replacement receives a new generation even though native
 writes it to the same URI, and `LayeredClimbImage` uses that generation in the React `key` so
-Android performs a real reload. Existing-file decode failures are terminal rather than retrying;
-each consumer gets one missing-file retry, replenished only after the exact replacement's `onLoad`.
+Android performs a real reload. An existing-file decode failure gets one bounded same-URI remount
+and is terminal on the second failure; each consumer holds a single retry budget shared across both
+failure classes (a present-file remount consumes the same budget as a missing-file regeneration),
+replenished only after the exact replacement's `onLoad`.
 The Android session notification has no expo-image callback, so it opts into synchronous file
 preflight, withholds a missing path, and keys native notification refreshes on the same generation.
 
