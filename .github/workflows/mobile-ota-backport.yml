@@ -102,11 +102,14 @@ jobs:
   backport:
     needs: setup
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     # Gates EOO_TOKEN + GOOGLE_MAPS_API_KEY + the EXPO_UPDATES_URL variable.
     environment: Production
     strategy:
       fail-fast: false
+      # Each eoas publish can perform four bounded attempts. Keep the platforms
+      # in one lane so a backport cannot create its own upload burst.
+      max-parallel: 1
       matrix:
         platform: ${{ fromJSON(needs.setup.outputs.platforms) }}
     # EOO_TOKEN (the app-scoped expo-open-ota publish key) is NOT a job-level env:

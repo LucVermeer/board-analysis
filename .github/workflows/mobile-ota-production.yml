@@ -22,6 +22,9 @@ on:
       - 'packages/board-constants/**'
       - 'packages/shared-schema/**'
       - 'patches/**' # bun patches to mobile deps live in root patches/, not under packages/mobile/**
+      - 'scripts/mobile-publish.ts'
+      - 'scripts/lib/mobile-publish-retry.ts'
+      - 'scripts/lib/eoas.ts'
       - '.github/workflows/mobile-ota-production.yml'
   workflow_dispatch:
     inputs:
@@ -96,7 +99,9 @@ env:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Four attempts per platform can spend 210 seconds in backoff alone, before
+    # two sequential exports/uploads. Leave enough room for the bounded retries.
+    timeout-minutes: 60
     # Gates EOO_TOKEN + GOOGLE_MAPS_API_KEY + the EXPO_UPDATES_URL variable.
     environment: Production
 
@@ -238,7 +243,8 @@ jobs:
       # single `--platform all` publish with one env could only ever match one side.
       - name: Publish iOS OTA
         id: publish_ios
-        if: steps.gate.outputs.configured == 'true' && (env.INPUT_PLATFORM == 'all' || env.INPUT_PLATFORM == 'ios')
+        if: steps.gate.outputs.configured == 'true' && steps.generate.outcome == 'success' && (env.INPUT_PLATFORM == 'all' || env.INPUT_PLATFORM == 'ios')
+        continue-on-error: true
         env:
           # V3 control-plane rejects Expo tokens; eoas publish authenticates with the
           # app-scoped EOO_TOKEN. The production channel→branch mapping is a one-time
@@ -258,7 +264,8 @@ jobs:
 
       - name: Publish Android OTA
         id: publish_android
-        if: steps.gate.outputs.configured == 'true' && (env.INPUT_PLATFORM == 'all' || env.INPUT_PLATFORM == 'android')
+        if: always() && steps.gate.outputs.configured == 'true' && steps.generate.outcome == 'success' && (env.INPUT_PLATFORM == 'all' || env.INPUT_PLATFORM == 'android')
+        continue-on-error: true
         env:
           EOO_TOKEN: ${{ secrets.EOO_TOKEN }}
           # Must match the Android native prebuild (android-apk-rn.yml) so the
@@ -271,21 +278,64 @@ jobs:
           if [ -n "$INPUT_MESSAGE" ]; then args+=(--message "$INPUT_MESSAGE"); fi
           vp run mobile:publish -- "${args[@]}"
 
+      # Publish both requested platforms before deciding the job result. This
+      # makes a partial release explicit without trying to roll back the platform
+      # that already succeeded (eoas has no safe cross-platform transaction).
+      - name: Summarize platform publish results
+        id: publish_summary
+        if: always() && steps.gate.outputs.configured == 'true' && steps.generate.outcome == 'success'
+        env:
+          IOS_OUTCOME: ${{ steps.publish_ios.outcome }}
+          ANDROID_OUTCOME: ${{ steps.publish_android.outcome }}
+        run: |
+          set -euo pipefail
+          ios_requested=false
+          android_requested=false
+          case "$INPUT_PLATFORM" in
+            all) ios_requested=true; android_requested=true ;;
+            ios) ios_requested=true ;;
+            android) android_requested=true ;;
+            *) echo "::error::Unknown platform '$INPUT_PLATFORM'"; exit 1 ;;
+          esac
+
+          all_success=true
+          any_success=false
+          if [ "$ios_requested" = true ]; then
+            [ "$IOS_OUTCOME" = success ] && any_success=true || all_success=false
+          fi
+          if [ "$android_requested" = true ]; then
+            [ "$ANDROID_OUTCOME" = success ] && any_success=true || all_success=false
+          fi
+          # Keep these outputs before the failure exit below: downstream steps
+          # use them to distinguish full success from a partial publish.
+          echo "all_success=$all_success" >> "$GITHUB_OUTPUT"
+          echo "any_success=$any_success" >> "$GITHUB_OUTPUT"
+          {
+            echo '### Production OTA platform results'
+            echo
+            echo "- iOS: $IOS_OUTCOME"
+            echo "- Android: $ANDROID_OUTCOME"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$all_success" != true ]; then
+            echo "::error::At least one requested platform failed. Successful platforms remain published; no automatic rollback was attempted."
+            exit 1
+          fi
+
       # Push the refreshed changelog to main so the committed copy is the single
       # source of truth (native builds bundle it; the next OTA diffs against it).
       # Runs AFTER publish, so the rebase here can't change what was just bundled.
       # The commit carries [skip ci], so this push can't re-trigger the workflow.
       # Rebase-and-retry guards a non-OTA push landing on main since checkout (OTA
       # runs are serialized on main, so two of these never race; only this workflow
-      # writes the file, so the rebase can't conflict). always() + the `changed`
-      # gate: the file still lands even if a publish failed — its entry then ships
-      # on the next OTA.
+      # writes the file, so the rebase can't conflict). The generated commit stays
+      # local when any requested platform fails; the next successful run regenerates
+      # it from merged PRs and pushes it.
       # Auth is the app token that checkout persisted (the app is in main's
       # PR-bypass list; github-actions[bot] is not, so it would 403). Skips when the
       # app isn't configured — checkout then holds only the default token, the OTA
       # already shipped, and main's committed copy is just left unchanged.
       - name: Push changelog to main
-        if: always() && github.ref == 'refs/heads/main' && steps.generate.outputs.changed == 'true' && vars.OTA_PUSH_APP_ID != ''
+        if: github.ref == 'refs/heads/main' && steps.publish_summary.outputs.all_success == 'true' && steps.generate.outputs.changed == 'true' && vars.OTA_PUSH_APP_ID != ''
         run: |
           set -euo pipefail
           cp packages/mobile/src/data/changelog.generated.json "$RUNNER_TEMP/changelog.json"
@@ -327,11 +377,11 @@ jobs:
           exit 1
 
       # Announce the publish to the Discord deploy channel (same webhook + pattern
-      # as ios-testflight-rn.yml / android-apk-rn.yml). Only when an OTA actually
-      # went out: gate wired AND at least one platform succeeded. A `--platform ios`
-      # run reports just "iOS" (the Android step is skipped, not success).
+      # as ios-testflight-rn.yml / android-apk-rn.yml). Only announce success when
+      # every requested platform succeeded. A `--platform ios` run reports just
+      # "iOS" (the Android step is skipped, not success).
       - name: Notify deployments channel
-        if: github.ref == 'refs/heads/main' && steps.gate.outputs.configured == 'true' && (steps.publish_ios.outcome == 'success' || steps.publish_android.outcome == 'success')
+        if: github.ref == 'refs/heads/main' && steps.publish_summary.outputs.all_success == 'true'
         env:
           DISCORD_DEPLOY_WEBHOOK: ${{ secrets.DISCORD_DEPLOY_WEBHOOK }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -368,17 +418,20 @@ jobs:
               echo "::warning::Failed to post Discord notification (see status above)"
 
       - name: Notify deployments channel of failure
-        if: github.ref == 'refs/heads/main' && failure()
+        if: always() && github.ref == 'refs/heads/main' && failure()
         env:
           DISCORD_DEPLOY_WEBHOOK: ${{ secrets.DISCORD_DEPLOY_WEBHOOK }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           COMMIT_SHA: ${{ github.sha }}
+          IOS_OUTCOME: ${{ steps.publish_ios.outcome }}
+          ANDROID_OUTCOME: ${{ steps.publish_android.outcome }}
         run: |
           if [ -z "$DISCORD_DEPLOY_WEBHOOK" ]; then
             echo "DISCORD_DEPLOY_WEBHOOK not set — skipping notification"
             exit 0
           fi
-          CONTENT=$(printf '🚨 **Production OTA publish failed** on `%s`\n<%s>' "${COMMIT_SHA:0:7}" "$RUN_URL")
+          CONTENT=$(printf '🚨 **Production OTA publish failed** on `%s`\n• iOS: %s\n• Android: %s\n• Any successful platform remains published; no automatic rollback was attempted.\n<%s>' \
+            "${COMMIT_SHA:0:7}" "$IOS_OUTCOME" "$ANDROID_OUTCOME" "$RUN_URL")
           jq -n --arg content "$CONTENT" '{content: $content, allowed_mentions: {parse: []}}' \
             | curl -sS --fail-with-body -X POST -H "Content-Type: application/json" -d @- "$DISCORD_DEPLOY_WEBHOOK" || \
               echo "::warning::Failed to post Discord notification (see status above)"
@@ -401,7 +454,7 @@ jobs:
       # See docs/mobile-ota-updates.md ("Health monitoring & rollback").
       - name: OTA health check (non-blocking)
         id: health
-        if: github.ref == 'refs/heads/main' && steps.gate.outputs.configured == 'true' && (steps.publish_ios.outcome == 'success' || steps.publish_android.outcome == 'success')
+        if: always() && github.ref == 'refs/heads/main' && steps.gate.outputs.configured == 'true' && (steps.publish_ios.outcome == 'success' || steps.publish_android.outcome == 'success')
         continue-on-error: true
         env:
           POSTHOG_PERSONAL_API_KEY: ${{ secrets.POSTHOG_PERSONAL_API_KEY }}
@@ -421,7 +474,7 @@ jobs:
       # is 'failure' only when the gate tripped (continue-on-error turned the
       # non-zero exit into a step failure without failing the job).
       - name: Notify OTA health to Discord
-        if: github.ref == 'refs/heads/main' && steps.gate.outputs.configured == 'true' && (steps.publish_ios.outcome == 'success' || steps.publish_android.outcome == 'success')
+        if: always() && github.ref == 'refs/heads/main' && steps.gate.outputs.configured == 'true' && (steps.publish_ios.outcome == 'success' || steps.publish_android.outcome == 'success')
         env:
           DISCORD_DEPLOY_WEBHOOK: ${{ secrets.DISCORD_DEPLOY_WEBHOOK }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

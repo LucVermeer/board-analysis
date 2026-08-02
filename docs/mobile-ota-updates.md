@@ -138,24 +138,39 @@ EOO_TOKEN=eoo_… \
   vp run mobile:publish -- --channel production --message "fix: <what>"
 ```
 
-This runs `eoas publish --branch production --channel production`, which does an `expo export` and
-uploads the bundle to our storage via the server. `eoas` reads the server URL from `updates.url` in
+The wrapper translates its `--channel production` selector to `eoas publish --branch production`.
+It deliberately does not pass eoas's deprecated `--channel` option; channel creation and mapping are
+control-plane operations described below. The publish does an `expo export` and uploads the bundle
+to our storage via the server. `eoas` reads the server URL from `updates.url` in
 `app.config.ts`, so `EXPO_UPDATES_URL` must be present. **Auth is `EOO_TOKEN`, not an Expo token:**
 the V3 control-plane server rejects Expo tokens, so publish/rollback need an app-scoped `eoo_` key
 minted in the dashboard. The CLI is pinned to **`eoas@3.0.5`** via `EOAS_PACKAGE_SPEC` in
 `scripts/lib/eoas.ts` — it must match the deployed server version exactly (V3 routes are
 app-scoped; a `v2` CLI 404s). Bump the server image and the pin in lockstep.
 
-**Progressive rollouts** are a control-plane feature: `eoas publish --branch production --channel
-production --rollout-percentage N` ships to only `N%` of the channel's installs. Finish or revert
+**Transient upload failures** are retried only when eoas output contains the exact S3 SlowDown XML
+response or an explicit HTTP 5xx status. Each platform gets at most four attempts, with 30, 60, and
+120 second waits. HTTP 4xx, authentication, configuration, export/build errors, unknown failures,
+and mixed permanent/retryable evidence fail immediately. Child output stays live and is not echoed
+again from a captured tail. The EAS-hosted preview path (`eas update`) is unchanged and does not use
+these retries.
+
+When both platforms are requested, iOS then Android publish sequentially and Android still runs if
+iOS fails. The run fails unless every requested platform succeeds, but it does not automatically
+roll back a platform that already published. A single eoas invocation can still upload some objects
+before its server-row write fails; making that internal PUT/database operation atomic requires an
+upstream expo-open-ota change.
+
+**Progressive rollouts** are a control-plane feature: `eoas publish --branch production
+--rollout-percentage N` ships to only `N%` of the channel's installs. Finish or revert
 the rollout from the dashboard once it's healthy — an unfinished per-update rollout **locks**
 further publishing on that branch, so a forgotten one turns the next auto-publish red.
 
 ### Channel↔branch mapping (control-plane)
 
-In V3 the channel→branch mapping lives in Postgres, not in Expo's API. `eoas publish --branch X
---channel Y` creates the **branch** (which holds the update) and the **channel**, but leaves them
-**unmapped**. A client requesting an unmapped channel gets `No branch mapping found`. Mapping is a
+In V3 the channel→branch mapping lives in Postgres, not in Expo's API. `eoas publish --branch X`
+creates the **branch** that holds the update; channel creation and mapping happen separately. A
+client requesting an unmapped channel gets `No branch mapping found`. Mapping is a
 **dashboard-admin operation**: the app-scoped `eoo_` publish key can list branches/channels but
 **cannot map** (it 403s with "This action requires a dashboard session").
 
@@ -351,9 +366,10 @@ Confirm the Android release actually shipped before relying on an Android backpo
    resolved fingerprint's 12-char prefix equals the anchor's `<shortfp>`**. A mismatch means the
    cherry-pick touched native inputs — it aborts, because an OTA would resolve a fingerprint no
    shipped binary has and silently never land. Ship such a fix as a new native build instead.
-4. Re-run with `dry_run` off to `eoas publish --channel production` under the approved fingerprint,
-   reaching that release's installs. It shares the `mobile-ota-production` concurrency lane, so it
-   never races a `main` OTA.
+4. Re-run with `dry_run` off. The wrapper targets the `production` branch under the approved
+   fingerprint, reaching that release's installs. It shares the `mobile-ota-production` concurrency
+   lane and limits the platform matrix to one publish at a time, so it never races a `main` OTA or
+   bursts iOS and Android uploads concurrently.
 
 To find the anchor for a release: `git tag -l 'release/ios-v2.1.0-*'`.
 
@@ -434,8 +450,9 @@ with read access) to the **Production** environment — the same secret
 
 ### Post-publish CI step (non-blocking)
 
-`mobile-ota-production.yml` runs the health check after a successful publish (a short `sleep` lets
-early relaunches report), with `continue-on-error: true`, and posts the verdict to the same Discord
+`mobile-ota-production.yml` runs the health check after any platform publishes successfully, even
+when another requested platform failed (a short `sleep` lets early relaunches report), with
+`continue-on-error: true`, and posts the verdict to the same Discord
 deploy channel as the publish announcement. It's wired so it can **never** block or fail the
 publish: `continue-on-error` swallows a tripped gate, and the script no-ops (exit 0) until the
 `POSTHOG_PERSONAL_API_KEY` secret exists. The step's `outcome` going to `failure` is what flips the
@@ -603,12 +620,14 @@ be requested.
 
 `packages/mobile/src/data/changelog.generated.json` is owned **solely** by the
 `mobile-ota-production.yml` workflow. On every production OTA it regenerates the file from merged-PR
-`## Release Notes` sections, commits it, **pushes it back to `main`** (commit tagged `[skip ci]` so
-the push can't re-trigger the OTA), and only then runs `eoas publish` (which needs a clean tree).
+`## Release Notes` sections and commits it locally before `eoas publish` (which needs a clean tree).
+It **pushes the commit back to `main`** only after every requested platform succeeds (the commit is
+tagged `[skip ci]` so the push can't re-trigger the OTA). A partial or total publish failure leaves
+the local CI commit unpushed; the next run regenerates the same source-of-truth files.
 Nothing else writes the file: the native build workflows and `refresh-acknowledgements.yml` only
-_read_ it, and a CI guard (`changelog-owned` in `ci.yml`) fails any PR that edits it. The OTA still
-publishes whether or not the push-back is wired — the push-back just keeps `main`'s copy (which the
-native binaries embed) current.
+_read_ it, and a CI guard (`changelog-owned` in `ci.yml`) fails any PR that edits it. A fully
+successful OTA still publishes when the push-back identity is not wired — the push-back just keeps
+`main`'s copy (which the native binaries embed) current.
 
 ### Native-release markers + on-demand update check
 
@@ -758,10 +777,9 @@ Every PR with React Native changes can publish its JS bundle to its own self-hos
 above — no per-tester build. Workflow: `.github/workflows/mobile-ota-preview.yml` (sweep:
 `mobile-ota-preview-sweep.yml`).
 
-- **Publish + map.** For each platform the workflow runs `eoas publish --branch pr-<number> --channel
-pr-<number>` (keeping `EXPO_UPDATES_CHANNEL=production` so the runtimeVersion equals the shipped
-  binary's), then maps the channel to the branch with `scripts/ota-channel-map.ts map` — because in
-  V3 `eoas publish` leaves the channel **unmapped** and the `eoo_` key can't map it (see
+- **Publish + map.** For each platform the wrapper runs `eoas publish --branch pr-<number>` (keeping
+  `EXPO_UPDATES_CHANNEL=production` so the runtimeVersion equals the shipped binary's), then creates
+  or remaps the channel with `scripts/ota-channel-map.ts map` — because the `eoo_` key can't map it (see
   [Channel↔branch mapping](#channelbranch-mapping-control-plane)). The channel name and the baked
   header are independent: the baked `expo-channel-name=production` drives the fingerprint, `pr-<number>`
   drives where the bundle lands and what the switcher selects.
