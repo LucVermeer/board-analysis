@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-08-03T06:20:33.229Z",
+  "generatedAt": "2026-08-03T08:46:25.203Z",
   "entries": [
+    {
+      "prNumber": 4185,
+      "category": "fixed",
+      "title": "Fixed the app logo briefly resizing itself while the app started up.",
+      "mergedAt": "2026-08-03T08:44:18Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4185"
+    },
     {
       "prNumber": 4184,
       "category": "fixed",

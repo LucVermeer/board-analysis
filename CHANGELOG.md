@@ -18,6 +18,7 @@ A new version shipped to the App Store and Play Store.
 
 ### Fixed
 
+- Fixed the app logo briefly resizing itself while the app started up. ([#4185](https://github.com/boardsesh/boardsesh/pull/4185))
 - Filter chips on the climbs list and logbook show their full names again instead of cutting off mid-word ([#4184](https://github.com/boardsesh/boardsesh/pull/4184))
 - Zeitangaben wie „vor 6 Minuten" erscheinen jetzt in deiner Sprache — bisher waren sie auf Deutsch, Spanisch und Französisch immer englisch. ([#4182](https://github.com/boardsesh/boardsesh/pull/4182))
 - Die deutsche App spricht jetzt sauberes Deutsch: das Board ist überall wirklich sächlich. ([#4180](https://github.com/boardsesh/boardsesh/pull/4180))
