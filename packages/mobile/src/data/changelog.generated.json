@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-08-02T11:39:56.566Z",
+  "generatedAt": "2026-08-03T01:47:32.255Z",
   "entries": [
+    {
+      "prNumber": 4177,
+      "category": "new",
+      "title": "Boardsesh spricht Deutsch: the whole app is now translated into German.",
+      "mergedAt": "2026-08-03T01:46:29Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4177"
+    },
     {
       "prNumber": 4151,
       "category": "fixed",

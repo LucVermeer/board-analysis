@@ -4,6 +4,12 @@ User-facing changes to Boardsesh, newest first. Auto-generated from the "Release
 Notes" section of merged pull requests — do not edit by hand (a CI check rejects
 manual changes). See docs/mobile-ota-updates.md.
 
+## 2026-08-03
+
+### New
+
+- Boardsesh spricht Deutsch: the whole app is now translated into German. ([#4177](https://github.com/boardsesh/boardsesh/pull/4177))
+
 ## 2026-08-02
 
 ### App update
