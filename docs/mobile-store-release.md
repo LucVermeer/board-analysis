@@ -45,7 +45,9 @@ value is fixed by editing the file and re-running.
   rerun without waiting on the other.
 
 The iOS "What's New" (`release_notes.txt`) is pushed by Mobile Store Metadata.
-The Android "What's new" is **not** — it already shipped with the AAB in step 1.
+The Android "What's new" is **not** — it already shipped with the AAB in step 1,
+one `whatsnew-<locale>` per `fastlane/metadata/android/<locale>/changelogs/`
+folder.
 
 ## 3. Manual "go live" in the stores
 
@@ -58,7 +60,13 @@ The Android "What's new" is **not** — it already shipped with the AAB in step 
 1. Bump `version` in `packages/mobile/app.config.ts`. Update
    `fastlane/metadata/en-US/release_notes.txt` (iOS) and
    `fastlane/metadata/android/en-US/changelogs/default.txt` (Android) if the
-   release notes changed. Merge to `main`.
+   release notes changed — **and translate them into `es-ES`, `es-MX`, `fr-FR`
+   and `de-DE`**, which both stores upload verbatim. Nothing generates these:
+   `scripts/generate-changelog.ts` writes only `CHANGELOG.md` and
+   `changelog.generated.json`, so every locale here is hand-written and a locale
+   you skip silently ships the previous release's notes. Play caps each
+   changelog at 500 characters and German runs long — check before pushing.
+   Merge to `main`.
 2. Merge auto-builds TestFlight + Play internal (Android changelog rides along).
 3. **In App Store Connect, create the new version first** — the `ios metadata`
    lane only writes into an existing _editable_ version. Then, if copy / icon /

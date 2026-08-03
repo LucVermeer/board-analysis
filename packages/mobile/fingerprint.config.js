@@ -81,6 +81,31 @@ module.exports = {
     },
     {
       type: 'dir',
+      filePath: 'locales',
+      reasons: ['iosInfoPlistLocales'],
+      overrideHashKey: 'iosInfoPlistLocales',
+      // app.config.ts points `locales` at these files by PATH, and the fingerprint
+      // hashes the config's resolved value (the paths), not the files behind it.
+      // Expo's iOS Locales plugin writes each one into <lang>.lproj/InfoPlist.strings
+      // at prebuild, so a permission-string edit is a native change no OTA can
+      // deliver — without this it would leave runtimeVersion untouched and ship to
+      // binaries whose prompts still read the old text.
+      //
+      // `overrideHashKey` names the source in the hash tree; it does NOT replace the
+      // content digest (see createSourceId in @expo/fingerprint's hash/Hash.js —
+      // the key is only the source id, contents are hashed either way). Confirmed by
+      // Scope note: this hashes the dir for BOTH platforms, so an iOS-only wording
+      // tweak also bumps the Android fingerprint and costs an Android rebuild it
+      // doesn't strictly need. Accepted deliberately — Android's prebuild output
+      // does depend on the *set* of languages here (Expo writes an empty
+      // res/values-b+<lang>/strings.xml per entry), so a narrower per-platform
+      // source would be wrong, not just fiddlier.
+      //
+      // probe: editing one string in locales/de.json moves the resolved iOS
+      // runtimeVersion.
+    },
+    {
+      type: 'dir',
       filePath: '../../patches',
       reasons: ['bunPatchedDependencies'],
       overrideHashKey: 'bunPatchedDependencies',

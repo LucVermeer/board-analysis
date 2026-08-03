@@ -6,14 +6,27 @@
 > below — the App Name, Subtitle, Description, Keywords, Promotional Text, and
 > What's New copy live in `name.txt`, `subtitle.txt`, `description.txt`,
 > `keywords.txt`, `promotional_text.txt`, and `release_notes.txt` respectively.
-> The listing is localized: `en-US` (default), `es-ES`, `es-MX`, and `fr-FR` each
-> have their own folder under `fastlane/metadata/`, and `deliver` uploads every
-> locale folder it finds. There's one Spanish app translation but no universal
-> App Store Spanish (unlike `en-US`, which covers every English storefront), so the
-> same `es` copy serves both `es-ES` (Spain) and `es-MX` (Mexico/Latin America) —
-> matching the two Spanish screenshot locales. This doc keeps the operational
-> material that `deliver` can't upload: review notes, privacy labels, and the
-> screenshot map.
+> The listing is localized: `en-US` (default), `es-ES`, `es-MX`, `fr-FR`, and
+> `de-DE` each have their own folder under `fastlane/metadata/`, and `deliver`
+> uploads every locale folder it finds. There's one Spanish app translation but no
+> universal App Store Spanish (unlike `en-US`, which covers every English
+> storefront), so the same `es` copy serves both `es-ES` (Spain) and `es-MX`
+> (Mexico/Latin America) — matching the two Spanish screenshot locales. German and
+> French each map to a single storefront locale.
+>
+> The "Languages" list Apple shows on the product page comes from the binary, not
+> from these folders: `ios.infoPlist.CFBundleLocalizations` plus the `locales` map
+> in `packages/mobile/app.config.ts`. Adding a listing locale without adding it
+> there leaves the page claiming English only.
+>
+> **First run for a brand-new locale:** `deliver` writes onto the _editable_ version's
+> localizations. If a newly added locale folder doesn't show up after a
+> `Mobile Store Metadata` run, add that language to the version once in App Store
+> Connect (version → **+** next to the language selector), then re-dispatch — every
+> later release picks it up from the folder on its own.
+>
+> This doc keeps the operational material that `deliver` can't upload: review
+> notes, privacy labels, and the screenshot map.
 
 ## Basic Info
 

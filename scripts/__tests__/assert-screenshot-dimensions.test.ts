@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
   type Dimensions,
+  EXPECTED_APP_STORE_LOCALES,
   findGooglePlayOffenders,
   findOffenders,
   findScreenshotTreeOffenders,
@@ -119,7 +123,9 @@ describe('findOffenders', () => {
 describe('findScreenshotTreeOffenders', () => {
   function screenshotTree(overrides: Partial<ScreenshotTree> = {}): ScreenshotTree {
     const baseTree: ScreenshotTree = {};
-    for (const locale of ['en-US', 'es-ES', 'es-MX', 'fr-FR']) {
+    // Derived, not literal: a new store locale must widen the fixture too, or
+    // every case below would fail on a spurious "missing locale" offender.
+    for (const locale of EXPECTED_APP_STORE_LOCALES) {
       baseTree[locale] = {
         'iphone-16-pro-max': [
           {
@@ -176,22 +182,22 @@ describe('findScreenshotTreeOffenders', () => {
 
   it('flags an unknown App Store locale directory', () => {
     const tree = screenshotTree({
-      'de-DE': {
+      'ja-JP': {
         'iphone-16-pro-max': [
           {
-            name: 'de-DE/iphone-16-pro-max/00-home.png',
+            name: 'ja-JP/iphone-16-pro-max/00-home.png',
             buffer: pngHeader({ width: 1320, height: 2868 }),
           },
         ],
         'ipad-pro-13-inch-m5': [
           {
-            name: 'de-DE/ipad-pro-13-inch-m5/00-home.png',
+            name: 'ja-JP/ipad-pro-13-inch-m5/00-home.png',
             buffer: pngHeader({ width: 2752, height: 2064 }),
           },
         ],
         'ipad-pro-11-inch-m5': [
           {
-            name: 'de-DE/ipad-pro-11-inch-m5/00-home.png',
+            name: 'ja-JP/ipad-pro-11-inch-m5/00-home.png',
             buffer: pngHeader({ width: 2420, height: 1668 }),
           },
         ],
@@ -199,7 +205,7 @@ describe('findScreenshotTreeOffenders', () => {
     });
     const offenders = findScreenshotTreeOffenders(tree);
     expect(
-      offenders.some((offender) => offender.file === 'de-DE' && /unknown App Store locale/.test(offender.reason)),
+      offenders.some((offender) => offender.file === 'ja-JP' && /unknown App Store locale/.test(offender.reason)),
     ).toBe(true);
   });
 
@@ -285,5 +291,19 @@ describe('findGooglePlayOffenders', () => {
     ]);
     expect(offenders).toHaveLength(1);
     expect(offenders[0].reason).toMatch(/no more than 2x/);
+  });
+});
+
+describe('Fastfile locale allowlist', () => {
+  // EXPECTED_DELIVER_LOCALES is the gate `fastlane ios screenshots` runs before
+  // uploading, and it's Ruby — nothing else in the TS test suite can see it, so
+  // it would drift silently on the next locale and only surface as a failed
+  // upload at release time. Parse the constant and hold it to the TS list.
+  it('matches EXPECTED_APP_STORE_LOCALES', () => {
+    const fastfile = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../../fastlane/Fastfile'), 'utf8');
+    const declaration = fastfile.match(/^EXPECTED_DELIVER_LOCALES\s*=\s*\[([^\]]*)\]/m);
+    expect(declaration, 'EXPECTED_DELIVER_LOCALES not found in fastlane/Fastfile').not.toBeNull();
+    const locales = [...(declaration?.[1] ?? '').matchAll(/"([^"]+)"/g)].map((entry) => entry[1]);
+    expect(locales.sort()).toEqual([...EXPECTED_APP_STORE_LOCALES].sort());
   });
 });
