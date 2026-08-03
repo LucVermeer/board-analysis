@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-08-03T05:24:05.947Z",
+  "generatedAt": "2026-08-03T06:20:33.229Z",
   "entries": [
+    {
+      "prNumber": 4184,
+      "category": "fixed",
+      "title": "Filter chips on the climbs list and logbook show their full names again instead of cutting off mid-word",
+      "mergedAt": "2026-08-03T06:19:09Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4184"
+    },
     {
       "prNumber": 4182,
       "category": "fixed",
