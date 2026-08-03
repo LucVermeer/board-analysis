@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-08-03T08:46:25.203Z",
+  "generatedAt": "2026-08-03T22:45:42.484Z",
   "entries": [
+    {
+      "prNumber": 4183,
+      "category": "fixed",
+      "title": "The Start button on the Record tab sits above the tab bar again on iOS 26.",
+      "mergedAt": "2026-08-03T21:37:48Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4183",
+      "body": "The climb filter sheet's Apply button sits at the bottom of the sheet again, without the dead gap below it.\nToasts, snackbars, and the last rows of lists stay clear of the tab bar."
+    },
     {
       "prNumber": 4185,
       "category": "fixed",

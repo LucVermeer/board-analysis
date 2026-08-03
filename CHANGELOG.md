@@ -18,6 +18,9 @@ A new version shipped to the App Store and Play Store.
 
 ### Fixed
 
+- The Start button on the Record tab sits above the tab bar again on iOS 26. ([#4183](https://github.com/boardsesh/boardsesh/pull/4183))
+  The climb filter sheet's Apply button sits at the bottom of the sheet again, without the dead gap below it.
+  Toasts, snackbars, and the last rows of lists stay clear of the tab bar.
 - Fixed the app logo briefly resizing itself while the app started up. ([#4185](https://github.com/boardsesh/boardsesh/pull/4185))
 - Filter chips on the climbs list and logbook show their full names again instead of cutting off mid-word ([#4184](https://github.com/boardsesh/boardsesh/pull/4184))
 - Zeitangaben wie „vor 6 Minuten" erscheinen jetzt in deiner Sprache — bisher waren sie auf Deutsch, Spanisch und Französisch immer englisch. ([#4182](https://github.com/boardsesh/boardsesh/pull/4182))
