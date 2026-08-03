@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-08-03T04:06:49.461Z",
+  "generatedAt": "2026-08-03T05:24:05.947Z",
   "entries": [
+    {
+      "prNumber": 4182,
+      "category": "fixed",
+      "title": "Zeitangaben wie „vor 6 Minuten\" erscheinen jetzt in deiner Sprache — bisher waren sie auf Deutsch, Spanisch und Französisch immer englisch.",
+      "mergedAt": "2026-08-03T05:22:49Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4182"
+    },
     {
       "prNumber": 4180,
       "category": "fixed",

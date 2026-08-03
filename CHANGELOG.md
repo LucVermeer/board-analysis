@@ -18,6 +18,7 @@ A new version shipped to the App Store and Play Store.
 
 ### Fixed
 
+- Zeitangaben wie „vor 6 Minuten" erscheinen jetzt in deiner Sprache — bisher waren sie auf Deutsch, Spanisch und Französisch immer englisch. ([#4182](https://github.com/boardsesh/boardsesh/pull/4182))
 - Die deutsche App spricht jetzt sauberes Deutsch: das Board ist überall wirklich sächlich. ([#4180](https://github.com/boardsesh/boardsesh/pull/4180))
 
 ## 2026-08-02
