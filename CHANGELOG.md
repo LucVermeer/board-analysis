@@ -8,6 +8,8 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### New
 
+- Boardsesh spricht jetzt Deutsch: the App Store and Play listings, the app, and the iOS permission ([#4178](https://github.com/boardsesh/boardsesh/pull/4178))
+  prompts all read in German now.
 - Boardsesh spricht Deutsch: the whole app is now translated into German. ([#4177](https://github.com/boardsesh/boardsesh/pull/4177))
 
 ## 2026-08-02

@@ -1,6 +1,14 @@
 {
-  "generatedAt": "2026-08-03T01:47:32.255Z",
+  "generatedAt": "2026-08-03T03:16:40.809Z",
   "entries": [
+    {
+      "prNumber": 4178,
+      "category": "new",
+      "title": "Boardsesh spricht jetzt Deutsch: the App Store and Play listings, the app, and the iOS permission",
+      "mergedAt": "2026-08-03T03:15:40Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4178",
+      "body": "prompts all read in German now."
+    },
     {
       "prNumber": 4177,
       "category": "new",
