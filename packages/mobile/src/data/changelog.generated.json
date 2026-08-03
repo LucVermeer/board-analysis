@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-08-03T03:16:40.809Z",
+  "generatedAt": "2026-08-03T04:06:49.461Z",
   "entries": [
+    {
+      "prNumber": 4180,
+      "category": "fixed",
+      "title": "Die deutsche App spricht jetzt sauberes Deutsch: das Board ist überall wirklich sächlich.",
+      "mergedAt": "2026-08-03T04:05:46Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4180"
+    },
     {
       "prNumber": 4178,
       "category": "new",
@@ -2799,6 +2806,19 @@
     }
   ],
   "nativeReleases": [
+    {
+      "kind": "native-release",
+      "date": "2026-08-03T13:15:39+10:00",
+      "sha": "bc0c94c47810101148505d80d67ff362bde636e8",
+      "platforms": [
+        "android",
+        "ios"
+      ],
+      "fingerprints": {
+        "android": "125ee4957b7ab20652b188779c121c0f30368be1",
+        "ios": "ef3763870f81c7d9aaa44924ddf3803b006fe26b"
+      }
+    },
     {
       "kind": "native-release",
       "date": "2026-08-02T17:35:43+10:00",
