@@ -8,6 +8,8 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- Fixed a crash that could take the app down when the now-playing bar appeared while a sheet was opening or closing ([#4198](https://github.com/boardsesh/boardsesh/pull/4198))
+- Tailscale dev servers now hydrate correctly — no more blank white pages when connecting over the tailnet. ([#4192](https://github.com/boardsesh/boardsesh/pull/4192))
 - Fixed a crash opening the Record tab in the browser app ([#4199](https://github.com/boardsesh/boardsesh/pull/4199))
 - Bug reports get through now, whatever board you're on — a board with lots of hold sets used to make the report vanish ([#4195](https://github.com/boardsesh/boardsesh/pull/4195))
   The "couldn't send" message no longer claims we saved your report when we didn't

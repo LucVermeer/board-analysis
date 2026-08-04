@@ -1,6 +1,20 @@
 {
-  "generatedAt": "2026-08-04T09:35:39.179Z",
+  "generatedAt": "2026-08-04T22:15:34.054Z",
   "entries": [
+    {
+      "prNumber": 4198,
+      "category": "fixed",
+      "title": "Fixed a crash that could take the app down when the now-playing bar appeared while a sheet was opening or closing",
+      "mergedAt": "2026-08-04T22:14:27Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4198"
+    },
+    {
+      "prNumber": 4192,
+      "category": "fixed",
+      "title": "Tailscale dev servers now hydrate correctly — no more blank white pages when connecting over the tailnet.",
+      "mergedAt": "2026-08-04T19:50:57Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4192"
+    },
     {
       "prNumber": 4199,
       "category": "fixed",
