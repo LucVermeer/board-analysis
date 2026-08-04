@@ -5,7 +5,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-import { minimumPublishJobTimeoutMinutes } from './lib/mobile-publish-retry';
+import { minimumPublishJobTimeoutMinutes, SELF_HOSTED_PUBLISH_JOB_OVERHEAD_MINUTES } from './lib/mobile-publish-retry';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const WORKFLOW_DIR = resolve(REPO_ROOT, '.github', 'workflows');
@@ -41,6 +41,21 @@ describe('production OTA workflow reliability', () => {
     // budgets. Killed mid-backoff, the run dies by timeout and never reports
     // `s3-slowdown` or fires the failure notification.
     expect(timeout).toBeGreaterThanOrEqual(minimumPublishJobTimeoutMinutes(2));
+  });
+
+  it('keeps the job-overhead allowance above the steps it is meant to cover', () => {
+    // SELF_HOSTED_PUBLISH_JOB_OVERHEAD_MINUTES is an estimate, and the source-map
+    // uploads are the bulk of it. They carry their own `timeout-minutes`, so
+    // raising those silently erodes the headroom every publish job's timeout is
+    // derived from. Re-read them here instead of trusting the constant's comment.
+    const publishJob = jobBlock(production, 'publish');
+    const stepTimeouts = [...publishJob.matchAll(/^\s+timeout-minutes: (\d+)$/gm)]
+      .map(([, minutes]) => Number(minutes))
+      .slice(1); // drop the job's own timeout; keep the per-step ones
+    const stepTimeoutTotal = stepTimeouts.reduce((total, minutes) => total + minutes, 0);
+
+    expect(stepTimeouts.length).toBeGreaterThanOrEqual(2);
+    expect(SELF_HOSTED_PUBLISH_JOB_OVERHEAD_MINUTES).toBeGreaterThan(stepTimeoutTotal);
   });
 
   it('attempts Android after iOS and records the aggregate result', () => {
