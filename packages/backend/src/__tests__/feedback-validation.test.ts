@@ -136,44 +136,116 @@ describe('SubmitAppFeedbackInputSchema', () => {
       expect(result.success).toBe(true);
     });
 
-    it('rejects a board name longer than 100 chars (cheap abuse guard)', () => {
+    it('accepts an arbitrary number of setIds (BOARDSESH-84: the 16 cap ate bug reports)', () => {
       const result = SubmitAppFeedbackInputSchema.safeParse({
         ...BASE,
-        rating: 5,
-        source: 'prompt',
-        boardName: 'x'.repeat(101),
+        comment: 'switch board did nothing',
+        source: 'shake-bug',
+        setIds: Array.from({ length: 20 }, (_, index) => index + 1),
       });
-      expect(result.success).toBe(false);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.setIds).toHaveLength(20);
+      }
     });
 
-    it('rejects an empty-string board name (use null instead of "")', () => {
+    it('truncates an absurd setIds list rather than dropping the report', () => {
       const result = SubmitAppFeedbackInputSchema.safeParse({
         ...BASE,
-        rating: 5,
-        source: 'prompt',
+        comment: 'switch board did nothing',
+        source: 'shake-bug',
+        setIds: Array.from({ length: 500 }, (_, index) => index + 1),
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.setIds).toHaveLength(64);
+      }
+    });
+  });
+
+  // The report is the payload; the board context around it is triage garnish. No
+  // enrichment field may fail the parse — see the `bestEffort` note in
+  // validation/schemas/feedback.ts and Sentry BOARDSESH-84.
+  describe('enrichment degrades instead of rejecting', () => {
+    const BUG = { ...BASE, comment: 'switch board did nothing', source: 'shake-bug' as const };
+
+    it('drops a board name past the abuse guard', () => {
+      const result = SubmitAppFeedbackInputSchema.safeParse({ ...BUG, boardName: 'x'.repeat(101) });
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data.boardName).toBeNull();
+    });
+
+    it('drops an empty-string board name', () => {
+      const result = SubmitAppFeedbackInputSchema.safeParse({ ...BUG, boardName: '' });
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data.boardName).toBeNull();
+    });
+
+    it('drops an out-of-range angle', () => {
+      const result = SubmitAppFeedbackInputSchema.safeParse({ ...BUG, angle: 360 });
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data.angle).toBeNull();
+    });
+
+    it('drops a wrong-typed layoutId', () => {
+      const result = SubmitAppFeedbackInputSchema.safeParse({ ...BUG, layoutId: 'one' });
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data.layoutId).toBeNull();
+    });
+
+    it('strips unknown context keys instead of rejecting (newer client, older server)', () => {
+      const result = SubmitAppFeedbackInputSchema.safeParse({
+        ...BUG,
+        context: { sessionId: 'sess-1', sneaky: 'payload' },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.context?.sessionId).toBe('sess-1');
+        expect(result.data.context).not.toHaveProperty('sneaky');
+      }
+    });
+
+    it('drops context entirely when it is not even an object', () => {
+      const result = SubmitAppFeedbackInputSchema.safeParse({ ...BUG, context: 'nope' });
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data.context).toBeNull();
+    });
+
+    it('survives every enrichment field being garbage at once', () => {
+      const result = SubmitAppFeedbackInputSchema.safeParse({
+        ...BUG,
+        appVersion: 'v'.repeat(200),
         boardName: '',
+        layoutId: {},
+        sizeId: 'big',
+        setIds: 'not-an-array',
+        angle: -5,
+        context: 42,
+        contactConsent: 'yes',
       });
-      expect(result.success).toBe(false);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.comment).toBe('switch board did nothing');
+        expect(result.data.source).toBe('shake-bug');
+      }
     });
 
-    it('rejects an out-of-range angle', () => {
+    it('clips an over-long comment rather than losing the report', () => {
       const result = SubmitAppFeedbackInputSchema.safeParse({
         ...BASE,
-        rating: 5,
-        source: 'prompt',
-        angle: 360,
+        comment: 'x'.repeat(5000),
+        source: 'shake-bug',
       });
-      expect(result.success).toBe(false);
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data.comment).toHaveLength(2000);
     });
 
-    it('rejects context with unknown keys', () => {
-      const result = SubmitAppFeedbackInputSchema.safeParse({
-        ...BASE,
-        rating: 5,
-        source: 'prompt',
-        context: { sneaky: 'payload' },
-      });
-      expect(result.success).toBe(false);
+    it('still rejects a submission missing the load-bearing fields', () => {
+      expect(SubmitAppFeedbackInputSchema.safeParse({ ...BASE, source: 'shake-bug' }).success).toBe(false);
+      expect(SubmitAppFeedbackInputSchema.safeParse({ ...BASE, rating: 5 }).success).toBe(false);
+      expect(SubmitAppFeedbackInputSchema.safeParse({ comment: 'a'.repeat(20), source: 'shake-bug' }).success).toBe(
+        false,
+      );
     });
   });
 });
