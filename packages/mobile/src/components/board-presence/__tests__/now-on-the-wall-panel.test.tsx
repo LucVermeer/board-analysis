@@ -315,6 +315,8 @@ describe('NowOnTheWallPanel', () => {
     toast.showToast.mockClear();
     pressableAvatar.mockClear();
     presence.refresh.mockClear();
+    // mockReset, not mockClear: the tap-ordering test installs an implementation.
+    analytics.track.mockReset();
   });
 
   it('adds the bottom safe-area inset to the switch-board footer in both sheet and inline variants', () => {
@@ -330,6 +332,22 @@ describe('NowOnTheWallPanel', () => {
     rerender(panelElement({ variant: 'column' }));
 
     expect(getByLabelText('mobile.boardPresence.switchBoardAria').getAttribute('data-padding-bottom')).toBe('46');
+  });
+
+  // The point of this event is to be provable evidence that the tap reached JS.
+  // If it ever fires only alongside the host handler it stops discriminating, so
+  // assert the ordering rather than just the call.
+  it('reports the switch-board tap before handing off to the host', () => {
+    presence.history = [makeClimb('one', 1), makeClimb('two', 2)];
+    const callOrder: string[] = [];
+    analytics.track.mockImplementation((event: string) => callOrder.push(`track:${event}`));
+    const onSwitchBoard = vi.fn(() => callOrder.push('onSwitchBoard'));
+
+    const { getByLabelText } = render(panelElement({ onSwitchBoard }));
+    fireEvent.click(getByLabelText('mobile.boardPresence.switchBoardAria'));
+
+    expect(callOrder).toEqual(['track:Board Swap Tapped', 'onSwitchBoard']);
+    expect(analytics.track).toHaveBeenCalledWith('Board Swap Tapped', expect.objectContaining({ historyCount: 2 }));
   });
 
   it('drops in-flight action results and clears loading when the board config changes', async () => {
