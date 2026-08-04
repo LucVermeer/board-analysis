@@ -4,6 +4,12 @@ User-facing changes to Boardsesh, newest first. Auto-generated from the "Release
 Notes" section of merged pull requests — do not edit by hand (a CI check rejects
 manual changes). See docs/mobile-ota-updates.md.
 
+## 2026-08-04
+
+### Fixed
+
+- Tap through None, Standard, and Extended warm-up again when building a workout on Android ([#4196](https://github.com/boardsesh/boardsesh/pull/4196))
+
 ## 2026-08-03
 
 ### App update

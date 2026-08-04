@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-08-03T22:45:42.484Z",
+  "generatedAt": "2026-08-04T09:28:14.618Z",
   "entries": [
+    {
+      "prNumber": 4196,
+      "category": "fixed",
+      "title": "Tap through None, Standard, and Extended warm-up again when building a workout on Android",
+      "mergedAt": "2026-08-04T09:27:15Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4196"
+    },
     {
       "prNumber": 4183,
       "category": "fixed",
