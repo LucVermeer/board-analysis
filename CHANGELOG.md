@@ -8,6 +8,9 @@ manual changes). See docs/mobile-ota-updates.md.
 
 ### Fixed
 
+- Fixed a crash opening the Record tab in the browser app ([#4199](https://github.com/boardsesh/boardsesh/pull/4199))
+- Bug reports get through now, whatever board you're on — a board with lots of hold sets used to make the report vanish ([#4195](https://github.com/boardsesh/boardsesh/pull/4195))
+  The "couldn't send" message no longer claims we saved your report when we didn't
 - Tap through None, Standard, and Extended warm-up again when building a workout on Android ([#4196](https://github.com/boardsesh/boardsesh/pull/4196))
 
 ## 2026-08-03

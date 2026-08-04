@@ -1,6 +1,21 @@
 {
-  "generatedAt": "2026-08-04T09:28:14.618Z",
+  "generatedAt": "2026-08-04T09:35:39.179Z",
   "entries": [
+    {
+      "prNumber": 4199,
+      "category": "fixed",
+      "title": "Fixed a crash opening the Record tab in the browser app",
+      "mergedAt": "2026-08-04T09:32:25Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4199"
+    },
+    {
+      "prNumber": 4195,
+      "category": "fixed",
+      "title": "Bug reports get through now, whatever board you're on — a board with lots of hold sets used to make the report vanish",
+      "mergedAt": "2026-08-04T09:31:40Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4195",
+      "body": "The \"couldn't send\" message no longer claims we saved your report when we didn't"
+    },
     {
       "prNumber": 4196,
       "category": "fixed",
