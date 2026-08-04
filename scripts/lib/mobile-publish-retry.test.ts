@@ -81,9 +81,17 @@ describe('self-hosted publish backoff budget', () => {
   });
 
   it('derives a job timeout floor that scales with the platforms a job publishes', () => {
-    expect(minimumPublishJobTimeoutMinutes(2)).toBeGreaterThan(minimumPublishJobTimeoutMinutes(1));
-    expect(minimumPublishJobTimeoutMinutes(1)).toBeGreaterThan(SELF_HOSTED_PUBLISH_WORST_CASE_MINUTES_PER_PLATFORM);
-    expect(Number.isInteger(minimumPublishJobTimeoutMinutes(2))).toBe(true);
+    // Each extra platform a job publishes must add that platform's whole worst
+    // case to the floor. A floor that grew by less would let a two-platform job
+    // be sized as if the second platform retried for free.
+    const onePlatformFloor = minimumPublishJobTimeoutMinutes(1);
+    const twoPlatformFloor = minimumPublishJobTimeoutMinutes(2);
+    expect(twoPlatformFloor - onePlatformFloor).toBeGreaterThanOrEqual(
+      Math.floor(SELF_HOSTED_PUBLISH_WORST_CASE_MINUTES_PER_PLATFORM),
+    );
+    // Whole minutes only — `timeout-minutes` rejects a fraction.
+    expect(Number.isInteger(twoPlatformFloor)).toBe(true);
+    expect(Number.isInteger(onePlatformFloor)).toBe(true);
   });
 });
 

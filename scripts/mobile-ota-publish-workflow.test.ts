@@ -48,11 +48,20 @@ describe('production OTA workflow reliability', () => {
     // uploads are the bulk of it. They carry their own `timeout-minutes`, so
     // raising those silently erodes the headroom every publish job's timeout is
     // derived from. Re-read them here instead of trusting the constant's comment.
+    // Select by indentation rather than by position: a job-level key sits at 4
+    // spaces and a step-level one at 8, so this stays correct no matter what
+    // order the keys appear in.
     const publishJob = jobBlock(production, 'publish');
-    const stepTimeouts = [...publishJob.matchAll(/^\s+timeout-minutes: (\d+)$/gm)]
-      .map(([, minutes]) => Number(minutes))
-      .slice(1); // drop the job's own timeout; keep the per-step ones
+    const stepTimeouts = [...publishJob.matchAll(/^ {8}timeout-minutes: (\d+)$/gm)].map(([, minutes]) =>
+      Number(minutes),
+    );
     const stepTimeoutTotal = stepTimeouts.reduce((total, minutes) => total + minutes, 0);
+
+    // Guard the selector itself: the job-level timeout must not be in this set,
+    // otherwise the comparison below would be measuring the wrong thing.
+    const jobTimeout = Number(publishJob.match(/^ {4}timeout-minutes: (\d+)$/m)?.[1]);
+    expect(jobTimeout).toBeGreaterThan(0);
+    expect(stepTimeouts).not.toContain(jobTimeout);
 
     expect(stepTimeouts.length).toBeGreaterThanOrEqual(2);
     expect(SELF_HOSTED_PUBLISH_JOB_OVERHEAD_MINUTES).toBeGreaterThan(stepTimeoutTotal);

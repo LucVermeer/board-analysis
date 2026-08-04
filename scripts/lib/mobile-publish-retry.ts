@@ -23,7 +23,10 @@ export const SELF_HOSTED_PUBLISH_MAX_ATTEMPTS = SELF_HOSTED_PUBLISH_RETRY_DELAYS
 
 /**
  * Measured cost of one throttled attempt (run 30855435091): a ~90s Metro export,
- * then uploads until the store rejects one.
+ * then uploads until the store rejects one. This is an observed floor, not a
+ * ceiling — a bigger bundle or a slower runner pushes it up, which eats into the
+ * headroom between a job's derived timeout floor and its actual `timeout-minutes`.
+ * If publishes get materially slower, re-measure this before trusting the floor.
  */
 export const SELF_HOSTED_PUBLISH_ATTEMPT_COST_MINUTES = 2.5;
 
