@@ -5,6 +5,8 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
+import { minimumPublishJobTimeoutMinutes } from './lib/mobile-publish-retry';
+
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const WORKFLOW_DIR = resolve(REPO_ROOT, '.github', 'workflows');
 const production = readFileSync(resolve(WORKFLOW_DIR, 'mobile-ota-production.yml'), 'utf8');
@@ -35,7 +37,10 @@ describe('production OTA workflow reliability', () => {
     expect(production).toContain('group: mobile-ota-production');
     expect(production).toContain('cancel-in-progress: false');
     const timeout = Number(jobBlock(production, 'publish').match(/timeout-minutes: (\d+)/)?.[1]);
-    expect(timeout).toBeGreaterThanOrEqual(45);
+    // iOS then Android in one job, so the job must outlast two full backoff
+    // budgets. Killed mid-backoff, the run dies by timeout and never reports
+    // `s3-slowdown` or fires the failure notification.
+    expect(timeout).toBeGreaterThanOrEqual(minimumPublishJobTimeoutMinutes(2));
   });
 
   it('attempts Android after iOS and records the aggregate result', () => {
@@ -97,7 +102,8 @@ describe('production OTA workflow reliability', () => {
 
   it('gives the preview publish job enough time for bounded platform retries', () => {
     const timeout = Number(jobBlock(preview, 'publish').match(/timeout-minutes: (\d+)/)?.[1]);
-    expect(timeout).toBeGreaterThanOrEqual(45);
+    // Same shape as production: one job publishes both platforms sequentially.
+    expect(timeout).toBeGreaterThanOrEqual(minimumPublishJobTimeoutMinutes(2));
   });
 });
 
@@ -113,7 +119,9 @@ describe('backport OTA workflow upload pressure', () => {
     expect(backport).toContain('cancel-in-progress: false');
     expect(backport).toContain('max-parallel: 1');
     const timeout = Number(jobBlock(backport, 'backport').match(/timeout-minutes: (\d+)/)?.[1]);
-    expect(timeout).toBeGreaterThanOrEqual(45);
+    // `max-parallel: 1` over a platform matrix, so each job publishes one
+    // platform and needs one backoff budget rather than two.
+    expect(timeout).toBeGreaterThanOrEqual(minimumPublishJobTimeoutMinutes(1));
   });
 
   it('overlays every trusted helper required by production publish and source-map upload', () => {

@@ -161,11 +161,29 @@ each `eoas publish` removes and recreates `packages/mobile/dist`, so the second 
 the first platform's source maps before they reached Sentry.
 
 **Transient upload failures** are retried only when eoas output contains the exact S3 SlowDown XML
-response or an explicit HTTP 5xx status. Each platform gets at most four attempts, with 30, 60, and
-120 second waits. HTTP 4xx, authentication, configuration, export/build errors, unknown failures,
-and mixed permanent/retryable evidence fail immediately. Child output stays live and is not echoed
-again from a captured tail. The EAS-hosted preview path (`eas update`) is unchanged and does not use
-these retries.
+response or an explicit HTTP 5xx status. Each platform gets at most six attempts, with 1, 3, 5, 10,
+and 15 minute waits — 34 minutes of backoff per platform. HTTP 4xx, authentication, configuration,
+export/build errors, unknown failures, and mixed permanent/retryable evidence fail immediately.
+Child output stays live and is not echoed again from a captured tail. The EAS-hosted preview path
+(`eas update`) is unchanged and does not use these retries.
+
+The ladder is sized against the object store's observed cooldown rather than a guess. Two production
+incidents (2026-07-15 run 29387706795, 2026-08-03 run 30855435091) throttled every attempt across a
+~17 minute window and only published after a cool-down; the earlier 30/60/120 second ladder gave up
+about 8 minutes in, so both needed a manual re-run. Waiting is the only lever available on this side
+of the process boundary: `eoas` uploads every asset (380 in a current bundle) through one unbounded
+`Promise.all`, and its `fetchWithRetries` retries network errors only — never an HTTP status — so a
+single 503 `SlowDown` response calls `process.exit(1)` and kills the publish. A whole-command retry
+re-runs the Metro export and re-fires the identical burst, which is what trips the limit, so shorter
+waits just fail faster. This is unchanged in `eoas@3.1.1`; capping upload concurrency needs an
+upstream expo-open-ota change (tracked by the reopened [#3620](https://github.com/boardsesh/boardsesh/issues/3620)).
+
+Because both budgets are spent sequentially, a fully throttled production run can take ~98 minutes
+before it reports failure. The publish jobs' `timeout-minutes` must stay above that: a job killed
+mid-backoff dies by timeout, losing both the `s3-slowdown` diagnosis and the failure notification.
+`scripts/mobile-ota-publish-workflow.test.ts` derives each floor from the ladder via
+`minimumPublishJobTimeoutMinutes()`, so widening the budget again fails CI until the timeouts follow.
+None of this costs anything on a healthy publish, which never sleeps and finishes in under 10 minutes.
 
 When both platforms are requested, iOS then Android publish sequentially and Android still runs if
 iOS fails. The run fails unless every requested platform succeeds, but it does not automatically
