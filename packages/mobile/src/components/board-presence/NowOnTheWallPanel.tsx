@@ -470,10 +470,21 @@ function NowOnTheWallPanelComponent(
     onClose?.();
   }, [invalidatePendingActions, onClose]);
 
+  // A ref, not a dep: a list `.length` in a callback's deps rebuilds it on every
+  // page of history (docs/react-native-performance.md).
+  const historyCountRef = useRef(combinedHistory.length);
+  historyCountRef.current = combinedHistory.length;
+
+  // Tracks before any other work, so it means "the tap reached JS" and nothing
+  // more — see the SHARED_EVENTS.BoardSwapTapped note for what the pairing buys.
   const handleSwitchBoard = useCallback(() => {
+    track(SHARED_EVENTS.BoardSwapTapped, {
+      boardId: boardPresenceBoardId ?? undefined,
+      historyCount: historyCountRef.current,
+    });
     invalidatePendingActions();
     onSwitchBoard();
-  }, [invalidatePendingActions, onSwitchBoard]);
+  }, [boardPresenceBoardId, invalidatePendingActions, onSwitchBoard]);
 
   const renderHistoryItem = useCallback(
     ({ item }: { item: BoardPresenceClimb }) => {

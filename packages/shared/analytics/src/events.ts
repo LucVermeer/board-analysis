@@ -257,6 +257,15 @@ export const SHARED_EVENTS = {
   // noisy for PostHog's event budget.
   BoardSheetOpened: 'Board Sheet Opened',
   BoardHistoryViewed: 'Board History Viewed',
+  // Fired from the switch-board control's own `onPress`, before any other work.
+  // Deliberately redundant with BoardSwapInvokedFromSheet (which fires one call
+  // deeper, in the drawer host): the PAIR is the diagnostic. A session with
+  // BoardSheetOpened but neither of these means the control was never reachable
+  // — occluded, laid out past the sheet's detent, or swallowed by a wedged
+  // presentation. This one alone means the handler chain broke in between.
+  // Without the pair, a "switching boards did nothing" report is unfalsifiable.
+  // Props: { boardId?, historyCount }.
+  BoardSwapTapped: 'Board Swap Tapped',
   BoardSwapInvokedFromSheet: 'Board Swap Invoked From Sheet',
   // Fired after a board-history catch-up completes. Props:
   // { boardId?, reason: 'gap' | 'reconnect' | 'foreground' | 'manual',
