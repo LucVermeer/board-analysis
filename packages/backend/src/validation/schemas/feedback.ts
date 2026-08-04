@@ -3,32 +3,72 @@ import { z } from 'zod';
 const RATING_SOURCES = ['prompt', 'drawer-feedback'] as const;
 const BUG_SOURCES = ['shake-bug', 'drawer-bug'] as const;
 
-const FeedbackContextInputSchema = z
-  .object({
-    climbUuid: z.string().max(64).optional().nullable(),
-    climbName: z.string().max(200).optional().nullable(),
-    difficulty: z.string().max(32).optional().nullable(),
-    sessionId: z.string().max(64).optional().nullable(),
-    sessionName: z.string().max(200).optional().nullable(),
-    url: z.string().max(1000).optional().nullable(),
-    userAgent: z.string().max(512).optional().nullable(),
-  })
-  .strict();
+const COMMENT_MAX = 2000;
+// An abuse bound, not a domain bound. Real boards carry a handful of sets; the
+// old bound of 16 was sized to the domain and a board that exceeded it cost us
+// the whole report (see `bestEffort`).
+const SET_IDS_MAX = 64;
+
+/**
+ * Diagnostic enrichment is never fatal.
+ *
+ * The report itself — `source`, `comment`, `platform` — is the payload. The board
+ * context wrapped around it (which board, which layout, what angle) is a
+ * nice-to-have that helps triage. Rejecting the mutation because one of those
+ * optional fields failed validation throws away the thing we actually wanted.
+ *
+ * That is not hypothetical: `setIds` was capped at 16 entries, and on 2026-08-03 a
+ * user on a board with more sets than that hit the cap four times in a row while
+ * trying to report a crash (Sentry BOARDSESH-84). Every one of those reports was
+ * discarded, and the user got a generic failure.
+ *
+ * So each enrichment field degrades to `null` instead of failing the parse. Widen
+ * the bounds too where they were domain-sized, but the `catch` is the real
+ * guarantee: a newer client that sends a field shape this server has never seen
+ * still gets its bug report filed.
+ */
+function bestEffort<T extends z.ZodType>(schema: T) {
+  return schema.optional().nullable().catch(null);
+}
+
+const FeedbackContextInputSchema = z.object({
+  climbUuid: bestEffort(z.string().max(64)),
+  climbName: bestEffort(z.string().max(200)),
+  difficulty: bestEffort(z.string().max(32)),
+  sessionId: bestEffort(z.string().max(64)),
+  sessionName: bestEffort(z.string().max(200)),
+  url: bestEffort(z.string().max(1000)),
+  userAgent: bestEffort(z.string().max(512)),
+});
+// Deliberately NOT `.strict()`: an unknown key is a newer client talking to an
+// older server, and that must not cost the report. Zod strips unknown keys, and
+// `normalizeContext` in the resolver only reads keys it knows about.
 
 export const SubmitAppFeedbackInputSchema = z
   .object({
-    rating: z.number().int().min(1).max(5).optional().nullable(),
-    comment: z.string().trim().max(2000).optional().nullable(),
+    rating: bestEffort(z.number().int().min(1).max(5)),
+    // Clipped, not rejected — an over-long comment is still a bug report, and the
+    // `.refine` below reads the clipped value.
+    comment: z
+      .string()
+      .trim()
+      .transform((value) => (value.length > COMMENT_MAX ? value.slice(0, COMMENT_MAX) : value))
+      .optional()
+      .nullable(),
     platform: z.enum(['ios', 'android', 'web']),
-    appVersion: z.string().max(64).optional().nullable(),
     source: z.enum([...RATING_SOURCES, ...BUG_SOURCES]),
-    boardName: z.string().min(1).max(100).optional().nullable(),
-    layoutId: z.number().int().optional().nullable(),
-    sizeId: z.number().int().optional().nullable(),
-    setIds: z.array(z.number().int()).max(16).optional().nullable(),
-    angle: z.number().int().min(0).max(180).optional().nullable(),
-    context: FeedbackContextInputSchema.optional().nullable(),
-    contactConsent: z.boolean().optional().nullable(),
+    appVersion: bestEffort(z.string().max(64)),
+    boardName: bestEffort(z.string().min(1).max(100)),
+    layoutId: bestEffort(z.number().int()),
+    sizeId: bestEffort(z.number().int()),
+    setIds: bestEffort(
+      z
+        .array(z.number().int())
+        .transform((setIds) => (setIds.length > SET_IDS_MAX ? setIds.slice(0, SET_IDS_MAX) : setIds)),
+    ),
+    angle: bestEffort(z.number().int().min(0).max(180)),
+    context: bestEffort(FeedbackContextInputSchema),
+    contactConsent: bestEffort(z.boolean()),
   })
   .refine((data) => !(RATING_SOURCES as readonly string[]).includes(data.source) || (data.rating ?? null) !== null, {
     message: 'rating is required for rating-source feedback',

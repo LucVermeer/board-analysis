@@ -381,7 +381,7 @@
     "submitBug": "Envoyer le rapport de bug",
     "successRating": "Merci, c'est noté.",
     "successBug": "Bug enregistré, merci.",
-    "errorRating": "Envoi impossible. On garde votre retour.",
+    "errorRating": "Envoi impossible. Réessayez dans un instant.",
     "closeAria": "Fermer",
     "joinDiscord": "Rejoindre Discord"
   },

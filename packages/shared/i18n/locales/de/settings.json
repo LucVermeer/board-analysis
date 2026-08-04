@@ -381,7 +381,7 @@
     "submitBug": "Fehlerbericht senden",
     "successRating": "Danke — ist notiert.",
     "successBug": "Fehler notiert — danke.",
-    "errorRating": "Ging nicht raus — wir heben dein Feedback auf.",
+    "errorRating": "Ging nicht raus — versuch es gleich noch mal.",
     "closeAria": "Schließen",
     "joinDiscord": "Discord beitreten"
   },
