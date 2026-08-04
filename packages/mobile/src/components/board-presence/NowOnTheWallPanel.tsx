@@ -470,19 +470,13 @@ function NowOnTheWallPanelComponent(
     onClose?.();
   }, [invalidatePendingActions, onClose]);
 
-  // Mirrored into a ref rather than listed as a dep: a list `.length` in a
-  // callback's deps rebuilds it on every page of history (see the perf checklist
-  // in docs/react-native-performance.md). Assigning during render is the standard
-  // latest-value ref pattern.
+  // A ref, not a dep: a list `.length` in a callback's deps rebuilds it on every
+  // page of history (docs/react-native-performance.md).
   const historyCountRef = useRef(combinedHistory.length);
   historyCountRef.current = combinedHistory.length;
 
-  // Track BEFORE `invalidatePendingActions()` and before handing off to the host,
-  // so this event means "the tap reached JS" and nothing more. Paired with the
-  // host's BoardSwapInvokedFromSheet it separates an unreachable control from a
-  // broken handler — see the SHARED_EVENTS.BoardSwapTapped note. `historyCount`
-  // rides along because the footer sits below the history list, so a dead tap
-  // correlated with a long list points at layout rather than hit-testing.
+  // Tracks before any other work, so it means "the tap reached JS" and nothing
+  // more — see the SHARED_EVENTS.BoardSwapTapped note for what the pairing buys.
   const handleSwitchBoard = useCallback(() => {
     track(SHARED_EVENTS.BoardSwapTapped, {
       boardId: boardPresenceBoardId ?? undefined,
