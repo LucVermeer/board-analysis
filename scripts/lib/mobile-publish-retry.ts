@@ -10,8 +10,53 @@
 
 import { spawn } from 'node:child_process';
 
-export const SELF_HOSTED_PUBLISH_RETRY_DELAYS_MS = [30_000, 60_000, 120_000] as const;
+/**
+ * Backoff ladder for one platform, in wait order: 34 minutes total, sized to
+ * outlast the object store's observed throttle cooldown (runs 29387706795 and
+ * 30855435091 both stayed throttled ~17 minutes; the old 30/60/120s ladder gave
+ * up ~8 minutes in and needed a manual re-run). Do not shorten these — a retry
+ * re-fires the same asset-upload burst that trips the limit, so waiting is the
+ * only lever here. Rationale and the upstream eoas bugs: docs/mobile-ota-updates.md.
+ */
+export const SELF_HOSTED_PUBLISH_RETRY_DELAYS_MS = [60_000, 180_000, 300_000, 600_000, 900_000] as const;
 export const SELF_HOSTED_PUBLISH_MAX_ATTEMPTS = SELF_HOSTED_PUBLISH_RETRY_DELAYS_MS.length + 1;
+
+/**
+ * Measured cost of one throttled attempt (run 30855435091): a ~90s Metro export,
+ * then uploads until the store rejects one. This is an observed floor, not a
+ * ceiling — a bigger bundle or a slower runner pushes it up, which eats into the
+ * headroom between a job's derived timeout floor and its actual `timeout-minutes`.
+ * If publishes get materially slower, re-measure this before trusting the floor.
+ */
+export const SELF_HOSTED_PUBLISH_ATTEMPT_COST_MINUTES = 2.5;
+
+/** Every wait plus the failed attempt that precedes each one. */
+export const SELF_HOSTED_PUBLISH_WORST_CASE_MINUTES_PER_PLATFORM =
+  SELF_HOSTED_PUBLISH_RETRY_DELAYS_MS.reduce((total, delayMs) => total + delayMs, 0) / 60_000 +
+  SELF_HOSTED_PUBLISH_MAX_ATTEMPTS * SELF_HOSTED_PUBLISH_ATTEMPT_COST_MINUTES;
+
+/**
+ * Everything a publish job does around the publish steps themselves. Dominated
+ * by the two source-map uploads, which carry their own `timeout-minutes` in the
+ * workflow; the rest (checkout, setup-vp/bun, `bun install`, changelog, health
+ * check) measured ~3 minutes in run 30855435091. mobile-ota-publish-workflow.test.ts
+ * re-reads those step timeouts and fails if they outgrow this allowance.
+ */
+export const SELF_HOSTED_PUBLISH_JOB_OVERHEAD_MINUTES = 30;
+
+/**
+ * Minimum `timeout-minutes` a publish job needs so a fully throttled run still
+ * reaches the retry wrapper's own verdict instead of being killed mid-backoff.
+ * `platforms` is how many platforms one job publishes sequentially: production
+ * and preview do iOS then Android in a single job, backport fans out one
+ * platform per matrix job.
+ */
+export function minimumPublishJobTimeoutMinutes(platforms: number): number {
+  return (
+    Math.ceil(platforms * SELF_HOSTED_PUBLISH_WORST_CASE_MINUTES_PER_PLATFORM) +
+    SELF_HOSTED_PUBLISH_JOB_OVERHEAD_MINUTES
+  );
+}
 
 export type OtaPublishPlatform = 'ios' | 'android';
 export type PublishFailureKind = 's3-slowdown' | 'http-5xx' | 'permanent' | 'unknown';

@@ -101,9 +101,16 @@ env:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    # Four attempts per platform can spend 210 seconds in backoff alone, before
-    # two sequential exports/uploads. Leave enough room for the bounded retries.
-    timeout-minutes: 60
+    # Six attempts per platform can spend 34 minutes in backoff alone, and iOS
+    # and Android each get that budget sequentially — a fully throttled run is
+    # ~98 minutes of publishing plus setup, changelog, source maps and the health
+    # check. This ceiling must stay above the retry budget: if the job is killed
+    # mid-backoff the run dies by timeout instead of reporting `s3-slowdown`,
+    # losing both the diagnosis and the failure notification. Derived and
+    # enforced in mobile-ota-publish-workflow.test.ts from the ladder in
+    # scripts/lib/mobile-publish-retry.ts — raise both together or not at all.
+    # Costs nothing on a healthy publish, which finishes in well under 10 minutes.
+    timeout-minutes: 150
     # Gates EOO_TOKEN + GOOGLE_MAPS_API_KEY + the EXPO_UPDATES_URL variable.
     environment: Production
 

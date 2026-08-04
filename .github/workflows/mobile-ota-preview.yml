@@ -260,9 +260,12 @@ jobs:
     needs: gate
     if: needs.gate.outputs.action == 'publish'
     runs-on: ubuntu-latest
-    # Each platform may perform four attempts with 210 seconds of backoff. The
-    # job publishes iOS then Android, so leave room for both bounded retry sets.
-    timeout-minutes: 60
+    # Each platform may perform six attempts with 34 minutes of backoff. The job
+    # publishes iOS then Android, so leave room for both bounded retry sets — a
+    # job killed mid-backoff dies by timeout instead of reporting `s3-slowdown`.
+    # Derived and enforced in mobile-ota-publish-workflow.test.ts from the ladder
+    # in scripts/lib/mobile-publish-retry.ts.
+    timeout-minutes: 150
     # This job runs PR-author code with EOO_TOKEN, so its workflow-token scope is capped
     # at the minimum: read the tree, write the pr-preview deployment. NO issues /
     # pull-requests write — those stay on the trusted announce / cleanup jobs.

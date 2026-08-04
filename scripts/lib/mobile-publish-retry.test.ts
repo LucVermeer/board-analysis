@@ -6,8 +6,10 @@ import {
   PublishFailureEvidenceScanner,
   publishPlatformsSequentially,
   publishSelfHostedPlatformWithRetry,
+  minimumPublishJobTimeoutMinutes,
   SELF_HOSTED_PUBLISH_MAX_ATTEMPTS,
   SELF_HOSTED_PUBLISH_RETRY_DELAYS_MS,
+  SELF_HOSTED_PUBLISH_WORST_CASE_MINUTES_PER_PLATFORM,
   type PublishCommandRunner,
   type TextOutput,
 } from './mobile-publish-retry';
@@ -55,8 +57,46 @@ describe('self-hosted publish failure classification', () => {
   });
 });
 
+describe('self-hosted publish backoff budget', () => {
+  // The point of the ladder is to outlast the object store's throttle, not just
+  // to retry. Run 30855435091 stayed throttled across a 17-minute window and the
+  // 30/60/120s ladder gave up ~8 minutes in; anything under 30 minutes of total
+  // backoff would reintroduce that failure.
+  const OBSERVED_THROTTLE_WINDOW_MINUTES = 17;
+
+  it('waits longer than the observed throttle window', () => {
+    const totalBackoffMinutes =
+      SELF_HOSTED_PUBLISH_RETRY_DELAYS_MS.reduce((total, delayMs) => total + delayMs, 0) / 60_000;
+    expect(totalBackoffMinutes).toBeGreaterThan(OBSERVED_THROTTLE_WINDOW_MINUTES);
+    expect(totalBackoffMinutes).toBeGreaterThanOrEqual(30);
+  });
+
+  it('grows the delays monotonically so early failures still retry quickly', () => {
+    const delays = [...SELF_HOSTED_PUBLISH_RETRY_DELAYS_MS];
+    expect(delays.length).toBeGreaterThan(0);
+    expect(delays[0]).toBeLessThanOrEqual(60_000);
+    for (let index = 1; index < delays.length; index++) {
+      expect(delays[index]).toBeGreaterThanOrEqual(delays[index - 1]);
+    }
+  });
+
+  it('derives a job timeout floor that scales with the platforms a job publishes', () => {
+    // Each extra platform a job publishes must add that platform's whole worst
+    // case to the floor. A floor that grew by less would let a two-platform job
+    // be sized as if the second platform retried for free.
+    const onePlatformFloor = minimumPublishJobTimeoutMinutes(1);
+    const twoPlatformFloor = minimumPublishJobTimeoutMinutes(2);
+    expect(twoPlatformFloor - onePlatformFloor).toBeGreaterThanOrEqual(
+      Math.floor(SELF_HOSTED_PUBLISH_WORST_CASE_MINUTES_PER_PLATFORM),
+    );
+    // Whole minutes only — `timeout-minutes` rejects a fraction.
+    expect(Number.isInteger(twoPlatformFloor)).toBe(true);
+    expect(Number.isInteger(onePlatformFloor)).toBe(true);
+  });
+});
+
 describe('self-hosted publish retries', () => {
-  it('uses four total attempts with 30/60/120 second backoff', async () => {
+  it('retries through the whole backoff ladder before succeeding', async () => {
     const attempts: number[] = [];
     const runner: PublishCommandRunner = async ({ onStderr }) => {
       attempts.push(attempts.length + 1);
@@ -75,8 +115,13 @@ describe('self-hosted publish retries', () => {
       { runner, sleeper, stdout: stdout.output, stderr: stderr.output },
     );
 
-    expect(outcome).toEqual({ platform: 'ios', success: true, attempts: 4, failureKind: null });
-    expect(attempts).toHaveLength(4);
+    expect(outcome).toEqual({
+      platform: 'ios',
+      success: true,
+      attempts: SELF_HOSTED_PUBLISH_MAX_ATTEMPTS,
+      failureKind: null,
+    });
+    expect(attempts).toHaveLength(SELF_HOSTED_PUBLISH_MAX_ATTEMPTS);
     expect(sleeper.mock.calls.map(([delayMs]) => delayMs)).toEqual([...SELF_HOSTED_PUBLISH_RETRY_DELAYS_MS]);
   });
 
