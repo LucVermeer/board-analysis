@@ -1,6 +1,13 @@
 {
-  "generatedAt": "2026-08-04T22:15:34.054Z",
+  "generatedAt": "2026-08-05T12:12:35.740Z",
   "entries": [
+    {
+      "prNumber": 4203,
+      "category": "fixed",
+      "title": "Fixed the Warm-up and Climb Bias pickers not responding to taps on Android",
+      "mergedAt": "2026-08-05T12:11:28Z",
+      "prUrl": "https://github.com/boardsesh/boardsesh/pull/4203"
+    },
     {
       "prNumber": 4198,
       "category": "fixed",
@@ -2871,6 +2878,19 @@
     }
   ],
   "nativeReleases": [
+    {
+      "kind": "native-release",
+      "date": "2026-08-05T08:14:27+10:00",
+      "sha": "97bfd80290eca9c9849914808bcefee414aa0da5",
+      "platforms": [
+        "android",
+        "ios"
+      ],
+      "fingerprints": {
+        "android": "70c78454348f526db29776b8d0981489fbdde3b6",
+        "ios": "183bcf4842928b888adba7cfc26951a0e7b56dbd"
+      }
+    },
     {
       "kind": "native-release",
       "date": "2026-08-03T13:15:39+10:00",
