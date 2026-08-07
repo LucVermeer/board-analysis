@@ -669,6 +669,44 @@
       "futureTimeAdjusted": "Zeit in der Zukunft auf jetzt gesetzt."
     }
   },
+  "attemptRecorder": {
+    "openAria": "Versuch aufnehmen",
+    "wallClimbRequired": "Zeige diesen Boulder vor der Aufnahme an der Wand",
+    "viewOnly": "Im Ansichtsmodus ist keine Aufnahme möglich",
+    "previewAria": "Kameravorschau",
+    "closeAria": "Aufnahme schließen",
+    "startAria": "Aufnahme starten",
+    "stopAria": "Aufnahme stoppen",
+    "cancelRecording": "Aufnahme verwerfen",
+    "retryUpload": "Upload wiederholen",
+    "retryCamera": "Kamera erneut versuchen",
+    "saved": "Versuch gespeichert",
+    "savedToast": "Versuchsvideo gespeichert",
+    "done": "Fertig",
+    "status": {
+      "permission": "Kamera wird geöffnet...",
+      "cancelling": "Aufnahme wird verworfen...",
+      "stopping": "Aufnahme wird beendet...",
+      "finalizing": "Versuch wird gespeichert..."
+    },
+    "errors": {
+      "default": "Diese Aufnahme konnte nicht gespeichert werden.",
+      "UNSUPPORTED_BROWSER": "Dieser Browser kann keine Videos aufnehmen.",
+      "PERMISSION_DENIED": "Der Kamerazugriff wurde verweigert.",
+      "CAMERA_UNAVAILABLE": "Die Kamera ist nicht verfügbar.",
+      "RECORDER_FAILED": "Die Aufnahme wurde unerwartet beendet.",
+      "SERVICE_UNAVAILABLE": "Der Aufnahmedienst ist nicht verfügbar.",
+      "UPLOAD_INIT_FAILED": "Der Upload konnte nicht gestartet werden.",
+      "DISK_FULL": "Der Speicher für Aufnahmen ist voll.",
+      "RECORDING_TOO_LARGE": "Diese Aufnahme ist zu groß.",
+      "UPLOAD_INTERRUPTED": "Der Upload wurde unterbrochen.",
+      "RECORDING_RESTART_REQUIRED": "Ein Teil der Videodaten ist nicht mehr auf diesem Gerät. Nimm den Versuch erneut auf.",
+      "OFFSET_MISMATCH": "Der Upload muss fortgesetzt werden.",
+      "EMPTY_RECORDING": "Es wurden keine Videodaten aufgenommen.",
+      "FINALIZE_FAILED": "Die Aufnahme konnte nicht fertig gespeichert werden.",
+      "UPLOAD_FAILED": "Diese Aufnahme konnte nicht hochgeladen werden."
+    }
+  },
   "mobileDetail": {
     "notFound": "Session nicht gefunden",
     "participants": "Kletterer*innen",

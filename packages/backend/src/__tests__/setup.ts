@@ -28,6 +28,7 @@ const TABLES_TO_RESET = [
   'board_session_queues',
   'board_session_participants',
   'board_sessions',
+  'private_attempt_videos',
   'boardsesh_ticks',
   'board_climb_holds',
   'board_climb_stats',

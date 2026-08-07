@@ -669,6 +669,44 @@
       "futureTimeAdjusted": "Hora futura ajustada a ahora."
     }
   },
+  "attemptRecorder": {
+    "openAria": "Grabar intento",
+    "wallClimbRequired": "Muestra este bloque en el muro antes de grabar",
+    "viewOnly": "No se puede grabar en modo de solo lectura",
+    "previewAria": "Vista previa de la cámara",
+    "closeAria": "Cerrar grabadora",
+    "startAria": "Iniciar grabación",
+    "stopAria": "Detener grabación",
+    "cancelRecording": "Descartar grabación",
+    "retryUpload": "Reintentar subida",
+    "retryCamera": "Reintentar cámara",
+    "saved": "Intento guardado",
+    "savedToast": "Video del intento guardado",
+    "done": "Listo",
+    "status": {
+      "permission": "Abriendo cámara...",
+      "cancelling": "Descartando grabación...",
+      "stopping": "Finalizando grabación...",
+      "finalizing": "Guardando intento..."
+    },
+    "errors": {
+      "default": "No se pudo guardar esta grabación.",
+      "UNSUPPORTED_BROWSER": "Este navegador no puede grabar video.",
+      "PERMISSION_DENIED": "Se denegó el permiso de cámara.",
+      "CAMERA_UNAVAILABLE": "La cámara no está disponible.",
+      "RECORDER_FAILED": "La grabación se detuvo inesperadamente.",
+      "SERVICE_UNAVAILABLE": "El servicio de grabación no está disponible.",
+      "UPLOAD_INIT_FAILED": "No se pudo iniciar la subida.",
+      "DISK_FULL": "El disco de grabaciones está lleno.",
+      "RECORDING_TOO_LARGE": "Esta grabación es demasiado grande.",
+      "UPLOAD_INTERRUPTED": "La subida se interrumpió.",
+      "RECORDING_RESTART_REQUIRED": "Parte del video ya no está en este dispositivo. Graba el intento de nuevo.",
+      "OFFSET_MISMATCH": "La subida debe reanudarse.",
+      "EMPTY_RECORDING": "No se grabaron datos de video.",
+      "FINALIZE_FAILED": "No se pudo terminar de guardar la grabación.",
+      "UPLOAD_FAILED": "No se pudo subir esta grabación."
+    }
+  },
   "mobileDetail": {
     "notFound": "Sesión no encontrada",
     "participants": "Escaladores",

@@ -669,6 +669,44 @@
       "futureTimeAdjusted": "Future time adjusted to now."
     }
   },
+  "attemptRecorder": {
+    "openAria": "Record attempt",
+    "wallClimbRequired": "Show this climb on the wall before recording",
+    "viewOnly": "Recording is unavailable in view-only mode",
+    "previewAria": "Camera preview",
+    "closeAria": "Close recorder",
+    "startAria": "Start recording",
+    "stopAria": "Stop recording",
+    "cancelRecording": "Cancel recording",
+    "retryUpload": "Retry upload",
+    "retryCamera": "Try camera again",
+    "saved": "Attempt saved",
+    "savedToast": "Attempt video saved",
+    "done": "Done",
+    "status": {
+      "permission": "Opening camera...",
+      "cancelling": "Cancelling recording...",
+      "stopping": "Finishing recording...",
+      "finalizing": "Saving attempt..."
+    },
+    "errors": {
+      "default": "Couldn't save this recording.",
+      "UNSUPPORTED_BROWSER": "This browser can't record video.",
+      "PERMISSION_DENIED": "Camera permission was denied.",
+      "CAMERA_UNAVAILABLE": "The camera isn't available.",
+      "RECORDER_FAILED": "Recording stopped unexpectedly.",
+      "SERVICE_UNAVAILABLE": "The recording service isn't available.",
+      "UPLOAD_INIT_FAILED": "Couldn't start the recording upload.",
+      "DISK_FULL": "The recording disk is full.",
+      "RECORDING_TOO_LARGE": "This recording is too large.",
+      "UPLOAD_INTERRUPTED": "The upload was interrupted.",
+      "RECORDING_RESTART_REQUIRED": "Some video data is no longer on this device. Record the attempt again.",
+      "OFFSET_MISMATCH": "The upload needs to resume.",
+      "EMPTY_RECORDING": "No video data was recorded.",
+      "FINALIZE_FAILED": "Couldn't finish saving this recording.",
+      "UPLOAD_FAILED": "Couldn't upload this recording."
+    }
+  },
   "mobileDetail": {
     "notFound": "Session not found",
     "participants": "Climbers",

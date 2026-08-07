@@ -27,6 +27,8 @@ import { betaLinksTypeDefs } from './beta-links';
 import { integrationsTypeDefs } from './integrations';
 import { otaTypeDefs } from './ota';
 import { syncTypeDefs } from './sync';
+import { privateAttemptVideoTypeDefs } from './private-attempt-videos';
+import { analyzedBetaVideoTypeDefs } from './analyzed-beta-videos';
 
 export const typeDefs = [
   scalarTypeDefs,
@@ -51,6 +53,8 @@ export const typeDefs = [
   integrationsTypeDefs,
   otaTypeDefs,
   syncTypeDefs,
+  privateAttemptVideoTypeDefs,
+  analyzedBetaVideoTypeDefs,
   queriesTypeDefs,
   mutationsTypeDefs,
   subscriptionsTypeDefs,

@@ -10,7 +10,8 @@ import React, {
   useMemo,
   useDeferredValue,
 } from 'react';
-import { BoardPresenceCurrentContext } from '@boardsesh/board-presence-react';
+import { BoardPresenceClientContext, BoardPresenceCurrentContext } from '@boardsesh/board-presence-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { track } from '@/app/lib/analytics';
 import IconButton from '@mui/material/IconButton';
@@ -59,6 +60,10 @@ import { PlayViewActionBar } from './play-view-action-bar';
 import { PlayViewTickBar } from './play-view-tick-bar';
 import { MiniSessionBar } from './mini-session-bar';
 import { useDrawerUrlSync } from './use-drawer-url-sync';
+import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
+import AttemptRecorderDialog, {
+  type AttemptRecorderTarget,
+} from '@/app/components/attempt-videos/attempt-recorder-dialog';
 
 /** Window with optional requestIdleCallback (not available in all browsers). */
 type WindowWithIdleCallback = Window & {
@@ -105,6 +110,8 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   const [isPlaylistSelectorOpen, setIsPlaylistSelectorOpen] = useState(false);
   const [isTickBarActive, setIsTickBarActive] = useState(false);
   const [isBoardZoomed, setIsBoardZoomed] = useState(false);
+  const [recorderTarget, setRecorderTarget] = useState<AttemptRecorderTarget | null>(null);
+  const [recorderBusy, setRecorderBusy] = useState(false);
   /**
    * Lightbulb pending state (queue-control-bar pivot, Phase 3).
    *
@@ -161,6 +168,7 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
 
   const pathname = usePathname();
   const { showMessage } = useSnackbar();
+  const queryClient = useQueryClient();
 
   const { logbook } = useBoardProvider();
 
@@ -180,6 +188,7 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     wallConfirmed,
     lastConnectedBoardSerial,
     participantId,
+    sessionId,
     users: sessionUsers,
   } = isOpen ? sessionData : deferredSession;
   const { mirrorClimb, getNextClimbQueueItem, getPreviousClimbQueueItem, setCurrentClimbQueueItem } = useQueueActions();
@@ -195,6 +204,7 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   // wall right now" (seeded for late joiners via fetchConnection). Used only to
   // light the party lightbulb; null when the board is free or unbound.
   const boardPresenceCurrent = useContext(BoardPresenceCurrentContext);
+  const boardPresenceClient = useContext(BoardPresenceClientContext);
 
   // In a party session, the drawer-local `drawerDisplayedItem` (set by browse
   // callers via the open-drawer event payload) takes precedence over the wall
@@ -203,6 +213,10 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   // drawer displays the wall climb directly — matching today's behavior.
   const effectiveItem = drawerDisplayedItem ?? currentClimbQueueItem;
   const currentClimb = effectiveItem?.climb ?? null;
+  const isMoonBoard2024 = boardDetails.board_name === 'moonboard' && boardDetails.layout_id === 3;
+  const { token: recordingToken, isAuthenticated: canUsePrivateRecordings } = useWsAuthToken(isMoonBoard2024);
+  const displayedClimbIsWallClimb =
+    !isPersistentSessionActive || currentClimb?.uuid === currentClimbQueueItem?.climb.uuid;
 
   const { handleDoubleTap, showHeart, dismissHeart, isFavorited, toggleFavorite } = useDoubleTapFavorite({
     climbUuid: currentClimb?.uuid ?? '',
@@ -240,10 +254,10 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   useWakeLock(isOpen);
 
   const handleClose = useCallback(() => {
-    if (isActionsOpen || isQueueOpen || isPlaylistSelectorOpen) return;
+    if (isActionsOpen || isQueueOpen || isPlaylistSelectorOpen || recorderBusy) return;
     setDrawerOpen(false);
     setActiveDrawer('none');
-  }, [setActiveDrawer, isActionsOpen, isQueueOpen, isPlaylistSelectorOpen]);
+  }, [setActiveDrawer, isActionsOpen, isQueueOpen, isPlaylistSelectorOpen, recorderBusy]);
 
   // Compute ascent info for tick FAB badge
   const currentAngle = typeof angle === 'string' ? parseInt(angle, 10) : angle;
@@ -257,9 +271,10 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   // presentational concern, and read-only spectators should still be able to
   // copy a shareable link from their address bar.
   const handleUrlSyncClose = useCallback(() => {
+    if (recorderBusy) return;
     setDrawerOpen(false);
     setActiveDrawer('none');
-  }, [setActiveDrawer]);
+  }, [setActiveDrawer, recorderBusy]);
   useDrawerUrlSync({
     isOpen,
     displayedClimb: currentClimb,
@@ -342,10 +357,10 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     (direction: 'next' | 'previous', source: 'swipePlayViewDrawer' | 'playViewDrawer') => {
       const getter = direction === 'next' ? getNextClimbQueueItem : getPreviousClimbQueueItem;
       const item = getter({ from: navigateFromItem });
-      if (!item || viewOnlyMode) return;
+      if (!item || viewOnlyMode || recorderBusy) return;
       advanceTo(item, source, direction);
     },
-    [getNextClimbQueueItem, getPreviousClimbQueueItem, navigateFromItem, viewOnlyMode, advanceTo],
+    [getNextClimbQueueItem, getPreviousClimbQueueItem, navigateFromItem, viewOnlyMode, recorderBusy, advanceTo],
   );
 
   const handleSwipeNext = useCallback(() => {
@@ -355,8 +370,8 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     navigate('previous', 'swipePlayViewDrawer');
   }, [navigate]);
 
-  const canSwipeNext = !viewOnlyMode && !!nextItem;
-  const canSwipePrevious = !viewOnlyMode && !!prevItem;
+  const canSwipeNext = !viewOnlyMode && !recorderBusy && !!nextItem;
+  const canSwipePrevious = !viewOnlyMode && !recorderBusy && !!prevItem;
 
   // Tick FAB → inline tick bar
   const handleTickFabClick = useCallback(() => {
@@ -495,6 +510,44 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     setIsPlaylistSelectorOpen(false);
     setQueueMounted(true);
     setIsQueueOpen(true);
+  }, []);
+
+  const handleOpenRecorder = useCallback(() => {
+    if (!isMoonBoard2024 || !recordingToken || !currentClimb || !displayedClimbIsWallClimb || viewOnlyMode) {
+      return;
+    }
+    setRecorderTarget({
+      climbUuid: currentClimb.uuid,
+      climbName: currentClimb.name,
+      layoutId: 3,
+      angle: currentAngle,
+      isMirror: isMirrored,
+      boardId: boardPresenceClient?.boardId ?? null,
+      sessionId,
+    });
+  }, [
+    boardPresenceClient?.boardId,
+    currentAngle,
+    currentClimb,
+    displayedClimbIsWallClimb,
+    isMirrored,
+    isMoonBoard2024,
+    recordingToken,
+    sessionId,
+    viewOnlyMode,
+  ]);
+
+  const handleRecordingSaved = useCallback(() => {
+    const target = recorderTarget;
+    if (!target) return;
+    void queryClient.invalidateQueries({
+      queryKey: ['privateAttemptVideos', target.climbUuid, target.layoutId, target.angle],
+    });
+    showMessage(t('attemptRecorder.savedToast'), 'success');
+  }, [queryClient, recorderTarget, showMessage, t]);
+
+  const handleCloseRecorder = useCallback(() => {
+    setRecorderTarget(null);
   }, []);
 
   // Go to queue from actions drawer
@@ -755,6 +808,16 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
             onToggleFavorite={toggleFavorite}
             onOpenActions={handleOpenActionsMenu}
             onOpenQueue={handleOpenQueueDrawer}
+            showRecordAction={isMoonBoard2024 && canUsePrivateRecordings && !!recordingToken}
+            recordDisabled={!displayedClimbIsWallClimb || viewOnlyMode || recorderBusy}
+            recordDisabledReason={
+              !displayedClimbIsWallClimb
+                ? t('attemptRecorder.wallClimbRequired')
+                : viewOnlyMode
+                  ? t('attemptRecorder.viewOnly')
+                  : undefined
+            }
+            onRecord={handleOpenRecorder}
             lightbulbActive={
               isPersistentSessionActive
                 ? wallConfirmed || isBluetoothConnected || boardPresenceCurrent?.holder != null
@@ -822,6 +885,13 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     toggleFavorite,
     handleOpenActionsMenu,
     handleOpenQueueDrawer,
+    handleOpenRecorder,
+    isMoonBoard2024,
+    canUsePrivateRecordings,
+    recordingToken,
+    displayedClimbIsWallClimb,
+    viewOnlyMode,
+    recorderBusy,
     wallConfirmed,
     handleLightbulbClick,
     handleOpenLightDrawer,
@@ -842,151 +912,164 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   ]);
 
   return (
-    <SwipeableDrawer
-      placement="bottom"
-      height="100%"
-      fullHeight
-      open={drawerOpen}
-      onClose={handleClose}
-      onTransitionEnd={handleTransitionEnd}
-      keepMounted
-      paperRef={combinedPaperRef}
-      swipeEnabled={!isActionsOpen && !isQueueOpen && !isPlaylistSelectorOpen}
-      showDragHandle
-      disableEnterAnimation={initialOpenWithoutAnimation}
-      styles={{
-        body: { padding: 0 },
-        wrapper: { height: '100%', backgroundColor: 'var(--semantic-background)' },
-      }}
-    >
-      {contentReady || isOpen ? (
-        <>
-          <IconButton
-            size="small"
-            onClick={handleClose}
-            aria-label={t('playView.closeAria')}
-            sx={{
-              position: 'absolute',
-              top: 8,
-              right: 8,
-              zIndex: 2,
-              color: 'text.primary',
-              backgroundColor: 'action.selected',
-              '&:hover': { backgroundColor: 'action.focus' },
-            }}
-          >
-            <CloseOutlined />
-          </IconButton>
-          <div
-            className={styles.drawerContent}
-            onTouchStart={handleBoardTouchStart}
-            onTouchMove={handleBoardTouchMove}
-            onTouchEnd={handleBoardTouchEnd}
-          >
-            {currentClimb ? (
-              <PlayDrawerContent
-                climb={currentClimb}
-                boardType={boardDetails.board_name}
-                angle={currentAngle}
-                layoutId={boardDetails.layout_id}
-                viewerBoardDetails={boardDetails}
-                sectionsEnabled={sectionsEverEnabled && isOpen}
-                aboveFold={aboveFold}
-                paperRef={playPaperRef}
-              />
-            ) : (
-              <ClimbDetailShellClient mode="play" sections={[]} aboveFold={null} />
-            )}
-          </div>
-
-          {/* Climb actions drawer */}
-          {isOpen && currentClimb && isActionsOpen && (
-            <SwipeableDrawer
-              placement="bottom"
-              title={
-                currentClimb ? (
-                  <div data-swipe-blocked="" {...actionsDragHandlers} className={drawerCss.dragHeaderWrapper}>
-                    <DrawerClimbHeader climb={currentClimb} boardDetails={boardDetails} />
-                  </div>
-                ) : undefined
-              }
-              height="60%"
-              paperRef={actionsPaperRef}
-              open={isActionsOpen}
-              onClose={handleCloseActions}
-              swipeEnabled={false}
-              disablePortal
-              styles={{
-                wrapper: {
-                  touchAction: 'pan-y' as const,
-                  transition: 'height 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                },
-                body: { padding: `${themeTokens.spacing[2]}px 0` },
+    <>
+      <SwipeableDrawer
+        placement="bottom"
+        height="100%"
+        fullHeight
+        open={drawerOpen}
+        onClose={handleClose}
+        onTransitionEnd={handleTransitionEnd}
+        keepMounted
+        paperRef={combinedPaperRef}
+        swipeEnabled={!isActionsOpen && !isQueueOpen && !isPlaylistSelectorOpen && !recorderBusy}
+        showDragHandle
+        disableEnterAnimation={initialOpenWithoutAnimation}
+        styles={{
+          body: { padding: 0 },
+          wrapper: { height: '100%', backgroundColor: 'var(--semantic-background)' },
+        }}
+      >
+        {contentReady || isOpen ? (
+          <>
+            <IconButton
+              size="small"
+              onClick={handleClose}
+              disabled={recorderBusy}
+              aria-label={t('playView.closeAria')}
+              sx={{
+                position: 'absolute',
+                top: 8,
+                right: 8,
+                zIndex: 2,
+                color: 'text.primary',
+                backgroundColor: 'action.selected',
+                '&:hover': { backgroundColor: 'action.focus' },
               }}
             >
-              <ClimbActions
-                climb={currentClimb}
-                boardDetails={boardDetails}
-                angle={currentAngle}
-                currentPathname={pathname}
-                viewMode="list"
-                onOpenPlaylistSelector={() => {
-                  setIsActionsOpen(false);
-                  setIsPlaylistSelectorOpen(true);
+              <CloseOutlined />
+            </IconButton>
+            <div
+              className={styles.drawerContent}
+              onTouchStart={handleBoardTouchStart}
+              onTouchMove={handleBoardTouchMove}
+              onTouchEnd={handleBoardTouchEnd}
+            >
+              {currentClimb ? (
+                <PlayDrawerContent
+                  climb={currentClimb}
+                  boardType={boardDetails.board_name}
+                  angle={currentAngle}
+                  layoutId={boardDetails.layout_id}
+                  viewerBoardDetails={boardDetails}
+                  sectionsEnabled={sectionsEverEnabled && isOpen}
+                  aboveFold={aboveFold}
+                  paperRef={playPaperRef}
+                />
+              ) : (
+                <ClimbDetailShellClient mode="play" sections={[]} aboveFold={null} />
+              )}
+            </div>
+
+            {/* Climb actions drawer */}
+            {isOpen && currentClimb && isActionsOpen && (
+              <SwipeableDrawer
+                placement="bottom"
+                title={
+                  currentClimb ? (
+                    <div data-swipe-blocked="" {...actionsDragHandlers} className={drawerCss.dragHeaderWrapper}>
+                      <DrawerClimbHeader climb={currentClimb} boardDetails={boardDetails} />
+                    </div>
+                  ) : undefined
+                }
+                height="60%"
+                paperRef={actionsPaperRef}
+                open={isActionsOpen}
+                onClose={handleCloseActions}
+                swipeEnabled={false}
+                disablePortal
+                styles={{
+                  wrapper: {
+                    touchAction: 'pan-y' as const,
+                    transition: 'height 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  },
+                  body: { padding: `${themeTokens.spacing[2]}px 0` },
                 }}
-                onActionComplete={handleCloseActions}
-                onGoToQueue={handleGoToQueueFromActions}
-              />
-            </SwipeableDrawer>
-          )}
+              >
+                <ClimbActions
+                  climb={currentClimb}
+                  boardDetails={boardDetails}
+                  angle={currentAngle}
+                  currentPathname={pathname}
+                  viewMode="list"
+                  onOpenPlaylistSelector={() => {
+                    setIsActionsOpen(false);
+                    setIsPlaylistSelectorOpen(true);
+                  }}
+                  onActionComplete={handleCloseActions}
+                  onGoToQueue={handleGoToQueueFromActions}
+                />
+              </SwipeableDrawer>
+            )}
 
-          {/* Playlist selector drawer */}
-          {isOpen && currentClimb && isPlaylistSelectorOpen && (
-            <SwipeableDrawer
-              title={<DrawerClimbHeader climb={currentClimb} boardDetails={boardDetails} />}
-              placement="bottom"
-              open={isPlaylistSelectorOpen}
-              onClose={handleClosePlaylist}
-              paperRef={playlistSwipe.paperRef}
-              swipeEnabled={false}
-              disablePortal
-              styles={{
-                wrapper: { height: 'auto', maxHeight: '70vh' },
-                body: { padding: 0 },
-                header: {
-                  paddingLeft: `${themeTokens.spacing[3]}px`,
-                  paddingRight: `${themeTokens.spacing[3]}px`,
-                },
-              }}
-            >
-              <PlaylistSelectionContent
-                climbUuid={currentClimb.uuid}
-                boardDetails={boardDetails}
-                angle={currentAngle}
-                onDone={handleClosePlaylist}
-              />
-            </SwipeableDrawer>
-          )}
-        </>
-      ) : null}
+            {/* Playlist selector drawer */}
+            {isOpen && currentClimb && isPlaylistSelectorOpen && (
+              <SwipeableDrawer
+                title={<DrawerClimbHeader climb={currentClimb} boardDetails={boardDetails} />}
+                placement="bottom"
+                open={isPlaylistSelectorOpen}
+                onClose={handleClosePlaylist}
+                paperRef={playlistSwipe.paperRef}
+                swipeEnabled={false}
+                disablePortal
+                styles={{
+                  wrapper: { height: 'auto', maxHeight: '70vh' },
+                  body: { padding: 0 },
+                  header: {
+                    paddingLeft: `${themeTokens.spacing[3]}px`,
+                    paddingRight: `${themeTokens.spacing[3]}px`,
+                  },
+                }}
+              >
+                <PlaylistSelectionContent
+                  climbUuid={currentClimb.uuid}
+                  boardDetails={boardDetails}
+                  angle={currentAngle}
+                  onDone={handleClosePlaylist}
+                />
+              </SwipeableDrawer>
+            )}
+          </>
+        ) : null}
 
-      {/* Queue list drawer */}
-      {queueMounted && (
-        <QueueDrawer
-          open={isQueueOpen}
-          onClose={handleCloseQueueDrawer}
-          onTransitionEnd={handleQueueTransitionEnd}
-          boardDetails={boardDetails}
-        />
-      )}
-      {/* Light-control drawer — opened by long-pressing the action bar's
+        {/* Queue list drawer */}
+        {queueMounted && (
+          <QueueDrawer
+            open={isQueueOpen}
+            onClose={handleCloseQueueDrawer}
+            onTransitionEnd={handleQueueTransitionEnd}
+            boardDetails={boardDetails}
+          />
+        )}
+        {/* Light-control drawer — opened by long-pressing the action bar's
           lightbulb. Hosts disco/glyph light shows, palette customisation,
           and the manual BLE disconnect that the old ShareBoardButton
           used to own. Mounted lazily on first open. */}
-      {hasOpenedLightDrawer && (
-        <LightControlDrawer open={lightDrawerOpen} onClose={handleCloseLightDrawer} boardDetails={boardDetails} />
+        {hasOpenedLightDrawer && (
+          <LightControlDrawer open={lightDrawerOpen} onClose={handleCloseLightDrawer} boardDetails={boardDetails} />
+        )}
+      </SwipeableDrawer>
+      {recorderTarget && recordingToken && (
+        <AttemptRecorderDialog
+          open
+          token={recordingToken}
+          target={recorderTarget}
+          onBusyChange={setRecorderBusy}
+          onClose={handleCloseRecorder}
+          onSaved={handleRecordingSaved}
+        />
       )}
-    </SwipeableDrawer>
+    </>
   );
 };
 

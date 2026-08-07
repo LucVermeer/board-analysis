@@ -351,6 +351,31 @@
       "similarClimbsSummary": "Climbs sharing 50%+ of these holds"
     }
   },
+  "attemptVideos": {
+    "section": "Your attempt videos",
+    "playbackSpeed": "Playback speed",
+    "videoAria": "Private attempt video",
+    "loading": "Loading attempt videos",
+    "empty": "No recorded attempts yet",
+    "duration": "{{seconds}} seconds",
+    "deleteAria": "Delete attempt video",
+    "deleteTitle": "Delete this video?",
+    "deleteBody": "The attempt stays in your logbook.",
+    "cancel": "Cancel",
+    "delete": "Delete"
+  },
+  "analyzedBeta": {
+    "loading": "Loading analyzed beta",
+    "videoAria": "Analyzed beta video",
+    "possibleMatch": "Possible match. This source is linked to more than one climb and has not been resolved.",
+    "sourceUnknown": "Unknown source",
+    "carouselItem": "Carousel item {{item}} of {{count}}",
+    "openPostAria": "Open source post",
+    "previousMoveAria": "Previous move",
+    "nextMoveAria": "Next move",
+    "moveLabel": "Move",
+    "moveCount": "Move {{move}} of {{count}}"
+  },
   "boardseshGrade": {
     "label": "Boardsesh grade",
     "title": "Boardsesh grade",

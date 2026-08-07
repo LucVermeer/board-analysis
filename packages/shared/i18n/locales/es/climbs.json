@@ -351,6 +351,31 @@
       "similarClimbsSummary": "Bloques que comparten el 50%+ de estas presas"
     }
   },
+  "attemptVideos": {
+    "section": "Tus videos de intentos",
+    "playbackSpeed": "Velocidad de reproducción",
+    "videoAria": "Video privado del intento",
+    "loading": "Cargando videos de intentos",
+    "empty": "Todavía no hay intentos grabados",
+    "duration": "{{seconds}} segundos",
+    "deleteAria": "Eliminar video del intento",
+    "deleteTitle": "¿Eliminar este video?",
+    "deleteBody": "El intento seguirá en tu registro.",
+    "cancel": "Cancelar",
+    "delete": "Eliminar"
+  },
+  "analyzedBeta": {
+    "loading": "Cargando beta analizada",
+    "videoAria": "Video beta analizado",
+    "possibleMatch": "Coincidencia posible. La fuente está vinculada a varios bloques y aún no se ha resuelto.",
+    "sourceUnknown": "Fuente desconocida",
+    "carouselItem": "Elemento {{item}} de {{count}} del carrusel",
+    "openPostAria": "Abrir publicación original",
+    "previousMoveAria": "Movimiento anterior",
+    "nextMoveAria": "Movimiento siguiente",
+    "moveLabel": "Movimiento",
+    "moveCount": "Movimiento {{move}} de {{count}}"
+  },
   "boardseshGrade": {
     "label": "Grado Boardsesh",
     "title": "Grado Boardsesh",

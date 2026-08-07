@@ -669,6 +669,44 @@
       "futureTimeAdjusted": "Heure future ajustée à maintenant."
     }
   },
+  "attemptRecorder": {
+    "openAria": "Filmer une tentative",
+    "wallClimbRequired": "Affiche ce bloc sur le mur avant de filmer",
+    "viewOnly": "La vidéo est indisponible en mode lecture seule",
+    "previewAria": "Aperçu de la caméra",
+    "closeAria": "Fermer la caméra",
+    "startAria": "Démarrer l'enregistrement",
+    "stopAria": "Arrêter l'enregistrement",
+    "cancelRecording": "Annuler l'enregistrement",
+    "retryUpload": "Réessayer l'envoi",
+    "retryCamera": "Réessayer la caméra",
+    "saved": "Essai enregistré",
+    "savedToast": "Vidéo d'essai enregistrée",
+    "done": "Terminé",
+    "status": {
+      "permission": "Ouverture de la caméra...",
+      "cancelling": "Annulation de l'enregistrement...",
+      "stopping": "Fin de l'enregistrement...",
+      "finalizing": "Enregistrement de l'essai..."
+    },
+    "errors": {
+      "default": "Impossible d'enregistrer cette vidéo.",
+      "UNSUPPORTED_BROWSER": "Ce navigateur ne peut pas filmer de vidéo.",
+      "PERMISSION_DENIED": "L'accès à la caméra a été refusé.",
+      "CAMERA_UNAVAILABLE": "La caméra n'est pas disponible.",
+      "RECORDER_FAILED": "L'enregistrement s'est arrêté de façon inattendue.",
+      "SERVICE_UNAVAILABLE": "Le service vidéo n'est pas disponible.",
+      "UPLOAD_INIT_FAILED": "Impossible de démarrer l'envoi.",
+      "DISK_FULL": "Le disque des vidéos est plein.",
+      "RECORDING_TOO_LARGE": "Cette vidéo est trop volumineuse.",
+      "UPLOAD_INTERRUPTED": "L'envoi a été interrompu.",
+      "RECORDING_RESTART_REQUIRED": "Une partie de la vidéo n'est plus sur cet appareil. Filme à nouveau cet essai.",
+      "OFFSET_MISMATCH": "L'envoi doit reprendre.",
+      "EMPTY_RECORDING": "Aucune donnée vidéo n'a été enregistrée.",
+      "FINALIZE_FAILED": "Impossible de finaliser cette vidéo.",
+      "UPLOAD_FAILED": "Impossible d'envoyer cette vidéo."
+    }
+  },
   "mobileDetail": {
     "notFound": "Session introuvable",
     "participants": "Grimpeurs",

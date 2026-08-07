@@ -31,3 +31,4 @@ export * from './location-sync';
 export * from './sync-deletions';
 export * from './sync-daemon-leases';
 export * from './logbook-sync-skips';
+export * from './private-attempt-videos';

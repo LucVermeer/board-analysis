@@ -65,6 +65,8 @@ import { betaLinkQueries } from './beta-videos/queries';
 import { instagramBetaImportQueries } from './beta-videos/instagram-beta-import';
 import { otaQueries } from './ota/queries';
 import { syncQueries } from './sync/queries';
+import { privateAttemptVideoQueries } from './private-attempt-videos/queries';
+import { analyzedBetaVideoQueries } from './analyzed-beta-videos/queries';
 import { isNoMatchClimb, isNoMatch } from './shared/helpers';
 
 export const resolvers = {
@@ -110,6 +112,8 @@ export const resolvers = {
     ...otaQueries,
     ...syncQueries,
     ...feedbackQueries,
+    ...privateAttemptVideoQueries,
+    ...analyzedBetaVideoQueries,
   },
 
   Mutation: {

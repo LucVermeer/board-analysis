@@ -351,6 +351,31 @@
       "similarClimbsSummary": "Boulder mit mindestens 50 % der gleichen Griffe"
     }
   },
+  "attemptVideos": {
+    "section": "Deine Versuchsvideos",
+    "playbackSpeed": "Wiedergabegeschwindigkeit",
+    "videoAria": "Privates Versuchsvideo",
+    "loading": "Versuchsvideos werden geladen",
+    "empty": "Noch keine Versuche aufgenommen",
+    "duration": "{{seconds}} Sekunden",
+    "deleteAria": "Versuchsvideo löschen",
+    "deleteTitle": "Dieses Video löschen?",
+    "deleteBody": "Der Versuch bleibt in deinem Logbuch.",
+    "cancel": "Abbrechen",
+    "delete": "Löschen"
+  },
+  "analyzedBeta": {
+    "loading": "Analysierte Beta wird geladen",
+    "videoAria": "Analysiertes Beta-Video",
+    "possibleMatch": "Möglicher Treffer. Die Quelle ist mit mehreren Bouldern verknüpft und noch nicht aufgelöst.",
+    "sourceUnknown": "Unbekannte Quelle",
+    "carouselItem": "Karussell-Element {{item}} von {{count}}",
+    "openPostAria": "Quellbeitrag öffnen",
+    "previousMoveAria": "Vorheriger Zug",
+    "nextMoveAria": "Nächster Zug",
+    "moveLabel": "Zug",
+    "moveCount": "Zug {{move}} von {{count}}"
+  },
   "boardseshGrade": {
     "label": "Boardsesh-Grad",
     "title": "Boardsesh-Grad",

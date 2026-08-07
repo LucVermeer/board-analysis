@@ -201,6 +201,18 @@ export const queriesTypeDefs = /* GraphQL */ `
     ticks(input: GetTicksInput!): [Tick!]!
 
     """
+    Get the current user's ready MoonBoard 2024 recordings for one climb and
+    angle. Private attempts are never returned by public beta queries.
+    """
+    privateAttemptVideos(climbUuid: String!, layoutId: Int!, angle: Int!): [PrivateAttemptVideo!]!
+
+    """
+    Get provenance-preserving analyzed beta and unresolved candidates from the
+    configured local analysis provider. Currently available for MoonBoard 2024.
+    """
+    analyzedBetaVideos(boardType: String!, climbUuid: String!, layoutId: Int!): [AnalyzedBetaVideo!]!
+
+    """
     Get public ticks for any user by their ID.
     """
     userTicks(userId: ID!, boardType: String!): [Tick!]!
