@@ -55,6 +55,9 @@ type PlayDrawerActionBarProps = {
   onTickPress: () => void;
   onTickLongPress: () => void;
   onOpenAngleSelector?: () => void;
+  showRecordAction?: boolean;
+  recordDisabled?: boolean;
+  onRecord?: () => void;
 };
 
 export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
@@ -86,6 +89,9 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
   onTickPress,
   onTickLongPress,
   onOpenAngleSelector,
+  showRecordAction = false,
+  recordDisabled = false,
+  onRecord,
 }: PlayDrawerActionBarProps) {
   const { t } = useTranslation('session');
   const { t: tClimbs } = useTranslation('climbs');
@@ -250,6 +256,15 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
           onPress={onOpenActions}
           accessibilityLabel={t('playView.actionBar.climbActionsAria')}
         />
+        {showRecordAction ? (
+          <ActionButton
+            size="sm"
+            iconName="video"
+            onPress={() => onRecord?.()}
+            disabled={recordDisabled}
+            accessibilityLabel={t('attemptRecorder.openAria')}
+          />
+        ) : null}
 
         <View style={drawerActionBarStyles.spacer} />
 

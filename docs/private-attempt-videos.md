@@ -36,7 +36,8 @@ disabled for these recordings.
 
 1. The authenticated client initializes an upload with a unique
    `clientRecordingId` and a MoonBoard 2024 climb snapshot.
-2. `MediaRecorder` chunks are appended sequentially with `Upload-Offset`.
+2. Browser `MediaRecorder` chunks and native Android file slices are appended
+   sequentially with `Upload-Offset`.
    Offset mismatches and status reads use the authoritative temporary-file
    offset so a partially received request can resume without duplicating data.
    Cancelling an active take stops capture, deletes the unfinished upload, and
@@ -45,8 +46,9 @@ disabled for these recordings.
    one native `attempt` tick and marks the video ready in a locked transaction.
    Repeating finalization returns the same video and tick.
 4. Owner-checked playback supports `GET`, `HEAD`, and single byte ranges. The
-   web app uses a same-origin authenticated proxy so native video seeking keeps
-   working without exposing a bearer token in the URL.
+   web app uses a same-origin authenticated proxy; the Android app supplies its
+   bearer credential as a protected Expo Video request header. Neither client
+   exposes a bearer token in the URL.
 5. Deletion first enters a retryable `deleting` state, removes the media, and
    deletes the video row. The linked attempt tick is retained.
 
@@ -68,6 +70,13 @@ released from browser memory, while only the unacknowledged tail is retained
 for retry. Camera permission, codec support, orientation changes, background
 interruption, and long-recording behavior still require a final smoke test on
 the target Android Chrome/tablet combination.
+
+The native Android app records a silent 720p MP4 into Expo Camera's private
+cache. It initializes the owner-scoped upload before capture, then sends bounded
+4 MiB file slices after the camera closes. Retry reads the server's authoritative
+offset and resumes from the retained cache file. Save and cancel both delete the
+temporary local file; cancel also deletes the unfinished backend upload and
+never creates a tick. Camera permission is declared without microphone access.
 
 ## Analysis Adapter
 

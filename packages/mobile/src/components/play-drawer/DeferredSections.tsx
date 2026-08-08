@@ -14,6 +14,7 @@ import { BoardseshGradeSection } from './BoardseshGradeSection';
 import { buildBoardseshGradeView, buildBoardseshGradeSummary, isMoonBoard } from './boardsesh-grade-utils';
 import { buildAngleGradeBars } from './community-utils';
 import { BetaVideosSection } from './BetaVideosSection';
+import { PrivateAttemptVideosSection } from '../attempt-videos/PrivateAttemptVideosSection';
 import { useAuth } from '../../providers/auth-provider';
 import { useBoardseshGradeEnabled } from '../../providers/feature-flags-provider';
 import { useTheme } from '../../providers/theme-provider';
@@ -223,6 +224,12 @@ export const DeferredSections = memo(function DeferredSections({
           >
             <BetaVideosSection climbUuid={climb.uuid} boardName={boardName} />
           </CollapsibleSection>
+
+          {isAuthenticated && boardName === 'moonboard' && layoutId === 3 ? (
+            <CollapsibleSection title={tClimbs('attemptVideos.section')} defaultExpanded persistKey="attemptVideos">
+              <PrivateAttemptVideosSection climbUuid={climb.uuid} layoutId={layoutId} angle={angle} />
+            </CollapsibleSection>
+          ) : null}
 
           {boardseshGradeEnabled && (
             <CollapsibleSection

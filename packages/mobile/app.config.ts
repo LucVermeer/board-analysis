@@ -510,7 +510,7 @@ export default ({ config, projectRoot }: ConfigContext): ExpoConfig & { newArchE
       //   <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
       //       android:usesPermissionFlags="neverForLocation" tools:targetApi="31"/>
       // Keep fine location uncapped on purpose.
-      blockedPermissions: ['android.permission.BLUETOOTH_ADVERTISE'],
+      blockedPermissions: ['android.permission.BLUETOOTH_ADVERTISE', 'android.permission.RECORD_AUDIO'],
       // expo-maps on Android renders Google Maps, which needs an API key. iOS
       // uses Apple Maps and needs none. Supplied via env so iOS works out of the
       // box; the Android map stays blank until GOOGLE_MAPS_API_KEY is set + a
@@ -538,6 +538,15 @@ export default ({ config, projectRoot }: ConfigContext): ExpoConfig & { newArchE
       // Native Google Sign-In — only when an iosUrlScheme is resolvable (see above).
       ...googleSignInPlugin,
       'expo-localization',
+      [
+        'expo-camera',
+        {
+          cameraPermission: 'Boardsesh uses your camera to record private climbing attempts.',
+          microphonePermission: false,
+          recordAudioAndroid: false,
+          barcodeScannerEnabled: false,
+        },
+      ],
       [
         'expo-location',
         {

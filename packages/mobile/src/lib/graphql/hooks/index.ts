@@ -31,6 +31,9 @@ import {
   UPDATE_SESSION,
   type UpdateSessionVariables,
   type UpdateSessionResponse,
+  GET_PRIVATE_ATTEMPT_VIDEOS,
+  type GetPrivateAttemptVideosResponse,
+  type GetPrivateAttemptVideosVariables,
 } from '@boardsesh/graphql/operations';
 import {
   GET_FAVORITES,
@@ -1207,6 +1210,28 @@ export function useBoardseshGrade(
     select: (data) => data.boardseshGrade,
     enabled: (options?.enabled ?? true) && !!climbUuid,
     staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function privateAttemptVideosQueryKey(climbUuid: string, layoutId: number, angle: number) {
+  return ['privateAttemptVideos', climbUuid, layoutId, angle] as const;
+}
+
+export function usePrivateAttemptVideos(
+  climbUuid: string,
+  layoutId: number,
+  angle: number,
+  options?: { enabled?: boolean },
+) {
+  return useQuery({
+    queryKey: privateAttemptVideosQueryKey(climbUuid, layoutId, angle),
+    queryFn: () =>
+      getHttpClient().request<GetPrivateAttemptVideosResponse, GetPrivateAttemptVideosVariables>(
+        GET_PRIVATE_ATTEMPT_VIDEOS,
+        { climbUuid, layoutId, angle },
+      ),
+    select: (data) => data.privateAttemptVideos,
+    enabled: options?.enabled ?? true,
   });
 }
 

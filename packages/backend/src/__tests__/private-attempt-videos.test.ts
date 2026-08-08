@@ -177,7 +177,7 @@ describe('private attempt video lifecycle', () => {
     );
     expect(ownerList).toHaveLength(1);
     expect(ownerList[0]).not.toHaveProperty('assetKey');
-    expect(ownerList[0]?.playbackPath).toContain(first.uuid);
+    expect(ownerList[0]?.playbackPath).toBe(`/api/private-attempt-videos/${first.uuid}/stream`);
     expect(otherList).toEqual([]);
 
     const request = { method: 'GET', headers: { range: 'bytes=2-5' } } as IncomingMessage;

@@ -46,7 +46,7 @@ export const privateAttemptVideoQueries = {
           durationMs: row.durationMs,
           recordedAt: row.recordedAt,
           createdAt: row.createdAt,
-          playbackPath: `/api/internal/attempt-videos/${row.uuid}/stream`,
+          playbackPath: `/api/private-attempt-videos/${row.uuid}/stream`,
         },
       ];
     });

@@ -22,6 +22,7 @@ import { ScrollView, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useAnimatedReaction, useSharedValue, runOnJS } from 'react-native-reanimated';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
 import type { ClimbQueueItem, PlaylistSuggestionSource } from '@boardsesh/queue';
@@ -48,6 +49,7 @@ import { useDrawerDismissGesture } from './use-drawer-dismiss-gesture';
 import { AngleSelectorSheet } from './AngleSelectorSheet';
 import { ClimbActionsSheet } from '../ClimbActionsSheet';
 import { AddBetaVideoSheet } from '../AddBetaVideoSheet';
+import { AttemptRecorderModal, type AttemptRecorderTarget } from '../attempt-videos/AttemptRecorderModal';
 import { BleControlSheetHost } from '../ble/BleControlSheetHost';
 import { Icon } from '../Icon';
 import {
@@ -60,7 +62,7 @@ import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider'
 import type { OpenClimbActionsOptions } from '../../providers/drawer-host-provider';
 import { useAuth } from '../../providers/auth-provider';
 import { useToast } from '../../providers/toast-provider';
-import { useToggleFavorite, useFavoriteStatus } from '../../lib/graphql/hooks';
+import { privateAttemptVideosQueryKey, useToggleFavorite, useFavoriteStatus } from '../../lib/graphql/hooks';
 import { useDisplayGrade } from '../../hooks/use-display-grade';
 import { resolveTickDefaultGradeName } from '../../lib/boardsesh-grade-display';
 import { useShareClimb } from '../../hooks/use-share-climb';
@@ -342,6 +344,7 @@ export function PlayDrawer({
   // tick picker's default grade below.
   const { boardseshActive } = useDisplayGrade();
   const { isAuthenticated } = useAuth();
+  const queryClient = useQueryClient();
 
   const { boardName, layoutId, sizeId, setIds, angle } = boardConfig;
   // The play route hosts its OWN BLE controls sheet (below) rather than the
@@ -373,7 +376,18 @@ export function PlayDrawer({
   // never set `drawerPreviewItem`, so this is true only for genuine previews
   // (workout builder, logbook/cross-board, the peer-driven accessory wall climb).
   const isPreview = drawerPreviewItem != null;
-
+  const [attemptRecorderTarget, setAttemptRecorderTarget] = useState<AttemptRecorderTarget | null>(null);
+  const canRecordAttempt = isAuthenticated && boardName === 'moonboard' && layoutId === 3;
+  const handleOpenAttemptRecorder = useCallback(() => {
+    if (!displayedClimb || !canRecordAttempt || isPreview) return;
+    setAttemptRecorderTarget({
+      climbUuid: displayedClimb.uuid,
+      climbName: displayedClimb.name,
+      angle,
+      isMirror: isMirrored,
+      sessionId,
+    });
+  }, [angle, canRecordAttempt, displayedClimb, isMirrored, isPreview, sessionId]);
   // Real favorite status for the heart, keyed on (boardName, climbUuid, angle).
   // Gated on the sheet being open so it doesn't fetch while the drawer is closed.
   // The displayed state is the local optimistic override when set, otherwise the
@@ -460,6 +474,14 @@ export function PlayDrawer({
   }, [angle]);
 
   const { showToast } = useToast();
+  const handleAttemptSaved = useCallback(() => {
+    const target = attemptRecorderTarget;
+    if (!target) return;
+    void queryClient.invalidateQueries({
+      queryKey: privateAttemptVideosQueryKey(target.climbUuid, 3, target.angle),
+    });
+    showToast(t('attemptRecorder.savedToast'), 'success');
+  }, [attemptRecorderTarget, queryClient, showToast, t]);
 
   const shareClimb = useShareClimb({
     climb: displayedClimb ?? null,
@@ -844,7 +866,7 @@ export function PlayDrawer({
             bounces={false}
             overScrollMode="never"
             style={styles.content}
-            contentContainerStyle={{ paddingBottom: insets.bottom }}
+            contentContainerStyle={{ paddingBottom: insets.bottom + spacing[4] }}
             onLayout={handleViewportLayout}
             onScroll={handleScroll}
             scrollEventThrottle={16}
@@ -1012,6 +1034,9 @@ export function PlayDrawer({
                         onTickLongPress={handleTickFabLongPress}
                         currentAngle={angle}
                         onOpenAngleSelector={isAngleAdjustable ? handleOpenAngleSelector : undefined}
+                        showRecordAction={canRecordAttempt}
+                        recordDisabled={isPreview}
+                        onRecord={handleOpenAttemptRecorder}
                       />
                     </View>
 
@@ -1083,6 +1108,13 @@ export function PlayDrawer({
           onClose={handleCloseAddBetaVideo}
         />
       )}
+
+      <AttemptRecorderModal
+        visible={attemptRecorderTarget !== null}
+        target={attemptRecorderTarget}
+        onClose={() => setAttemptRecorderTarget(null)}
+        onSaved={handleAttemptSaved}
+      />
 
       {/* Sub-drawer: Angle selector. Mounted on first open, then toggled via `visible`. */}
       {mountAngleSelector && (
