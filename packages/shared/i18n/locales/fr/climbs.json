@@ -351,6 +351,31 @@
       "similarClimbsSummary": "Blocs partageant au moins 50 % de ces prises"
     }
   },
+  "attemptVideos": {
+    "section": "Tes vidéos d'essais",
+    "playbackSpeed": "Vitesse de lecture",
+    "videoAria": "Vidéo privée d'essai",
+    "loading": "Chargement des vidéos d'essais",
+    "empty": "Aucun essai filmé",
+    "duration": "{{seconds}} secondes",
+    "deleteAria": "Supprimer la vidéo d'essai",
+    "deleteTitle": "Supprimer cette vidéo ?",
+    "deleteBody": "L'essai restera dans ton carnet.",
+    "cancel": "Annuler",
+    "delete": "Supprimer"
+  },
+  "analyzedBeta": {
+    "loading": "Chargement de la bêta analysée",
+    "videoAria": "Vidéo bêta analysée",
+    "possibleMatch": "Correspondance possible. La source est liée à plusieurs blocs et n'a pas encore été résolue.",
+    "sourceUnknown": "Source inconnue",
+    "carouselItem": "Élément {{item}} sur {{count}} du carrousel",
+    "openPostAria": "Ouvrir la publication source",
+    "previousMoveAria": "Mouvement précédent",
+    "nextMoveAria": "Mouvement suivant",
+    "moveLabel": "Mouvement",
+    "moveCount": "Mouvement {{move}} sur {{count}}"
+  },
   "boardseshGrade": {
     "label": "Grade Boardsesh",
     "title": "Grade Boardsesh",

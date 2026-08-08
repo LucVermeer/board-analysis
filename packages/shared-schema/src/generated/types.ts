@@ -188,6 +188,55 @@ export type AllUserPlaylistsResult = {
   totalCount: Scalars['Int']['output'];
 };
 
+export type AnalyzedBetaClimb = {
+  __typename?: 'AnalyzedBetaClimb';
+  angle: Scalars['String']['output'];
+  boardLayout: Scalars['String']['output'];
+  grade: Scalars['String']['output'];
+  id: Scalars['String']['output'];
+  name: Scalars['String']['output'];
+  normalizedId: Scalars['String']['output'];
+  setterUsername: Scalars['String']['output'];
+};
+
+export type AnalyzedBetaClimbCandidate = {
+  __typename?: 'AnalyzedBetaClimbCandidate';
+  angles: Array<Scalars['String']['output']>;
+  boardLayout: Scalars['String']['output'];
+  climbId: Scalars['String']['output'];
+  climbName: Scalars['String']['output'];
+  grades: Array<Scalars['String']['output']>;
+  normalizedClimbId: Scalars['String']['output'];
+};
+
+/** A provider-scoped beta item with explicit post/item/segment provenance. */
+export type AnalyzedBetaVideo = {
+  __typename?: 'AnalyzedBetaVideo';
+  assignmentMethod: Scalars['String']['output'];
+  assignmentState: Scalars['String']['output'];
+  boardLayout: Scalars['String']['output'];
+  boardType: Scalars['String']['output'];
+  candidateClimbs: Array<AnalyzedBetaClimbCandidate>;
+  climb?: Maybe<AnalyzedBetaClimb>;
+  evidenceScope: Scalars['String']['output'];
+  hasMoveAnalysis: Scalars['Boolean']['output'];
+  id: Scalars['ID']['output'];
+  isDefinitive: Scalars['Boolean']['output'];
+  mediaItemCount?: Maybe<Scalars['Int']['output']>;
+  mediaItemIndex?: Maybe<Scalars['Int']['output']>;
+  mediaItemKey: Scalars['String']['output'];
+  movesPath?: Maybe<Scalars['String']['output']>;
+  playbackPath: Scalars['String']['output'];
+  postKey: Scalars['String']['output'];
+  postUrl: Scalars['String']['output'];
+  provider: Scalars['String']['output'];
+  providerClimbId: Scalars['String']['output'];
+  resolutionScope: Scalars['String']['output'];
+  segmentKey: Scalars['String']['output'];
+  sourceAccount: Scalars['String']['output'];
+  uncertaintyReasons: Array<Scalars['String']['output']>;
+};
+
 /** A supported board angle. */
 export type Angle = {
   __typename?: 'Angle';
@@ -4433,6 +4482,28 @@ export type PopularBoardConfigsInput = {
   offset?: InputMaybe<Scalars['Int']['input']>;
 };
 
+/**
+ * An owner-only MoonBoard 2024 attempt recording. The opaque filesystem asset
+ * key is intentionally absent; playback is always authorized independently.
+ */
+export type PrivateAttemptVideo = {
+  __typename?: 'PrivateAttemptVideo';
+  angle: Scalars['Int']['output'];
+  boardType: Scalars['String']['output'];
+  byteSize: Scalars['Int']['output'];
+  climbProvider: Scalars['String']['output'];
+  climbUuid: Scalars['String']['output'];
+  createdAt: Scalars['String']['output'];
+  durationMs: Scalars['Int']['output'];
+  isMirror: Scalars['Boolean']['output'];
+  layoutId: Scalars['Int']['output'];
+  mimeType: Scalars['String']['output'];
+  playbackPath: Scalars['String']['output'];
+  recordedAt: Scalars['String']['output'];
+  tickUuid: Scalars['ID']['output'];
+  uuid: Scalars['ID']['output'];
+};
+
 /** Aggregated profile statistics across all boards. */
 export type ProfileStats = {
   __typename?: 'ProfileStats';
@@ -4537,6 +4608,11 @@ export type Query = {
    * Optional boardType/layoutId filter. Requires authentication.
    */
   allUserPlaylists: AllUserPlaylistsResult;
+  /**
+   * Get provenance-preserving analyzed beta and unresolved candidates from the
+   * configured local analysis provider. Currently available for MoonBoard 2024.
+   */
+  analyzedBetaVideos: Array<AnalyzedBetaVideo>;
   /** Get available angles for a board layout. */
   angles: Array<Angle>;
   /**
@@ -4899,6 +4975,11 @@ export type Query = {
   /** Get popular board configurations ranked by climb count. */
   popularBoardConfigs: PopularBoardConfigConnection;
   /**
+   * Get the current user's ready MoonBoard 2024 recordings for one climb and
+   * angle. Private attempts are never returned by public beta queries.
+   */
+  privateAttemptVideos: Array<PrivateAttemptVideo>;
+  /**
    * Get the currently authenticated user's profile.
    * Returns null if not authenticated.
    */
@@ -5119,6 +5200,13 @@ export type QueryAdminAppFeedbackArgs = {
 /** Root query type for all read operations. */
 export type QueryAllUserPlaylistsArgs = {
   input: GetAllUserPlaylistsInput;
+};
+
+/** Root query type for all read operations. */
+export type QueryAnalyzedBetaVideosArgs = {
+  boardType: Scalars['String']['input'];
+  climbUuid: Scalars['String']['input'];
+  layoutId: Scalars['Int']['input'];
 };
 
 /** Root query type for all read operations. */
@@ -5479,6 +5567,13 @@ export type QueryPlaylistsForClimbsArgs = {
 /** Root query type for all read operations. */
 export type QueryPopularBoardConfigsArgs = {
   input?: InputMaybe<PopularBoardConfigsInput>;
+};
+
+/** Root query type for all read operations. */
+export type QueryPrivateAttemptVideosArgs = {
+  angle: Scalars['Int']['input'];
+  climbUuid: Scalars['String']['input'];
+  layoutId: Scalars['Int']['input'];
 };
 
 /** Root query type for all read operations. */
@@ -7941,6 +8036,9 @@ export type ResolversTypes = ResolversObject<{
   AdminAppFeedbackInput: AdminAppFeedbackInput;
   AdminAppFeedbackResult: ResolverTypeWrapper<AdminAppFeedbackResult>;
   AllUserPlaylistsResult: ResolverTypeWrapper<AllUserPlaylistsResult>;
+  AnalyzedBetaClimb: ResolverTypeWrapper<AnalyzedBetaClimb>;
+  AnalyzedBetaClimbCandidate: ResolverTypeWrapper<AnalyzedBetaClimbCandidate>;
+  AnalyzedBetaVideo: ResolverTypeWrapper<AnalyzedBetaVideo>;
   Angle: ResolverTypeWrapper<Angle>;
   AppFeedbackContext: ResolverTypeWrapper<AppFeedbackContext>;
   AppFeedbackReport: ResolverTypeWrapper<AppFeedbackReport>;
@@ -8156,6 +8254,7 @@ export type ResolversTypes = ResolversObject<{
   PopularBoardConfig: ResolverTypeWrapper<PopularBoardConfig>;
   PopularBoardConfigConnection: ResolverTypeWrapper<PopularBoardConfigConnection>;
   PopularBoardConfigsInput: PopularBoardConfigsInput;
+  PrivateAttemptVideo: ResolverTypeWrapper<PrivateAttemptVideo>;
   ProfileStats: ResolverTypeWrapper<ProfileStats>;
   Proposal: ResolverTypeWrapper<Proposal>;
   ProposalConnection: ResolverTypeWrapper<ProposalConnection>;
@@ -8308,6 +8407,9 @@ export type ResolversParentTypes = ResolversObject<{
   AdminAppFeedbackInput: AdminAppFeedbackInput;
   AdminAppFeedbackResult: AdminAppFeedbackResult;
   AllUserPlaylistsResult: AllUserPlaylistsResult;
+  AnalyzedBetaClimb: AnalyzedBetaClimb;
+  AnalyzedBetaClimbCandidate: AnalyzedBetaClimbCandidate;
+  AnalyzedBetaVideo: AnalyzedBetaVideo;
   Angle: Angle;
   AppFeedbackContext: AppFeedbackContext;
   AppFeedbackReport: AppFeedbackReport;
@@ -8505,6 +8607,7 @@ export type ResolversParentTypes = ResolversObject<{
   PopularBoardConfig: PopularBoardConfig;
   PopularBoardConfigConnection: PopularBoardConfigConnection;
   PopularBoardConfigsInput: PopularBoardConfigsInput;
+  PrivateAttemptVideo: PrivateAttemptVideo;
   ProfileStats: ProfileStats;
   Proposal: Proposal;
   ProposalConnection: ProposalConnection;
@@ -8697,6 +8800,64 @@ export type AllUserPlaylistsResultResolvers<
   hasMore?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   playlists?: Resolver<Array<ResolversTypes['Playlist']>, ParentType, ContextType>;
   totalCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
+export type AnalyzedBetaClimbResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['AnalyzedBetaClimb'] = ResolversParentTypes['AnalyzedBetaClimb'],
+> = ResolversObject<{
+  angle?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  boardLayout?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  grade?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  id?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  name?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  normalizedId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  setterUsername?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
+export type AnalyzedBetaClimbCandidateResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['AnalyzedBetaClimbCandidate'] =
+    ResolversParentTypes['AnalyzedBetaClimbCandidate'],
+> = ResolversObject<{
+  angles?: Resolver<Array<ResolversTypes['String']>, ParentType, ContextType>;
+  boardLayout?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  climbId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  climbName?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  grades?: Resolver<Array<ResolversTypes['String']>, ParentType, ContextType>;
+  normalizedClimbId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
+export type AnalyzedBetaVideoResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['AnalyzedBetaVideo'] = ResolversParentTypes['AnalyzedBetaVideo'],
+> = ResolversObject<{
+  assignmentMethod?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  assignmentState?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  boardLayout?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  boardType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  candidateClimbs?: Resolver<Array<ResolversTypes['AnalyzedBetaClimbCandidate']>, ParentType, ContextType>;
+  climb?: Resolver<Maybe<ResolversTypes['AnalyzedBetaClimb']>, ParentType, ContextType>;
+  evidenceScope?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  hasMoveAnalysis?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  isDefinitive?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  mediaItemCount?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
+  mediaItemIndex?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
+  mediaItemKey?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  movesPath?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  playbackPath?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  postKey?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  postUrl?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  provider?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  providerClimbId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  resolutionScope?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  segmentKey?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  sourceAccount?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  uncertaintyReasons?: Resolver<Array<ResolversTypes['String']>, ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
@@ -11031,6 +11192,27 @@ export type PopularBoardConfigConnectionResolvers<
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
+export type PrivateAttemptVideoResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['PrivateAttemptVideo'] = ResolversParentTypes['PrivateAttemptVideo'],
+> = ResolversObject<{
+  angle?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  boardType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  byteSize?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  climbProvider?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  climbUuid?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  createdAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  durationMs?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  isMirror?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  layoutId?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  mimeType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  playbackPath?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  recordedAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  tickUuid?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  uuid?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
 export type ProfileStatsResolvers<
   ContextType = ConnectionContext,
   ParentType extends ResolversParentTypes['ProfileStats'] = ResolversParentTypes['ProfileStats'],
@@ -11132,6 +11314,12 @@ export type QueryResolvers<
     ParentType,
     ContextType,
     RequireFields<QueryAllUserPlaylistsArgs, 'input'>
+  >;
+  analyzedBetaVideos?: Resolver<
+    Array<ResolversTypes['AnalyzedBetaVideo']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryAnalyzedBetaVideosArgs, 'boardType' | 'climbUuid' | 'layoutId'>
   >;
   angles?: Resolver<
     Array<ResolversTypes['Angle']>,
@@ -11513,6 +11701,12 @@ export type QueryResolvers<
     ParentType,
     ContextType,
     Partial<QueryPopularBoardConfigsArgs>
+  >;
+  privateAttemptVideos?: Resolver<
+    Array<ResolversTypes['PrivateAttemptVideo']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryPrivateAttemptVideosArgs, 'angle' | 'climbUuid' | 'layoutId'>
   >;
   profile?: Resolver<Maybe<ResolversTypes['UserProfile']>, ParentType, ContextType>;
   publicProfile?: Resolver<
@@ -12847,6 +13041,9 @@ export type Resolvers<ContextType = ConnectionContext> = ResolversObject<{
   ActivityFeedResult?: ActivityFeedResultResolvers<ContextType>;
   AdminAppFeedbackResult?: AdminAppFeedbackResultResolvers<ContextType>;
   AllUserPlaylistsResult?: AllUserPlaylistsResultResolvers<ContextType>;
+  AnalyzedBetaClimb?: AnalyzedBetaClimbResolvers<ContextType>;
+  AnalyzedBetaClimbCandidate?: AnalyzedBetaClimbCandidateResolvers<ContextType>;
+  AnalyzedBetaVideo?: AnalyzedBetaVideoResolvers<ContextType>;
   Angle?: AngleResolvers<ContextType>;
   AppFeedbackContext?: AppFeedbackContextResolvers<ContextType>;
   AppFeedbackReport?: AppFeedbackReportResolvers<ContextType>;
@@ -12973,6 +13170,7 @@ export type Resolvers<ContextType = ConnectionContext> = ResolversObject<{
   PlaylistCreator?: PlaylistCreatorResolvers<ContextType>;
   PopularBoardConfig?: PopularBoardConfigResolvers<ContextType>;
   PopularBoardConfigConnection?: PopularBoardConfigConnectionResolvers<ContextType>;
+  PrivateAttemptVideo?: PrivateAttemptVideoResolvers<ContextType>;
   ProfileStats?: ProfileStatsResolvers<ContextType>;
   Proposal?: ProposalResolvers<ContextType>;
   ProposalConnection?: ProposalConnectionResolvers<ContextType>;

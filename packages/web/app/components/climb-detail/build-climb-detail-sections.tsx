@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import VideocamOutlined from '@mui/icons-material/VideocamOutlined';
+import VideoLibraryOutlined from '@mui/icons-material/VideoLibraryOutlined';
 import Box from '@mui/material/Box';
 import type { CollapsibleSectionConfig } from '@/app/components/collapsible-section/collapsible-section';
 import { LogbookSection, useLogbookSummary } from '@/app/components/logbook/logbook-section';
@@ -15,6 +16,8 @@ import BoardseshGradeSection from '@/app/components/climb-detail/boardsesh-grade
 import BoardseshBetaList from '@/app/components/beta-videos/boardsesh-beta-list';
 import BoardseshBetaAddPanel from '@/app/components/beta-videos/boardsesh-beta-add-panel';
 import BoardseshBetaAddButton from '@/app/components/beta-videos/boardsesh-beta-add-button';
+import AnalyzedBetaVideos from '@/app/components/beta-videos/analyzed-beta-videos';
+import PrivateAttemptVideos from '@/app/components/attempt-videos/private-attempt-videos';
 import SimilarClimbsList from '@/app/components/similar-climbs/similar-climbs-list';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import { useFeatureFlag } from '@/app/components/providers/feature-flags-provider';
@@ -23,6 +26,7 @@ import { GET_BETA_LINKS } from '@boardsesh/graphql/operations/beta-links';
 import { dedupeBetaLinks, mapBetaLinksResponse } from '@/app/lib/beta-video-url';
 import type { BetaLink } from '@/app/lib/api-wrappers/sync-api-types';
 import type { BoardDetails, BoardName, Climb } from '@/app/lib/types';
+import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 
 type BuildClimbDetailSectionsProps = {
   climb: Climb;
@@ -58,6 +62,8 @@ export function useBuildClimbDetailSections({
 }: BuildClimbDetailSectionsProps): CollapsibleSectionConfig[] {
   const { t } = useTranslation('climbs');
   const boardseshGradeEnabled = useFeatureFlag(BOARDSESH_GRADE_FLAG) === true;
+  const isMoonBoard2024 = boardType === 'moonboard' && layoutId === 3;
+  const { isAuthenticated } = useWsAuthToken(isMoonBoard2024);
   const betaLabel = (
     <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
       <VideocamOutlined sx={{ fontSize: 16 }} />
@@ -138,11 +144,34 @@ export function useBuildClimbDetailSections({
               onSuccess={() => setIsAddingBeta(false)}
             />
           ) : (
-            <BoardseshBetaList links={dedupedBetaLinks} isLoading={betaLinksLoading} />
+            <>
+              {isMoonBoard2024 && (
+                <AnalyzedBetaVideos boardType={boardType} climbUuid={climbUuid} layoutId={layoutId} />
+              )}
+              <BoardseshBetaList links={dedupedBetaLinks} isLoading={betaLinksLoading} />
+            </>
           )}
         </Box>
       ),
     },
+    ...(isMoonBoard2024 && isAuthenticated
+      ? [
+          {
+            key: 'attempt-videos',
+            label: (
+              <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
+                <VideoLibraryOutlined sx={{ fontSize: 16 }} />
+                {t('attemptVideos.section')}
+              </Box>
+            ),
+            title: t('attemptVideos.section'),
+            defaultSummary: t('attemptVideos.empty'),
+            lazy: true,
+            flush: true,
+            content: <PrivateAttemptVideos climbUuid={climbUuid} layoutId={layoutId} angle={angle} />,
+          },
+        ]
+      : []),
     {
       key: 'logbook',
       label: 'Your Logbook',

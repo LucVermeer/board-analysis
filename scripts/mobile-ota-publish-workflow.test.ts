@@ -165,3 +165,9 @@ describe('backport OTA workflow upload pressure', () => {
     }
   });
 });
+
+describe('preview OTA workflow configuration', () => {
+  it('skips publishing when a repository has no self-hosted OTA endpoint', () => {
+    expect(jobBlock(preview, 'gate')).toContain("vars.EXPO_UPDATES_URL != ''");
+  });
+});

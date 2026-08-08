@@ -304,6 +304,11 @@ export const schemaSQL = `
   EXCEPTION WHEN duplicate_object THEN NULL;
   END $$;
 
+  DO $$ BEGIN
+    CREATE TYPE private_attempt_video_status AS ENUM ('uploading', 'finalizing', 'ready', 'failed', 'deleting');
+  EXCEPTION WHEN duplicate_object THEN NULL;
+  END $$;
+
   -- gym_members.role is a real enum in prod. The merge's member-collapse upsert
   -- builds an enum-typed CASE value (not just a string-equality read), so the
   -- test schema needs the actual type, not a text column.
@@ -354,6 +359,44 @@ export const schemaSQL = `
   -- (unsynced) ticks are unaffected.
   CREATE UNIQUE INDEX IF NOT EXISTS "boardsesh_ticks_aurora_id_unique" ON "boardsesh_ticks" ("aurora_id");
   CREATE UNIQUE INDEX IF NOT EXISTS "boardsesh_ticks_kilter_id_unique" ON "boardsesh_ticks" ("kilter_id");
+
+  CREATE TABLE IF NOT EXISTS "private_attempt_videos" (
+    "uuid" text PRIMARY KEY NOT NULL,
+    "owner_user_id" text NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+    "tick_uuid" text REFERENCES "boardsesh_ticks"("uuid") ON DELETE CASCADE,
+    "board_type" text NOT NULL,
+    "climb_provider" text DEFAULT 'boardsesh_public_graphql_search_climbs' NOT NULL,
+    "climb_uuid" text NOT NULL,
+    "layout_id" integer NOT NULL,
+    "angle" integer NOT NULL,
+    "is_mirror" boolean DEFAULT false NOT NULL,
+    "board_id" bigint,
+    "session_id" text REFERENCES "board_sessions"("id") ON DELETE SET NULL,
+    "asset_key" text NOT NULL,
+    "mime_type" text NOT NULL,
+    "byte_size" bigint DEFAULT 0 NOT NULL,
+    "duration_ms" integer,
+    "status" private_attempt_video_status DEFAULT 'uploading' NOT NULL,
+    "failure_code" text,
+    "recorded_at" timestamp NOT NULL,
+    "created_at" timestamp DEFAULT now() NOT NULL,
+    "updated_at" timestamp DEFAULT now() NOT NULL,
+    "client_recording_id" text NOT NULL,
+    CONSTRAINT "private_attempt_videos_moonboard_2024_only"
+      CHECK ("board_type" = 'moonboard' AND "layout_id" = 3),
+    CONSTRAINT "private_attempt_videos_byte_size_non_negative" CHECK ("byte_size" >= 0),
+    CONSTRAINT "private_attempt_videos_duration_non_negative" CHECK ("duration_ms" IS NULL OR "duration_ms" >= 0)
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS "private_attempt_videos_asset_key_unique"
+    ON "private_attempt_videos" ("asset_key");
+  CREATE UNIQUE INDEX IF NOT EXISTS "private_attempt_videos_tick_uuid_unique"
+    ON "private_attempt_videos" ("tick_uuid") WHERE "tick_uuid" IS NOT NULL;
+  CREATE UNIQUE INDEX IF NOT EXISTS "private_attempt_videos_owner_client_recording_unique"
+    ON "private_attempt_videos" ("owner_user_id", "client_recording_id");
+  CREATE INDEX IF NOT EXISTS "private_attempt_videos_owner_climb_created_idx"
+    ON "private_attempt_videos" ("owner_user_id", "board_type", "climb_uuid", "created_at");
+  CREATE INDEX IF NOT EXISTS "private_attempt_videos_status_updated_idx"
+    ON "private_attempt_videos" ("status", "updated_at");
 
   DROP TABLE IF EXISTS "board_placements" CASCADE;
   CREATE TABLE IF NOT EXISTS "board_placements" (

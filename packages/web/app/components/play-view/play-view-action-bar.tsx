@@ -14,6 +14,7 @@ import LightbulbOutlined from '@mui/icons-material/LightbulbOutlined';
 import Lightbulb from '@mui/icons-material/Lightbulb';
 import MoreHorizOutlined from '@mui/icons-material/MoreHorizOutlined';
 import FormatListBulletedOutlined from '@mui/icons-material/FormatListBulletedOutlined';
+import VideocamOutlined from '@mui/icons-material/VideocamOutlined';
 import { useLongPress } from '@/app/lib/hooks/use-long-press';
 import { themeTokens } from '@/app/theme/theme-config';
 import styles from './play-view-drawer.module.css';
@@ -31,6 +32,10 @@ export type PlayViewActionBarProps = {
   onToggleFavorite: () => void;
   onOpenActions: () => void;
   onOpenQueue: () => void;
+  showRecordAction?: boolean;
+  recordDisabled?: boolean;
+  recordDisabledReason?: string;
+  onRecord?: () => void;
   /** Whether the lightbulb should render as filled/lit (the visual). In party
    *  this is the session-scoped `wallConfirmed` indicator OR'd with this
    *  device's BLE / the board-presence holder; in solo it's
@@ -83,6 +88,10 @@ export const PlayViewActionBar = React.memo(function PlayViewActionBar({
   onToggleFavorite,
   onOpenActions,
   onOpenQueue,
+  showRecordAction = false,
+  recordDisabled = false,
+  recordDisabledReason,
+  onRecord,
   lightbulbActive,
   lightbulbConnected,
   lightbulbPending = false,
@@ -139,6 +148,15 @@ export const PlayViewActionBar = React.memo(function PlayViewActionBar({
       <IconButton onClick={onToggleFavorite}>
         {isFavorited ? <Favorite sx={{ color: 'var(--color-error)' }} /> : <FavoriteBorderOutlined />}
       </IconButton>
+      {showRecordAction && (
+        <Tooltip title={recordDisabled ? (recordDisabledReason ?? '') : t('attemptRecorder.openAria')}>
+          <span>
+            <IconButton onClick={onRecord} disabled={recordDisabled} aria-label={t('attemptRecorder.openAria')}>
+              <VideocamOutlined />
+            </IconButton>
+          </span>
+        </Tooltip>
+      )}
       {/* Lightbulb: the primary "send to the wall" gesture.
           Filled+amber-glowing when the lightbulb is active (wall confirmed in
           party, BLE-paired in solo); outlined when inactive (wall not confirmed

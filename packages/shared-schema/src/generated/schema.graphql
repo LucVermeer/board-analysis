@@ -4895,6 +4895,75 @@ type SyncDeletionsResult {
 }
 
 """
+An owner-only MoonBoard 2024 attempt recording. The opaque filesystem asset
+key is intentionally absent; playback is always authorized independently.
+"""
+type PrivateAttemptVideo {
+  uuid: ID!
+  tickUuid: ID!
+  boardType: String!
+  climbProvider: String!
+  climbUuid: String!
+  layoutId: Int!
+  angle: Int!
+  isMirror: Boolean!
+  mimeType: String!
+  byteSize: Int!
+  durationMs: Int!
+  recordedAt: String!
+  createdAt: String!
+  playbackPath: String!
+}
+
+type AnalyzedBetaClimbCandidate {
+  normalizedClimbId: String!
+  climbId: String!
+  climbName: String!
+  boardLayout: String!
+  grades: [String!]!
+  angles: [String!]!
+}
+
+type AnalyzedBetaClimb {
+  id: String!
+  normalizedId: String!
+  name: String!
+  grade: String!
+  angle: String!
+  boardLayout: String!
+  setterUsername: String!
+}
+
+"""
+A provider-scoped beta item with explicit post/item/segment provenance.
+"""
+type AnalyzedBetaVideo {
+  id: ID!
+  provider: String!
+  providerClimbId: String!
+  boardType: String!
+  boardLayout: String!
+  sourceAccount: String!
+  postKey: String!
+  postUrl: String!
+  mediaItemKey: String!
+  mediaItemIndex: Int
+  mediaItemCount: Int
+  segmentKey: String!
+  evidenceScope: String!
+  resolutionScope: String!
+  assignmentState: String!
+  assignmentMethod: String!
+  uncertaintyReasons: [String!]!
+  isDefinitive: Boolean!
+  hasMoveAnalysis: Boolean!
+  candidateClimbs: [AnalyzedBetaClimbCandidate!]!
+  climb: AnalyzedBetaClimb
+  playbackPath: String!
+  movesPath: String
+}
+
+"""
 Root query type for all read operations.
 """
 type Query {
@@ -5094,6 +5163,18 @@ type Query {
   Requires authentication.
   """
   ticks(input: GetTicksInput!): [Tick!]!
+
+  """
+  Get the current user's ready MoonBoard 2024 recordings for one climb and
+  angle. Private attempts are never returned by public beta queries.
+  """
+  privateAttemptVideos(climbUuid: String!, layoutId: Int!, angle: Int!): [PrivateAttemptVideo!]!
+
+  """
+  Get provenance-preserving analyzed beta and unresolved candidates from the
+  configured local analysis provider. Currently available for MoonBoard 2024.
+  """
+  analyzedBetaVideos(boardType: String!, climbUuid: String!, layoutId: Int!): [AnalyzedBetaVideo!]!
 
   """
   Get public ticks for any user by their ID.

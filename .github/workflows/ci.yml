@@ -558,10 +558,9 @@ jobs:
         include: ${{ fromJSON(github.event_name != 'pull_request' && '[{"shard":1,"total":2},{"shard":2,"total":2}]' || '[{"shard":1,"total":1}]') }}
     services:
       postgres:
-        image: ghcr.io/boardsesh/boardsesh-postgres-postgis:latest
-        credentials:
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+        # Keep CI runnable in mirrors, whose GITHUB_TOKEN cannot pull the
+        # upstream repository's private GHCR package.
+        image: postgis/postgis:17-3.5
         env:
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: boardsesh_backend_test

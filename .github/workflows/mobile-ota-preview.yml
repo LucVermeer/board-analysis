@@ -133,13 +133,15 @@ jobs:
   # dispatcher selects, gated instead by dispatch REQUIRING REPO WRITE ACCESS — that is
   # what makes the fork / on-demand path safe.
   gate:
-    # Skip unrelated comments (issue_comment fires on every comment in the repo).
+    # Skip unrelated comments (issue_comment fires on every comment in the repo)
+    # and mirrors that have not configured the self-hosted OTA endpoint.
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'pull_request' ||
-      (github.event_name == 'issue_comment' &&
-       github.event.issue.pull_request != null &&
-       startsWith(github.event.comment.body, '/ota-preview'))
+      vars.EXPO_UPDATES_URL != '' &&
+      (github.event_name == 'workflow_dispatch' ||
+       github.event_name == 'pull_request' ||
+       (github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request != null &&
+        startsWith(github.event.comment.body, '/ota-preview')))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     # Read-only: reads PR metadata (incl. the head SHA to pin) and uploads an artifact.

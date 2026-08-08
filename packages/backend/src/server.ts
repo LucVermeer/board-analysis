@@ -47,6 +47,9 @@ import {
   stopRefreshTokenCleanup,
 } from './handlers/native-auth';
 import { handleApnsStats } from './handlers/apns-stats';
+import { handlePrivateAttemptVideoCollection, handlePrivateAttemptVideoItem } from './handlers/private-attempt-videos';
+import { cleanupPrivateAttemptVideoStorage } from './services/private-attempt-videos';
+import { handleAnalyzedBetaVideo } from './handlers/analyzed-beta-videos';
 import { handleIntegrationOAuthStart, handleIntegrationOAuthCallback } from './handlers/integrations-oauth';
 import { createYogaInstance } from './graphql/yoga';
 import { setupWebSocketServer } from './websocket/setup';
@@ -504,6 +507,27 @@ export async function startServer(): Promise<ServerResources> {
         return;
       }
 
+      if (pathname === '/api/private-attempt-videos') {
+        await handlePrivateAttemptVideoCollection(req, res);
+        return;
+      }
+
+      if (pathname.startsWith('/api/private-attempt-videos/')) {
+        const segments = pathname.slice('/api/private-attempt-videos/'.length).split('/').filter(Boolean);
+        if (segments.length === 1 || segments.length === 2) {
+          await handlePrivateAttemptVideoItem(req, res, segments[0], segments[1] ?? null);
+          return;
+        }
+      }
+
+      if (pathname.startsWith('/api/analyzed-beta-videos/')) {
+        const segments = pathname.slice('/api/analyzed-beta-videos/'.length).split('/').filter(Boolean);
+        if (segments.length === 2 && (segments[1] === 'stream' || segments[1] === 'moves')) {
+          await handleAnalyzedBetaVideo(req, res, url, segments[0], segments[1]);
+          return;
+        }
+      }
+
       // Native auth endpoints for React Native mobile app
       if (pathname === '/auth/native/exchange' && (req.method === 'POST' || req.method === 'OPTIONS')) {
         await handleNativeAuthExchange(req, res);
@@ -647,6 +671,11 @@ export async function startServer(): Promise<ServerResources> {
     logger.info(`  Native auth revoke: ${httpScheme}://0.0.0.0:${PORT}/auth/native/revoke`);
     logger.info(`  Integration OAuth start: ${httpScheme}://0.0.0.0:${PORT}/integrations/:provider/start`);
     logger.info(`  Integration OAuth callback: ${httpScheme}://0.0.0.0:${PORT}/integrations/:provider/callback`);
+    logger.info(`  Private attempt videos: ${httpScheme}://0.0.0.0:${PORT}/api/private-attempt-videos`);
+
+    cleanupPrivateAttemptVideoStorage().catch((error) => {
+      logger.error('[PrivateAttemptVideos] Startup cleanup failed:', error);
+    });
 
     // Warm up popular board configs cache in the background.
     // Uses a Redis lock so only one node across the cluster runs the query.
@@ -751,6 +780,17 @@ export async function startServer(): Promise<ServerResources> {
     }
   }, 120000); // 2 minutes
   intervals.push(ttlRefreshInterval);
+
+  const privateAttemptCleanupInterval = setInterval(
+    () => {
+      cleanupPrivateAttemptVideoStorage().catch((error) => {
+        logger.error('[PrivateAttemptVideos] Periodic cleanup failed:', error);
+      });
+    },
+    6 * 60 * 60 * 1000,
+  );
+  if (typeof privateAttemptCleanupInterval.unref === 'function') privateAttemptCleanupInterval.unref();
+  intervals.push(privateAttemptCleanupInterval);
 
   // Prune sync-deletion tombstones past their retention window (see
   // sync-deletions-prune.ts). Every delete of a tick/favorite/playlist writes a

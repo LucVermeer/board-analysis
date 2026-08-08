@@ -185,6 +185,55 @@ export type AllUserPlaylistsResult = {
   totalCount: Scalars['Int']['output'];
 };
 
+export type AnalyzedBetaClimb = {
+  __typename?: 'AnalyzedBetaClimb';
+  angle: Scalars['String']['output'];
+  boardLayout: Scalars['String']['output'];
+  grade: Scalars['String']['output'];
+  id: Scalars['String']['output'];
+  name: Scalars['String']['output'];
+  normalizedId: Scalars['String']['output'];
+  setterUsername: Scalars['String']['output'];
+};
+
+export type AnalyzedBetaClimbCandidate = {
+  __typename?: 'AnalyzedBetaClimbCandidate';
+  angles: Array<Scalars['String']['output']>;
+  boardLayout: Scalars['String']['output'];
+  climbId: Scalars['String']['output'];
+  climbName: Scalars['String']['output'];
+  grades: Array<Scalars['String']['output']>;
+  normalizedClimbId: Scalars['String']['output'];
+};
+
+/** A provider-scoped beta item with explicit post/item/segment provenance. */
+export type AnalyzedBetaVideo = {
+  __typename?: 'AnalyzedBetaVideo';
+  assignmentMethod: Scalars['String']['output'];
+  assignmentState: Scalars['String']['output'];
+  boardLayout: Scalars['String']['output'];
+  boardType: Scalars['String']['output'];
+  candidateClimbs: Array<AnalyzedBetaClimbCandidate>;
+  climb?: Maybe<AnalyzedBetaClimb>;
+  evidenceScope: Scalars['String']['output'];
+  hasMoveAnalysis: Scalars['Boolean']['output'];
+  id: Scalars['ID']['output'];
+  isDefinitive: Scalars['Boolean']['output'];
+  mediaItemCount?: Maybe<Scalars['Int']['output']>;
+  mediaItemIndex?: Maybe<Scalars['Int']['output']>;
+  mediaItemKey: Scalars['String']['output'];
+  movesPath?: Maybe<Scalars['String']['output']>;
+  playbackPath: Scalars['String']['output'];
+  postKey: Scalars['String']['output'];
+  postUrl: Scalars['String']['output'];
+  provider: Scalars['String']['output'];
+  providerClimbId: Scalars['String']['output'];
+  resolutionScope: Scalars['String']['output'];
+  segmentKey: Scalars['String']['output'];
+  sourceAccount: Scalars['String']['output'];
+  uncertaintyReasons: Array<Scalars['String']['output']>;
+};
+
 /** A supported board angle. */
 export type Angle = {
   __typename?: 'Angle';
@@ -4430,6 +4479,28 @@ export type PopularBoardConfigsInput = {
   offset?: InputMaybe<Scalars['Int']['input']>;
 };
 
+/**
+ * An owner-only MoonBoard 2024 attempt recording. The opaque filesystem asset
+ * key is intentionally absent; playback is always authorized independently.
+ */
+export type PrivateAttemptVideo = {
+  __typename?: 'PrivateAttemptVideo';
+  angle: Scalars['Int']['output'];
+  boardType: Scalars['String']['output'];
+  byteSize: Scalars['Int']['output'];
+  climbProvider: Scalars['String']['output'];
+  climbUuid: Scalars['String']['output'];
+  createdAt: Scalars['String']['output'];
+  durationMs: Scalars['Int']['output'];
+  isMirror: Scalars['Boolean']['output'];
+  layoutId: Scalars['Int']['output'];
+  mimeType: Scalars['String']['output'];
+  playbackPath: Scalars['String']['output'];
+  recordedAt: Scalars['String']['output'];
+  tickUuid: Scalars['ID']['output'];
+  uuid: Scalars['ID']['output'];
+};
+
 /** Aggregated profile statistics across all boards. */
 export type ProfileStats = {
   __typename?: 'ProfileStats';
@@ -4534,6 +4605,11 @@ export type Query = {
    * Optional boardType/layoutId filter. Requires authentication.
    */
   allUserPlaylists: AllUserPlaylistsResult;
+  /**
+   * Get provenance-preserving analyzed beta and unresolved candidates from the
+   * configured local analysis provider. Currently available for MoonBoard 2024.
+   */
+  analyzedBetaVideos: Array<AnalyzedBetaVideo>;
   /** Get available angles for a board layout. */
   angles: Array<Angle>;
   /**
@@ -4896,6 +4972,11 @@ export type Query = {
   /** Get popular board configurations ranked by climb count. */
   popularBoardConfigs: PopularBoardConfigConnection;
   /**
+   * Get the current user's ready MoonBoard 2024 recordings for one climb and
+   * angle. Private attempts are never returned by public beta queries.
+   */
+  privateAttemptVideos: Array<PrivateAttemptVideo>;
+  /**
    * Get the currently authenticated user's profile.
    * Returns null if not authenticated.
    */
@@ -5116,6 +5197,13 @@ export type QueryAdminAppFeedbackArgs = {
 /** Root query type for all read operations. */
 export type QueryAllUserPlaylistsArgs = {
   input: GetAllUserPlaylistsInput;
+};
+
+/** Root query type for all read operations. */
+export type QueryAnalyzedBetaVideosArgs = {
+  boardType: Scalars['String']['input'];
+  climbUuid: Scalars['String']['input'];
+  layoutId: Scalars['Int']['input'];
 };
 
 /** Root query type for all read operations. */
@@ -5476,6 +5564,13 @@ export type QueryPlaylistsForClimbsArgs = {
 /** Root query type for all read operations. */
 export type QueryPopularBoardConfigsArgs = {
   input?: InputMaybe<PopularBoardConfigsInput>;
+};
+
+/** Root query type for all read operations. */
+export type QueryPrivateAttemptVideosArgs = {
+  angle: Scalars['Int']['input'];
+  climbUuid: Scalars['String']['input'];
+  layoutId: Scalars['Int']['input'];
 };
 
 /** Root query type for all read operations. */
@@ -7836,6 +7931,59 @@ export type DeleteAccountMutationVariables = Exact<{
 
 export type DeleteAccountMutation = { __typename?: 'Mutation'; deleteAccount: boolean };
 
+export type GetAnalyzedBetaVideosQueryVariables = Exact<{
+  boardType: Scalars['String']['input'];
+  climbUuid: Scalars['String']['input'];
+  layoutId: Scalars['Int']['input'];
+}>;
+
+export type GetAnalyzedBetaVideosQuery = {
+  __typename?: 'Query';
+  analyzedBetaVideos: Array<{
+    __typename?: 'AnalyzedBetaVideo';
+    id: string;
+    provider: string;
+    providerClimbId: string;
+    boardType: string;
+    boardLayout: string;
+    sourceAccount: string;
+    postKey: string;
+    postUrl: string;
+    mediaItemKey: string;
+    mediaItemIndex?: number | null;
+    mediaItemCount?: number | null;
+    segmentKey: string;
+    evidenceScope: string;
+    resolutionScope: string;
+    assignmentState: string;
+    assignmentMethod: string;
+    uncertaintyReasons: Array<string>;
+    isDefinitive: boolean;
+    hasMoveAnalysis: boolean;
+    playbackPath: string;
+    movesPath?: string | null;
+    candidateClimbs: Array<{
+      __typename?: 'AnalyzedBetaClimbCandidate';
+      normalizedClimbId: string;
+      climbId: string;
+      climbName: string;
+      boardLayout: string;
+      grades: Array<string>;
+      angles: Array<string>;
+    }>;
+    climb?: {
+      __typename?: 'AnalyzedBetaClimb';
+      id: string;
+      normalizedId: string;
+      name: string;
+      grade: string;
+      angle: string;
+      boardLayout: string;
+      setterUsername: string;
+    } | null;
+  }>;
+};
+
 export type GetBetaLinksQueryVariables = Exact<{
   boardType: Scalars['String']['input'];
   climbUuid: Scalars['String']['input'];
@@ -9171,6 +9319,33 @@ export type GetMySmartPlaylistCountsQuery = {
   mySmartPlaylistCounts: Array<{ __typename?: 'SmartPlaylistCount'; type: SmartPlaylistType; count: number }>;
 };
 
+export type GetPrivateAttemptVideosQueryVariables = Exact<{
+  climbUuid: Scalars['String']['input'];
+  layoutId: Scalars['Int']['input'];
+  angle: Scalars['Int']['input'];
+}>;
+
+export type GetPrivateAttemptVideosQuery = {
+  __typename?: 'Query';
+  privateAttemptVideos: Array<{
+    __typename?: 'PrivateAttemptVideo';
+    uuid: string;
+    tickUuid: string;
+    boardType: string;
+    climbProvider: string;
+    climbUuid: string;
+    layoutId: number;
+    angle: number;
+    isMirror: boolean;
+    mimeType: string;
+    byteSize: number;
+    durationMs: number;
+    recordedAt: string;
+    createdAt: string;
+    playbackPath: string;
+  }>;
+};
+
 export type GetClimbProposalsQueryVariables = Exact<{
   input: GetClimbProposalsInput;
 }>;
@@ -10502,6 +10677,116 @@ export const DeleteAccountDocument = {
     },
   ],
 } as unknown as DocumentNode<DeleteAccountMutation, DeleteAccountMutationVariables>;
+export const GetAnalyzedBetaVideosDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'GetAnalyzedBetaVideos' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'boardType' } },
+          type: { kind: 'NonNullType', type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'climbUuid' } },
+          type: { kind: 'NonNullType', type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'layoutId' } },
+          type: { kind: 'NonNullType', type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } } },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'analyzedBetaVideos' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'boardType' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'boardType' } },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'climbUuid' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'climbUuid' } },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'layoutId' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'layoutId' } },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'id' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'provider' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'providerClimbId' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'boardType' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'boardLayout' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'sourceAccount' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'postKey' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'postUrl' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'mediaItemKey' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'mediaItemIndex' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'mediaItemCount' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'segmentKey' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'evidenceScope' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'resolutionScope' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'assignmentState' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'assignmentMethod' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'uncertaintyReasons' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'isDefinitive' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'hasMoveAnalysis' } },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'candidateClimbs' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      { kind: 'Field', name: { kind: 'Name', value: 'normalizedClimbId' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'climbId' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'climbName' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'boardLayout' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'grades' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'angles' } },
+                    ],
+                  },
+                },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'climb' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      { kind: 'Field', name: { kind: 'Name', value: 'id' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'normalizedId' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'grade' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'angle' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'boardLayout' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'setterUsername' } },
+                    ],
+                  },
+                },
+                { kind: 'Field', name: { kind: 'Name', value: 'playbackPath' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'movesPath' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<GetAnalyzedBetaVideosQuery, GetAnalyzedBetaVideosQueryVariables>;
 export const GetBetaLinksDocument = {
   kind: 'Document',
   definitions: [
@@ -14114,6 +14399,78 @@ export const GetMySmartPlaylistCountsDocument = {
     },
   ],
 } as unknown as DocumentNode<GetMySmartPlaylistCountsQuery, GetMySmartPlaylistCountsQueryVariables>;
+export const GetPrivateAttemptVideosDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'GetPrivateAttemptVideos' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'climbUuid' } },
+          type: { kind: 'NonNullType', type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'layoutId' } },
+          type: { kind: 'NonNullType', type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'angle' } },
+          type: { kind: 'NonNullType', type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } } },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'privateAttemptVideos' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'climbUuid' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'climbUuid' } },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'layoutId' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'layoutId' } },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'angle' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'angle' } },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'tickUuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'boardType' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'climbProvider' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'climbUuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'layoutId' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'angle' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'isMirror' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'mimeType' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'byteSize' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'durationMs' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'recordedAt' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'playbackPath' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<GetPrivateAttemptVideosQuery, GetPrivateAttemptVideosQueryVariables>;
 export const GetClimbProposalsDocument = {
   kind: 'Document',
   definitions: [
