@@ -48,6 +48,16 @@ vi.mock('@/app/components/beta-videos/boardsesh-beta-add-button', () => ({
   ),
 }));
 
+let mockIsAuthenticated = false;
+vi.mock('@/app/hooks/use-ws-auth-token', () => ({
+  useWsAuthToken: () => ({
+    token: mockIsAuthenticated ? 'test-token' : null,
+    isAuthenticated: mockIsAuthenticated,
+    isLoading: false,
+    error: null,
+  }),
+}));
+
 // Mutable mock payload for the betaLinks GraphQL query.
 let mockBetaLinks: Array<{
   climbUuid: string;
@@ -129,6 +139,7 @@ describe('useBuildClimbDetailSections', () => {
     vi.restoreAllMocks();
     mockSearchParams = new URLSearchParams();
     mockBetaLinks = [];
+    mockIsAuthenticated = false;
   });
 
   it('returns 6 sections when enabled (default)', () => {
@@ -185,6 +196,22 @@ describe('useBuildClimbDetailSections', () => {
     for (const section of result.current) {
       expect(section.lazy).toBe(true);
     }
+  });
+
+  it('includes private attempt videos for an authenticated MoonBoard 2024 climber', () => {
+    mockIsAuthenticated = true;
+
+    const { result } = renderHook(
+      () =>
+        useBuildClimbDetailSections({
+          ...BASE_PROPS,
+          boardType: 'moonboard',
+          layoutId: 3,
+        }),
+      { wrapper: createWrapper() },
+    );
+
+    expect(result.current.map((section) => section.key)).toContain('attempt-videos');
   });
 
   it('beta is the default-active section when no proposalUuid is set', () => {
