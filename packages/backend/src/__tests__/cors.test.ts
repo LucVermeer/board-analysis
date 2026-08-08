@@ -412,7 +412,10 @@ describe('CORS Handler', () => {
       const res = createMockRes();
       applyCorsHeaders(req, res);
 
-      expect(res.setHeader).toHaveBeenCalledWith('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+      expect(res.setHeader).toHaveBeenCalledWith(
+        'Access-Control-Allow-Methods',
+        'GET, HEAD, POST, PATCH, DELETE, OPTIONS',
+      );
     });
 
     it('always sets Access-Control-Allow-Headers', () => {
@@ -422,7 +425,18 @@ describe('CORS Handler', () => {
 
       expect(res.setHeader).toHaveBeenCalledWith(
         'Access-Control-Allow-Headers',
-        'Content-Type, Authorization, Content-Encoding',
+        'Content-Type, Authorization, Content-Encoding, Range, Upload-Offset',
+      );
+    });
+
+    it('always exposes resumable upload and range response headers', () => {
+      const req = createMockReq('GET');
+      const res = createMockRes();
+      applyCorsHeaders(req, res);
+
+      expect(res.setHeader).toHaveBeenCalledWith(
+        'Access-Control-Expose-Headers',
+        'Accept-Ranges, Content-Length, Content-Range, Upload-Offset',
       );
     });
 
