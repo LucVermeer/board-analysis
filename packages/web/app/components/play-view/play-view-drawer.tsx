@@ -653,7 +653,10 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     return () => cancelAnimationFrame(openRafRef.current);
   }, [isOpen]);
 
-  const [sectionsEverEnabled, setSectionsEverEnabled] = useState(false);
+  // A direct /view/ hit mounts already open with the enter animation disabled,
+  // so SwipeableDrawer never fires onEntered. Enable below-fold content on
+  // that path immediately; animated opens still defer it until transition end.
+  const [sectionsEverEnabled, setSectionsEverEnabled] = useState(() => initialOpenWithoutAnimation && isOpen);
   const handleTransitionEnd = useCallback((open: boolean) => {
     if (open) setSectionsEverEnabled(true);
   }, []);
