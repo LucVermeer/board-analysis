@@ -39,6 +39,8 @@ type ClimbActionsSheetProps = {
   onEditEntry?: () => void;
   /** When provided, shows an "Add beta video" row that opens the share-your-beta sheet. */
   onAddBetaVideo?: () => void;
+  /** Opens confirmed analyzed videos for this climb. */
+  onOpenVideoAnalysis?: () => void;
   /** Supplied only by the `/play` route; omitted by the persistent iPad pane. */
   dismissPlayerAndWait?: DismissSurfaceAndWait;
   onClose: () => void;
@@ -66,11 +68,13 @@ function ClimbActionsSheet({
   onTick,
   onEditEntry,
   onAddBetaVideo,
+  onOpenVideoAnalysis,
   dismissPlayerAndWait,
   onClose,
 }: ClimbActionsSheetProps) {
   const { t } = useTranslation('climbs');
   const managedSheetRef = useRef<ManagedSheetHandle>(null);
+  const videoAnalysisInFlightRef = useRef(false);
   const dismissActionsSheetAndWait = useCallback(() => dismissManagedSheetAndWait(managedSheetRef.current), []);
   const { openRemix, openEdit, resetActionGuard } = useCreateClimbNavigation({
     dismissSourceSheet: dismissActionsSheetAndWait,
@@ -80,7 +84,10 @@ function ClimbActionsSheet({
   // presentation opens; do not reset on close while the old sheet is still
   // hit-testable during its dismiss animation.
   useEffect(() => {
-    if (visible) resetActionGuard();
+    if (visible) {
+      resetActionGuard();
+      videoAnalysisInFlightRef.current = false;
+    }
   }, [visible, resetActionGuard]);
   const { showToast } = useToast();
   const theme = useTheme();
@@ -114,6 +121,15 @@ function ClimbActionsSheet({
     onAddBetaVideo?.();
     onClose();
   }, [onAddBetaVideo, onClose]);
+
+  const handleOpenVideoAnalysis = useCallback(() => {
+    if (!onOpenVideoAnalysis || videoAnalysisInFlightRef.current) return;
+    videoAnalysisInFlightRef.current = true;
+    onClose();
+    void dismissActionsSheetAndWait().then((result) => {
+      if (result.status === 'dismissed') onOpenVideoAnalysis();
+    });
+  }, [dismissActionsSheetAndWait, onClose, onOpenVideoAnalysis]);
 
   const auroraAppUrl = climb ? buildAuroraAppUrl(boardName, climb.uuid) : null;
 
@@ -256,6 +272,14 @@ function ClimbActionsSheet({
             title={t('mobile.climbActions.addBetaVideo')}
             leading={<Icon name="video" size={22} color={accentActionIconColor} />}
             onPress={handleAddBetaVideo}
+            showSeparator
+          />
+        )}
+        {onOpenVideoAnalysis && (
+          <ListRow
+            title={t('analysisNavigation.title')}
+            leading={<Icon name="play.circle" size={22} color={accentActionIconColor} />}
+            onPress={handleOpenVideoAnalysis}
             showSeparator
           />
         )}

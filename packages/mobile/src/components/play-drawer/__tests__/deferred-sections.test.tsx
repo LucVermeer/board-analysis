@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { createElement, type ReactNode } from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Climb } from '@boardsesh/shared-schema';
 
@@ -20,7 +20,8 @@ vi.mock('react-native', () => ({
   Platform: { OS: 'ios' },
   PlatformColor: (name: string) => name,
   View: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
-  Pressable: ({ children }: { children?: ReactNode }) => createElement('button', null, children),
+  Pressable: ({ children, onPress }: { children?: ReactNode; onPress?: () => void }) =>
+    createElement('button', { onClick: onPress }, children),
   StyleSheet: { create: (styles: unknown) => styles },
 }));
 
@@ -28,6 +29,9 @@ vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => k
 vi.mock('expo-haptics', () => ({ selectionAsync: vi.fn() }));
 vi.mock('@boardsesh/board-react', () => ({ useLogbook: () => ({ logbook: [], isLoading: false }) }));
 vi.mock('../../Icon', () => ({ Icon: () => null }));
+vi.mock('../../Text', () => ({
+  Text: ({ children }: { children?: ReactNode }) => createElement('span', null, children),
+}));
 vi.mock('../../../providers/auth-provider', () => ({ useAuth: () => ({ isAuthenticated: false }) }));
 vi.mock('../../../providers/theme-provider', () => ({ useTheme: () => ({ brandColors: { primary: '#000' } }) }));
 
@@ -103,7 +107,14 @@ const climb = {
   ascensionist_count: 0,
 } as Climb;
 
-function renderSections(options: { enabled?: boolean; contentEnabled?: boolean } = {}) {
+function renderSections(
+  options: {
+    enabled?: boolean;
+    contentEnabled?: boolean;
+    analysisVideoCount?: number;
+    onOpenVideoAnalysis?: () => void;
+  } = {},
+) {
   return render(
     <DeferredSections
       climb={climb}
@@ -114,6 +125,8 @@ function renderSections(options: { enabled?: boolean; contentEnabled?: boolean }
       angle={40}
       enabled={options.enabled ?? true}
       contentEnabled={options.contentEnabled ?? false}
+      analysisVideoCount={options.analysisVideoCount}
+      onOpenVideoAnalysis={options.onOpenVideoAnalysis}
       onSimilarClimbPress={vi.fn()}
     />,
   );
@@ -154,6 +167,17 @@ describe('DeferredSections', () => {
     expect(screen.getByTestId('beta-videos')).not.toBeNull();
     expect(screen.getByTestId('community')).not.toBeNull();
     expect(screen.getByTestId('similar-climbs')).not.toBeNull();
+  });
+
+  it('links to confirmed video analysis when the climb has analyzed videos', () => {
+    deferred.ready = true;
+    const onOpenVideoAnalysis = vi.fn();
+    renderSections({ contentEnabled: true, analysisVideoCount: 68, onOpenVideoAnalysis });
+
+    fireEvent.click(screen.getByText('analysisNavigation.title'));
+
+    expect(screen.getByText('analysisNavigation.videoCount')).not.toBeNull();
+    expect(onOpenVideoAnalysis).toHaveBeenCalledTimes(1);
   });
 
   it('hides the Boardsesh grade section when the flag is off', () => {

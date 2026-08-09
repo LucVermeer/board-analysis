@@ -272,6 +272,21 @@ describe('ClimbActionsSheet controlled visible (always-mounted toggle)', () => {
     expect(onEditEntry).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it('opens video analysis only after the action sheet has dismissed', async () => {
+    const onClose = vi.fn();
+    const onOpenVideoAnalysis = vi.fn();
+    render(
+      <ClimbActionsSheet visible={true} {...baseProps} onClose={onClose} onOpenVideoAnalysis={onOpenVideoAnalysis} />,
+    );
+
+    fireEvent.click(screen.getByText('analysisNavigation.title'));
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(sheet.dismissAndWait).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onOpenVideoAnalysis).toHaveBeenCalledTimes(1));
+    expect(onClose.mock.invocationCallOrder[0]).toBeLessThan(onOpenVideoAnalysis.mock.invocationCallOrder[0]);
+  });
 });
 
 describe('ClimbActionsSheet create-climb navigation (Remix / Edit)', () => {

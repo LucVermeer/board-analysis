@@ -15,6 +15,7 @@ import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-g
 import { runOnJS } from 'react-native-reanimated';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { useLocalSearchParams } from 'expo-router';
 import type {
   AnalyzedBetaMoveAttempt,
   AnalyzedBetaMoveSummary,
@@ -71,6 +72,8 @@ function transitionLabel(attempt: AnalyzedBetaMoveAttempt): string {
 }
 
 export function AnalyzedBetaNavigationScreen() {
+  const routeParams = useLocalSearchParams<{ climb?: string | string[] }>();
+  const requestedClimbId = Array.isArray(routeParams.climb) ? routeParams.climb[0] : routeParams.climb;
   const { t } = useTranslation('climbs');
   const { t: tCommon } = useTranslation('common');
   const { systemColors, brandColors } = useTheme();
@@ -93,6 +96,7 @@ export function AnalyzedBetaNavigationScreen() {
   const [recordingIndex, setRecordingIndex] = useState(0);
   const segmentEndRef = useRef<number | null>(null);
   const controlsHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const appliedRouteClimbRef = useRef<string | undefined>(undefined);
 
   const hideBetaControls = useCallback(() => {
     if (controlsHideTimerRef.current) clearTimeout(controlsHideTimerRef.current);
@@ -170,6 +174,32 @@ export function AnalyzedBetaNavigationScreen() {
   }, [analyzedClimbs, catalogClimbs, search]);
 
   useEffect(() => {
+    if (!requestedClimbId) appliedRouteClimbRef.current = undefined;
+    if (requestedClimbId && appliedRouteClimbRef.current !== requestedClimbId) {
+      const requestedClimb = analyzedClimbs.find((climb) => climb.uuid === requestedClimbId);
+      if (requestedClimb) {
+        if (selectedClimb?.uuid !== requestedClimb.uuid) {
+          segmentEndRef.current = null;
+          setSelectedClimb(requestedClimb);
+          setMoveKey('all');
+          setVideoId('');
+          setBetaFullscreen(false);
+          setComparisonOpen(false);
+          setRecordingIndex(0);
+        }
+        appliedRouteClimbRef.current = requestedClimbId;
+        setChooserOpen(false);
+        return;
+      }
+
+      const requestedIndex = analyzedClimbIds.indexOf(requestedClimbId);
+      const requestedStillLoading =
+        analyzedClimbIdsQuery.isLoading ||
+        (requestedIndex >= 0 && (analyzedClimbQueries[requestedIndex]?.isLoading ?? false));
+      if (requestedStillLoading) return;
+      appliedRouteClimbRef.current = requestedClimbId;
+    }
+
     if (selectedClimb) return;
     if (analyzedClimbs[0]) {
       setSelectedClimb(analyzedClimbs[0]);
@@ -178,7 +208,15 @@ export function AnalyzedBetaNavigationScreen() {
     const analyzedCatalogueLoaded =
       !analyzedClimbIdsQuery.isLoading && !analyzedClimbQueries.some((query) => query.isLoading);
     if (analyzedCatalogueLoaded && catalogClimbs[0]) setSelectedClimb(catalogClimbs[0]);
-  }, [analyzedClimbIdsQuery.isLoading, analyzedClimbQueries, analyzedClimbs, catalogClimbs, selectedClimb]);
+  }, [
+    analyzedClimbIds,
+    analyzedClimbIdsQuery.isLoading,
+    analyzedClimbQueries,
+    analyzedClimbs,
+    catalogClimbs,
+    requestedClimbId,
+    selectedClimb,
+  ]);
 
   const availabilityQuery = useQuery({
     queryKey: ['deviceClimbAnalysisAvailability', selectedClimb?.uuid],

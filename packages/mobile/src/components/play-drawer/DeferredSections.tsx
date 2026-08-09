@@ -7,6 +7,7 @@ import { useLogbook } from '@boardsesh/board-react';
 import { deriveOtherAngleActivity } from './logbook-summary';
 import { CollapsibleSection } from '../CollapsibleSection';
 import { Icon } from '../Icon';
+import { Text } from '../Text';
 import { LogbookSection } from './LogbookSection';
 import { SimilarClimbsSection } from './SimilarClimbsSection';
 import { CommunitySection } from './CommunitySection';
@@ -21,6 +22,7 @@ import { useTheme } from '../../providers/theme-provider';
 import { useBoardseshGrade, useClimbStatsHistory } from '../../lib/graphql/hooks';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { spacing, borderRadius } from '../../theme/tokens';
+import { iosSystemColors } from '../../theme/ios-colors';
 import { useDeferredAfterInteractions } from '../../hooks/use-deferred-after-interactions';
 
 type DeferredSectionsProps = {
@@ -45,6 +47,8 @@ type DeferredSectionsProps = {
   /** Opens the "share your beta" sheet. Rendered as the Beta Videos header "+" for
    *  signed-in users; absent (undefined) hides it. */
   onAddBetaVideo?: () => void;
+  analysisVideoCount?: number;
+  onOpenVideoAnalysis?: () => void;
 };
 
 /**
@@ -66,6 +70,8 @@ export const DeferredSections = memo(function DeferredSections({
   onLogbookSectionLayout,
   onLogbookToggle,
   onAddBetaVideo,
+  analysisVideoCount = 0,
+  onOpenVideoAnalysis,
 }: DeferredSectionsProps) {
   const { t } = useTranslation('session');
   const { t: tClimbs } = useTranslation('climbs');
@@ -202,6 +208,24 @@ export const DeferredSections = memo(function DeferredSections({
 
       {readyToRender && (
         <>
+          {analysisVideoCount > 0 && onOpenVideoAnalysis ? (
+            <Pressable
+              onPress={onOpenVideoAnalysis}
+              accessibilityRole="button"
+              accessibilityLabel={tClimbs('analysisNavigation.title')}
+              style={({ pressed }) => [styles.analysisRow, pressed && styles.analysisRowPressed]}
+            >
+              <Icon name="play.circle" size={24} color={brandColors.primary} />
+              <View style={styles.analysisCopy}>
+                <Text variant="headline">{tClimbs('analysisNavigation.title')}</Text>
+                <Text variant="footnote" color={iosSystemColors.systemGray}>
+                  {tClimbs('analysisNavigation.videoCount', { count: analysisVideoCount })}
+                </Text>
+              </View>
+              <Icon name="chevron.right" size={18} color={iosSystemColors.systemGray} />
+            </Pressable>
+          ) : null}
+
           <CollapsibleSection
             title={t('mobile.betaVideos.title')}
             keepExpanded
@@ -283,5 +307,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: borderRadius.full,
+  },
+  analysisRow: {
+    minHeight: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+    paddingVertical: spacing[2],
+  },
+  analysisRowPressed: {
+    opacity: 0.65,
+  },
+  analysisCopy: {
+    flex: 1,
+    gap: spacing[1],
   },
 });

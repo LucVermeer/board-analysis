@@ -22,7 +22,7 @@ import { ScrollView, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useAnimatedReaction, useSharedValue, runOnJS } from 'react-native-reanimated';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
 import type { ClimbQueueItem, PlaylistSuggestionSource } from '@boardsesh/queue';
@@ -63,6 +63,7 @@ import type { OpenClimbActionsOptions } from '../../providers/drawer-host-provid
 import { useAuth } from '../../providers/auth-provider';
 import { useToast } from '../../providers/toast-provider';
 import { privateAttemptVideosQueryKey, useToggleFavorite, useFavoriteStatus } from '../../lib/graphql/hooks';
+import { fetchClimbAnalysisAvailability } from '../../lib/analyzed-beta-analysis-client';
 import { useDisplayGrade } from '../../hooks/use-display-grade';
 import { resolveTickDefaultGradeName } from '../../lib/boardsesh-grade-display';
 import { useShareClimb } from '../../hooks/use-share-climb';
@@ -372,6 +373,15 @@ export function PlayDrawer({
 
   const displayedQueueItem = drawerPreviewItem ?? currentClimbQueueItem;
   const displayedClimb = displayedQueueItem?.climb;
+  const supportsVideoAnalysis = boardName === 'moonboard' && layoutId === 3;
+  const analysisAvailabilityQuery = useQuery({
+    queryKey: ['deviceClimbAnalysisAvailability', displayedClimb?.uuid],
+    queryFn: () => fetchClimbAnalysisAvailability(displayedClimb!.uuid),
+    enabled: supportsVideoAnalysis && !!displayedClimb,
+    staleTime: 60_000,
+    retry: 1,
+  });
+  const analysisVideoCount = analysisAvailabilityQuery.data?.videos.length ?? 0;
   // A view-only preview is showing (not the active/wall climb). Commit paths
   // never set `drawerPreviewItem`, so this is true only for genuine previews
   // (workout builder, logbook/cross-board, the peer-driven accessory wall climb).
@@ -454,6 +464,26 @@ export function PlayDrawer({
   // new climb's heart shows its real (server) status rather than the previous
   // climb's optimistic value.
   const displayedClimbUuid = displayedClimb?.uuid;
+  const analysisNavigationInFlightRef = useRef(false);
+  useEffect(() => {
+    analysisNavigationInFlightRef.current = false;
+  }, [displayedClimbUuid]);
+  const handleOpenVideoAnalysis = useCallback(() => {
+    if (!displayedClimb || analysisNavigationInFlightRef.current) return;
+    analysisNavigationInFlightRef.current = true;
+    const climbUuid = displayedClimb.uuid;
+    void (async () => {
+      try {
+        if (dismissPlayerAndWait) {
+          const result = await dismissPlayerAndWait();
+          if (result.status === 'aborted') return;
+        }
+        router.push({ pathname: '/(tabs)/profile/video-analysis', params: { climb: climbUuid } });
+      } finally {
+        analysisNavigationInFlightRef.current = false;
+      }
+    })();
+  }, [dismissPlayerAndWait, displayedClimb]);
   useEffect(() => {
     setIsTickBarActive(false);
     setFavoriteOverride(null);
@@ -1061,6 +1091,8 @@ export function PlayDrawer({
                   onLogbookSectionLayout={handleLogbookSectionLayout}
                   onLogbookToggle={handleLogbookToggle}
                   onAddBetaVideo={isAuthenticated ? handleOpenAddBetaVideo : undefined}
+                  analysisVideoCount={analysisVideoCount}
+                  onOpenVideoAnalysis={analysisVideoCount > 0 ? handleOpenVideoAnalysis : undefined}
                 />
               </>
             )}
@@ -1091,6 +1123,7 @@ export function PlayDrawer({
           }}
           onToggleFavorite={handleToggleFavorite}
           onAddBetaVideo={isAuthenticated ? handleOpenAddBetaVideo : undefined}
+          onOpenVideoAnalysis={analysisVideoCount > 0 ? handleOpenVideoAnalysis : undefined}
           dismissPlayerAndWait={dismissPlayerAndWait}
           onClose={handleCloseSubDrawer}
         />
