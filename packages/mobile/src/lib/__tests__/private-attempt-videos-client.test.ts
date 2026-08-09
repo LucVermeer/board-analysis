@@ -128,4 +128,22 @@ describe('private attempt video client', () => {
       expect.objectContaining<Partial<PrivateAttemptApiError>>({ code: 'RECORDING_TOO_LARGE', status: 413 }),
     );
   });
+
+  it('reports a missing recording endpoint as an unavailable service', async () => {
+    authenticatedFetch.mockResolvedValueOnce(jsonResponse({ error: 'Not found' }, 404));
+
+    await expect(
+      createPrivateAttemptUpload({
+        clientRecordingId: 'recording-1',
+        climbUuid: 'climb-1',
+        layoutId: 3,
+        angle: 40,
+        isMirror: false,
+        boardId: null,
+        sessionId: null,
+        mimeType: 'video/mp4',
+        recordedAt: '2026-08-08T12:00:00.000Z',
+      }),
+    ).rejects.toEqual(expect.objectContaining<Partial<PrivateAttemptApiError>>({ code: 'SERVICE_UNAVAILABLE' }));
+  });
 });

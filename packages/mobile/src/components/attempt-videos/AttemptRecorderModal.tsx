@@ -66,6 +66,7 @@ export function AttemptRecorderModal({ visible, target, onClose, onSaved }: Atte
   const [elapsedMs, setElapsedMs] = useState(0);
   const cameraRef = useRef<ComponentRef<typeof CameraView>>(null);
   const recordingStartedAtRef = useRef(0);
+  const recordedAtRef = useRef('');
   const uploadUuidRef = useRef<string | null>(null);
   const uploadOffsetRef = useRef(0);
   const localFileRef = useRef<File | null>(null);
@@ -106,6 +107,7 @@ export function AttemptRecorderModal({ visible, target, onClose, onSaved }: Atte
     localFileRef.current = null;
     durationMsRef.current = 0;
     recordingStartedAtRef.current = 0;
+    recordedAtRef.current = '';
     permissionRequestStartedRef.current = false;
     setElapsedMs(0);
     setProgress(0);
@@ -165,12 +167,10 @@ export function AttemptRecorderModal({ visible, target, onClose, onSaved }: Atte
     [onSaved, removeLocalFile],
   );
 
-  const handleStart = useCallback(async () => {
-    if (!target || !cameraRef.current || phase !== 'ready') return;
-    cancelledRef.current = false;
-    setErrorCode('default');
-
-    try {
+  const initializeUpload = useCallback(
+    async (file: File) => {
+      if (!target) return;
+      setPhase('stopping');
       const created = await createPrivateAttemptUpload({
         clientRecordingId: randomUUID(),
         climbUuid: target.climbUuid,
@@ -180,10 +180,22 @@ export function AttemptRecorderModal({ visible, target, onClose, onSaved }: Atte
         boardId: null,
         sessionId: target.sessionId,
         mimeType: 'video/mp4',
-        recordedAt: new Date().toISOString(),
+        recordedAt: recordedAtRef.current || new Date().toISOString(),
       });
       uploadUuidRef.current = created.video.uuid;
       uploadOffsetRef.current = created.uploadOffset;
+      await uploadAndFinalize(file, created.video.uuid, created.uploadOffset);
+    },
+    [target, uploadAndFinalize],
+  );
+
+  const handleStart = useCallback(async () => {
+    if (!target || !cameraRef.current || phase !== 'ready') return;
+    cancelledRef.current = false;
+    setErrorCode('default');
+
+    try {
+      recordedAtRef.current = new Date().toISOString();
       recordingStartedAtRef.current = Date.now();
       setPhase('recording');
 
@@ -201,8 +213,7 @@ export function AttemptRecorderModal({ visible, target, onClose, onSaved }: Atte
         await finishCancellation();
         return;
       }
-      setPhase('stopping');
-      await uploadAndFinalize(localFileRef.current, created.video.uuid, created.uploadOffset);
+      await initializeUpload(localFileRef.current);
     } catch (error) {
       if (cancelledRef.current) {
         await finishCancellation();
@@ -212,7 +223,7 @@ export function AttemptRecorderModal({ visible, target, onClose, onSaved }: Atte
       setErrorCode(error instanceof PrivateAttemptApiError ? error.code : 'default');
       setPhase('error');
     }
-  }, [finishCancellation, phase, target, uploadAndFinalize]);
+  }, [finishCancellation, initializeUpload, phase, target]);
 
   const handleStop = useCallback(() => {
     if (phase !== 'recording') return;
@@ -243,20 +254,24 @@ export function AttemptRecorderModal({ visible, target, onClose, onSaved }: Atte
   const handleRetry = useCallback(async () => {
     const file = localFileRef.current;
     const uploadUuid = uploadUuidRef.current;
-    if (!file?.exists || !uploadUuid) {
+    if (!file?.exists) {
       await deleteUnfinishedUpload();
       permissionRequestStartedRef.current = false;
       setPhase(permission?.granted ? 'ready' : 'permission');
       return;
     }
     try {
+      if (!uploadUuid) {
+        await initializeUpload(file);
+        return;
+      }
       const status = await getPrivateAttemptUpload(uploadUuid);
       await uploadAndFinalize(file, uploadUuid, status.uploadOffset);
     } catch (error) {
       setErrorCode(error instanceof PrivateAttemptApiError ? error.code : 'default');
       setPhase('error');
     }
-  }, [deleteUnfinishedUpload, permission?.granted, uploadAndFinalize]);
+  }, [deleteUnfinishedUpload, initializeUpload, permission?.granted, uploadAndFinalize]);
 
   const statusLabel =
     phase === 'uploading'

@@ -66,7 +66,7 @@ async function parseResponse<T>(response: Response): Promise<T> {
   };
   if (!response.ok) {
     throw new PrivateAttemptApiError(
-      payload.code ?? 'REQUEST_FAILED',
+      payload.code ?? (response.status === 404 ? 'SERVICE_UNAVAILABLE' : 'REQUEST_FAILED'),
       payload.error ?? 'Recording request failed',
       response.status,
       payload.uploadOffset,
