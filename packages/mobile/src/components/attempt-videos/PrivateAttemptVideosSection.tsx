@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
-import { VideoView, useVideoPlayer, type VideoSource } from 'expo-video';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import { useTranslation } from 'react-i18next';
 import type { PrivateAttemptVideo } from '@boardsesh/shared-schema';
 import { Text } from '../Text';
@@ -9,10 +9,10 @@ import { Icon } from '../Icon';
 import { ActivityIndicator } from '../ActivityIndicator';
 import { useTheme } from '../../providers/theme-provider';
 import { privateAttemptVideosQueryKey, usePrivateAttemptVideos } from '../../lib/graphql/hooks';
-import { BACKEND_URL } from '../../lib/env';
-import { ensureFreshToken } from '../../lib/auth-interceptor';
-import { getAuthToken } from '../../lib/auth-store';
-import { deletePrivateAttemptUpload } from '../../lib/private-attempt-videos-client';
+import {
+  deletePrivateAttemptUpload,
+  protectedPrivateAttemptVideoSource,
+} from '../../lib/private-attempt-videos-client';
 import { spacing } from '../../theme/tokens';
 
 type PrivateAttemptVideosSectionProps = {
@@ -22,18 +22,6 @@ type PrivateAttemptVideosSectionProps = {
 };
 
 const SPEEDS = [0.25, 0.5, 1] as const;
-
-async function protectedVideoSource(playbackPath: string): Promise<VideoSource> {
-  await ensureFreshToken();
-  const token = await getAuthToken();
-  if (!token) throw new Error('Missing authentication token');
-  return {
-    uri: `${BACKEND_URL}${playbackPath}`,
-    headers: { Authorization: `Bearer ${token}` },
-    contentType: 'progressive',
-    useCaching: false,
-  };
-}
 
 function AttemptVideoRow({ video, onDelete }: { video: PrivateAttemptVideo; onDelete: () => void }) {
   const { t } = useTranslation('climbs');
@@ -47,7 +35,7 @@ function AttemptVideoRow({ video, onDelete }: { video: PrivateAttemptVideo; onDe
   useEffect(() => {
     let active = true;
     setSourceError(false);
-    void protectedVideoSource(video.playbackPath)
+    void protectedPrivateAttemptVideoSource(video.playbackPath)
       .then((source) => {
         if (active) return player.replaceAsync(source);
       })

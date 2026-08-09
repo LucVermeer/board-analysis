@@ -394,7 +394,19 @@
     "moves": "Mouvements",
     "allMoves": "Tous les mouvements",
     "videoCount": "{{count}} vidéos",
-    "coverage": "{{videos}}/{{total}} vidéos"
+    "coverage": "{{videos}}/{{total}} vidéos",
+    "compareRecording": "Comparer avec votre vidéo",
+    "yourRecordings": "Les vôtres ({{count}})",
+    "yourRecording": "Votre vidéo",
+    "previousRecording": "Vidéo personnelle précédente",
+    "nextRecording": "Vidéo personnelle suivante",
+    "closeRecording": "Fermer la vidéo personnelle",
+    "recordingUnavailable": "Vidéo indisponible",
+    "loopStart": "Début {{time}}",
+    "loopEnd": "Fin {{time}}",
+    "resetLoop": "Réinitialiser la boucle",
+    "enterFullscreen": "Ouvrir en plein écran",
+    "exitFullscreen": "Quitter le plein écran"
   },
   "analyzedBeta": {
     "loading": "Chargement de la bêta analysée",

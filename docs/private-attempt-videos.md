@@ -98,3 +98,13 @@ The workstation's `/api/analysis-climbs` response is used only to discover which
 stable BoardSesh UUIDs have local analysis. The app rehydrates each climb's name,
 grade, angle, and setter from the BoardSesh catalogue and pins available climbs
 above the otherwise complete, searchable MoonBoard 2024 catalogue.
+
+The native analysis workspace keeps the move index beside the beta video on
+tablets and supports landscape. A user can open an owner-scoped recording for
+the selected climb beside the beta, set manual loop start/end marks, and switch
+between their recordings. These loop marks are transient inspection state and
+are not move detections or training labels. Analysis playback speed is stored as
+an app setting and reused across climbs; horizontal beta swipes only navigate
+the existing definitive-video set. The beta uses an app-owned fullscreen view
+so the same definitive-set swipe navigation remains available while fullscreen;
+Expo's detached Android fullscreen activity is not used.

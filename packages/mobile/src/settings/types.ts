@@ -23,6 +23,8 @@ export type AppSettings = {
   kioskHintSeen: boolean;
   /** Show the live bottom-chrome geometry overlay (dev / preview / pr-channel only). */
   bottomChromeDiagnostics: boolean;
+  /** Playback speed shared by analyzed beta and comparison videos. */
+  analysisPlaybackSpeed: 0.25 | 0.5 | 1;
 };
 
 export type SettingsKey = keyof AppSettings;

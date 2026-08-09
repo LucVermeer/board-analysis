@@ -1,4 +1,5 @@
 import { File, FileMode, Paths, UploadType } from 'expo-file-system';
+import type { VideoSource } from 'expo-video';
 import { BACKEND_URL } from './env';
 import { getAuthToken } from './auth-store';
 import { authenticatedFetch, ensureFreshToken } from './auth-interceptor';
@@ -40,6 +41,18 @@ export class PrivateAttemptApiError extends Error {
 
 const CHUNK_SIZE = 4 * 1024 * 1024;
 const MAX_OFFSET_REPAIRS = 3;
+
+export async function protectedPrivateAttemptVideoSource(playbackPath: string): Promise<VideoSource> {
+  await ensureFreshToken();
+  const token = await getAuthToken();
+  if (!token) throw new Error('Missing authentication token');
+  return {
+    uri: `${BACKEND_URL}${playbackPath}`,
+    headers: { Authorization: `Bearer ${token}` },
+    contentType: 'progressive',
+    useCaching: false,
+  };
+}
 
 function endpoint(path = ''): string {
   return `${BACKEND_URL}/api/private-attempt-videos${path}`;

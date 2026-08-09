@@ -394,7 +394,19 @@
     "moves": "Moves",
     "allMoves": "All moves",
     "videoCount": "{{count}} videos",
-    "coverage": "{{videos}}/{{total}} videos"
+    "coverage": "{{videos}}/{{total}} videos",
+    "compareRecording": "Compare with your recording",
+    "yourRecordings": "Yours ({{count}})",
+    "yourRecording": "Your recording",
+    "previousRecording": "Previous personal recording",
+    "nextRecording": "Next personal recording",
+    "closeRecording": "Close personal recording",
+    "recordingUnavailable": "Recording unavailable",
+    "loopStart": "Start {{time}}",
+    "loopEnd": "End {{time}}",
+    "resetLoop": "Reset loop",
+    "enterFullscreen": "Enter fullscreen",
+    "exitFullscreen": "Exit fullscreen"
   },
   "analyzedBeta": {
     "loading": "Loading analyzed beta",

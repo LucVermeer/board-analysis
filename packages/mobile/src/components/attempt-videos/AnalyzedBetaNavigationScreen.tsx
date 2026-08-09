@@ -1,7 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
+import {
+  Modal,
+  Pressable,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  TextInput,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { useEventListener } from 'expo';
 import { VideoView, useVideoPlayer } from 'expo-video';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
+import { runOnJS } from 'react-native-reanimated';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type {
@@ -11,6 +22,7 @@ import type {
   ClimbSearchInput,
 } from '@boardsesh/shared-schema';
 import { useInfiniteSearchClimbs } from '../../lib/graphql/hooks/use-infinite-search-climbs';
+import { usePrivateAttemptVideos } from '../../lib/graphql/hooks';
 import { getHttpClient } from '../../lib/graphql/client';
 import { GET_CLIMB, type GetClimbQueryResponse, type GetClimbQueryVariables } from '../../lib/graphql/operations';
 import { useTheme } from '../../providers/theme-provider';
@@ -27,6 +39,9 @@ import {
   fetchClimbMoveAttempts,
 } from '../../lib/analyzed-beta-analysis-client';
 import { buildAnalyzedBetaNavigationItems, type AnalyzedBetaNavigationItem } from '../../lib/analyzed-beta-navigation';
+import { attemptSwipeOffset } from '../../lib/private-attempt-loop';
+import { useSetting } from '../../settings/hooks';
+import { PrivateAttemptComparison } from './PrivateAttemptComparison';
 
 const SPEEDS = [0.25, 0.5, 1] as const;
 const SEARCH_DELAY_MS = 250;
@@ -58,16 +73,20 @@ export function AnalyzedBetaNavigationScreen() {
   const { t } = useTranslation('climbs');
   const { systemColors, brandColors } = useTheme();
   const bottomChrome = useBottomChromeMetrics();
-  const { width } = useWindowDimensions();
-  const tabletLayout = width >= 760;
+  const { width, height } = useWindowDimensions();
+  const wideLayout = width >= 600;
+  const landscapeLayout = width > height;
   const [selectedClimb, setSelectedClimb] = useState<Climb | null>(null);
   const [moveKey, setMoveKey] = useState('all');
   const [videoId, setVideoId] = useState('');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [chooserOpen, setChooserOpen] = useState(true);
-  const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(1);
-  const speedRef = useRef<(typeof SPEEDS)[number]>(1);
+  const [speed, setSpeed] = useSetting('analysisPlaybackSpeed');
+  const speedRef = useRef<(typeof SPEEDS)[number]>(speed);
+  const [comparisonOpen, setComparisonOpen] = useState(false);
+  const [betaFullscreen, setBetaFullscreen] = useState(false);
+  const [recordingIndex, setRecordingIndex] = useState(0);
   const segmentEndRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -146,6 +165,16 @@ export function AnalyzedBetaNavigationScreen() {
     staleTime: 60_000,
     retry: 1,
   });
+  const privateVideosQuery = usePrivateAttemptVideos(selectedClimb?.uuid ?? '', 3, selectedClimb?.angle ?? 40, {
+    enabled: !!selectedClimb,
+  });
+  const privateVideos = privateVideosQuery.data ?? [];
+
+  useEffect(() => {
+    setRecordingIndex((current) => Math.min(current, Math.max(0, privateVideos.length - 1)));
+    if (privateVideos.length === 0) setComparisonOpen(false);
+  }, [privateVideos.length]);
+
   const availability = availabilityQuery.data;
   const analysisClimbId = availability?.analysisClimbId ?? '';
   const hasMoveAnalysis = availability?.videos.some((video) => video.hasMoveAnalysis) ?? false;
@@ -191,11 +220,20 @@ export function AnalyzedBetaNavigationScreen() {
   const currentAttempt = currentItem?.attempt ?? null;
   const navigation = navigationQuery.data;
 
+  useEffect(() => {
+    if (!currentVideo) setBetaFullscreen(false);
+  }, [currentVideo]);
+
   const player = useVideoPlayer(null, (createdPlayer) => {
     createdPlayer.loop = false;
     createdPlayer.muted = true;
     createdPlayer.timeUpdateEventInterval = 0.1;
   });
+
+  useEffect(() => {
+    speedRef.current = speed;
+    player.playbackRate = speed;
+  }, [player, speed]);
 
   useEventListener(player, 'timeUpdate', ({ currentTime }) => {
     const segmentEnd = segmentEndRef.current;
@@ -238,6 +276,9 @@ export function AnalyzedBetaNavigationScreen() {
     setMoveKey('all');
     setVideoId('');
     setChooserOpen(false);
+    setBetaFullscreen(false);
+    setComparisonOpen(false);
+    setRecordingIndex(0);
     setSearch('');
     setDebouncedSearch('');
   }, []);
@@ -254,6 +295,25 @@ export function AnalyzedBetaNavigationScreen() {
       if (next) setVideoId(next.video.id);
     },
     [currentIndex, navigationItems],
+  );
+
+  const handleBetaSwipe = useCallback(
+    (translationX: number, velocityX: number) => {
+      const offset = attemptSwipeOffset(translationX, velocityX);
+      if (offset !== 0) navigateAttempt(offset);
+    },
+    [navigateAttempt],
+  );
+
+  const betaSwipeGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .activeOffsetX([-24, 24])
+        .failOffsetY([-20, 20])
+        .onEnd((event) => {
+          runOnJS(handleBetaSwipe)(event.translationX, event.velocityX);
+        }),
+    [handleBetaSwipe],
   );
 
   const updateSpeed = useCallback(
@@ -293,6 +353,8 @@ export function AnalyzedBetaNavigationScreen() {
   const loadingClimb = availabilityQuery.isLoading || navigationQuery.isLoading;
   const attemptCount = navigationItems.length;
   const attemptPosition = currentIndex >= 0 ? currentIndex + 1 : 0;
+  const selectedRecording = privateVideos[recordingIndex] ?? null;
+  const stackMovePaneForComparison = wideLayout && comparisonOpen && !landscapeLayout && width < 1000;
 
   return (
     <ScrollView
@@ -423,107 +485,200 @@ export function AnalyzedBetaNavigationScreen() {
           </Text>
         </View>
       ) : (
-        <View style={[styles.workspace, tabletLayout && styles.workspaceTablet]}>
-          <View style={styles.videoColumn}>
-            <View style={[styles.attemptBar, { borderColor: systemColors.separator }]}>
-              <Pressable
-                onPress={() => navigateAttempt(-1)}
-                disabled={currentIndex <= 0}
-                accessibilityRole="button"
-                accessibilityLabel={t('analysisNavigation.previousAttempt')}
-                style={[styles.arrowButton, currentIndex <= 0 && styles.disabled]}
-              >
-                <Icon name="chevron.left" color={brandColors.primary} />
-              </Pressable>
-              <Text variant="subheadline">
-                {t(moveKey === 'all' ? 'analysisNavigation.videoPosition' : 'analysisNavigation.attemptPosition', {
-                  current: attemptPosition,
-                  count: attemptCount,
-                })}
-              </Text>
-              <Pressable
-                onPress={() => navigateAttempt(1)}
-                disabled={currentIndex < 0 || currentIndex >= attemptCount - 1}
-                accessibilityRole="button"
-                accessibilityLabel={t('analysisNavigation.nextAttempt')}
-                style={[styles.arrowButton, (currentIndex < 0 || currentIndex >= attemptCount - 1) && styles.disabled]}
-              >
-                <Icon name="chevron.right" color={brandColors.primary} />
-              </Pressable>
-            </View>
-
-            {currentVideo ? (
-              <VideoView
-                player={player}
-                style={styles.video}
-                contentFit="contain"
-                nativeControls
-                surfaceType="textureView"
-                accessibilityLabel={t('analysisNavigation.videoAria')}
-              />
-            ) : (
-              <View style={[styles.video, styles.videoEmpty, { backgroundColor: systemColors.fill }]}>
-                <Text variant="subheadline" color={systemColors.secondaryLabel}>
-                  {t('analysisNavigation.noAttempts')}
-                </Text>
-              </View>
-            )}
-
-            <View style={styles.videoMeta}>
-              <View style={styles.sourceMeta}>
+        <View style={[styles.workspace, wideLayout && !stackMovePaneForComparison && styles.workspaceWide]}>
+          <View style={[styles.mediaGroup, wideLayout && comparisonOpen && styles.mediaGroupCompare]}>
+            <View style={styles.videoColumn}>
+              <View style={[styles.attemptBar, { borderColor: systemColors.separator }]}>
+                <Pressable
+                  onPress={() => navigateAttempt(-1)}
+                  disabled={currentIndex <= 0}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('analysisNavigation.previousAttempt')}
+                  style={[styles.arrowButton, currentIndex <= 0 && styles.disabled]}
+                >
+                  <Icon name="chevron.left" color={brandColors.primary} />
+                </Pressable>
                 <Text variant="subheadline">
-                  {currentVideo?.sourceAccount
-                    ? `@${currentVideo.sourceAccount}`
-                    : t('analysisNavigation.unknownSource')}
+                  {t(moveKey === 'all' ? 'analysisNavigation.videoPosition' : 'analysisNavigation.attemptPosition', {
+                    current: attemptPosition,
+                    count: attemptCount,
+                  })}
                 </Text>
-                {currentAttempt ? (
-                  <>
-                    <Text variant="caption1" color={systemColors.secondaryLabel}>
-                      {transitionLabel(currentAttempt)}
-                    </Text>
-                    <Text variant="caption1" color={systemColors.secondaryLabel}>
-                      {t('analysisNavigation.confidence', {
-                        move: currentAttempt.localOrdinal,
-                        confidence: Math.round(currentAttempt.confidence * 100),
-                      })}
-                    </Text>
-                    {currentAttempt.warnings.length > 0 ? (
-                      <Text variant="caption1" color={systemColors.secondaryLabel} numberOfLines={2}>
-                        {currentAttempt.warnings.join(' · ').replaceAll('_', ' ')}
-                      </Text>
-                    ) : null}
-                  </>
-                ) : null}
+                <Pressable
+                  onPress={() => navigateAttempt(1)}
+                  disabled={currentIndex < 0 || currentIndex >= attemptCount - 1}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('analysisNavigation.nextAttempt')}
+                  style={[
+                    styles.arrowButton,
+                    (currentIndex < 0 || currentIndex >= attemptCount - 1) && styles.disabled,
+                  ]}
+                >
+                  <Icon name="chevron.right" color={brandColors.primary} />
+                </Pressable>
               </View>
-              <View
-                accessibilityRole="radiogroup"
-                style={[styles.speedControl, { backgroundColor: systemColors.fill }]}
-              >
-                {SPEEDS.map((candidate) => (
-                  <Pressable
-                    key={candidate}
-                    onPress={() => updateSpeed(candidate)}
-                    accessibilityRole="radio"
-                    accessibilityState={{ checked: speed === candidate }}
-                    accessibilityLabel={`${candidate}x`}
-                    style={[
-                      styles.speedButton,
-                      speed === candidate && { backgroundColor: systemColors.elevatedSurface },
+
+              {currentVideo ? (
+                <>
+                  {betaFullscreen ? (
+                    <View style={styles.video} />
+                  ) : (
+                    <GestureDetector gesture={betaSwipeGesture}>
+                      <View style={styles.videoStage}>
+                        <VideoView
+                          player={player}
+                          style={styles.video}
+                          contentFit="contain"
+                          nativeControls
+                          fullscreenOptions={{ enable: false }}
+                          surfaceType="textureView"
+                          accessibilityLabel={t('analysisNavigation.videoAria')}
+                        />
+                        <Pressable
+                          onPress={() => setBetaFullscreen(true)}
+                          accessibilityRole="button"
+                          accessibilityLabel={t('analysisNavigation.enterFullscreen')}
+                          style={styles.fullscreenButton}
+                        >
+                          <Icon name="fullscreen" color="#ffffff" />
+                        </Pressable>
+                      </View>
+                    </GestureDetector>
+                  )}
+                  <Modal
+                    visible={betaFullscreen}
+                    animationType="fade"
+                    presentationStyle="fullScreen"
+                    supportedOrientations={[
+                      'portrait',
+                      'portrait-upside-down',
+                      'landscape',
+                      'landscape-left',
+                      'landscape-right',
                     ]}
+                    onRequestClose={() => setBetaFullscreen(false)}
                   >
-                    <Text
-                      variant="caption1"
-                      color={speed === candidate ? brandColors.primary : systemColors.secondaryLabel}
+                    <GestureHandlerRootView style={styles.fullscreenRoot}>
+                      <StatusBar hidden />
+                      <GestureDetector gesture={betaSwipeGesture}>
+                        <View style={styles.fullscreenStage}>
+                          <VideoView
+                            player={player}
+                            style={styles.fullscreenVideo}
+                            contentFit="contain"
+                            nativeControls
+                            fullscreenOptions={{ enable: false }}
+                            surfaceType="textureView"
+                            accessibilityLabel={t('analysisNavigation.videoAria')}
+                          />
+                          <Pressable
+                            onPress={() => setBetaFullscreen(false)}
+                            accessibilityRole="button"
+                            accessibilityLabel={t('analysisNavigation.exitFullscreen')}
+                            style={[styles.fullscreenButton, styles.fullscreenExitButton]}
+                          >
+                            <Icon name="fullscreen.exit" color="#ffffff" />
+                          </Pressable>
+                        </View>
+                      </GestureDetector>
+                    </GestureHandlerRootView>
+                  </Modal>
+                </>
+              ) : (
+                <View style={[styles.video, styles.videoEmpty, { backgroundColor: systemColors.fill }]}>
+                  <Text variant="subheadline" color={systemColors.secondaryLabel}>
+                    {t('analysisNavigation.noAttempts')}
+                  </Text>
+                </View>
+              )}
+
+              <View style={styles.videoMeta}>
+                <View style={styles.sourceMeta}>
+                  <Text variant="subheadline">
+                    {currentVideo?.sourceAccount
+                      ? `@${currentVideo.sourceAccount}`
+                      : t('analysisNavigation.unknownSource')}
+                  </Text>
+                  {currentAttempt ? (
+                    <>
+                      <Text variant="caption1" color={systemColors.secondaryLabel}>
+                        {transitionLabel(currentAttempt)}
+                      </Text>
+                      <Text variant="caption1" color={systemColors.secondaryLabel}>
+                        {t('analysisNavigation.confidence', {
+                          move: currentAttempt.localOrdinal,
+                          confidence: Math.round(currentAttempt.confidence * 100),
+                        })}
+                      </Text>
+                      {currentAttempt.warnings.length > 0 ? (
+                        <Text variant="caption1" color={systemColors.secondaryLabel} numberOfLines={2}>
+                          {currentAttempt.warnings.join(' · ').replaceAll('_', ' ')}
+                        </Text>
+                      ) : null}
+                    </>
+                  ) : null}
+                </View>
+                <View
+                  accessibilityRole="radiogroup"
+                  style={[styles.speedControl, { backgroundColor: systemColors.fill }]}
+                >
+                  {SPEEDS.map((candidate) => (
+                    <Pressable
+                      key={candidate}
+                      onPress={() => updateSpeed(candidate)}
+                      accessibilityRole="radio"
+                      accessibilityState={{ checked: speed === candidate }}
+                      accessibilityLabel={`${candidate}x`}
+                      style={[
+                        styles.speedButton,
+                        speed === candidate && { backgroundColor: systemColors.elevatedSurface },
+                      ]}
                     >
-                      {candidate}x
+                      <Text
+                        variant="caption1"
+                        color={speed === candidate ? brandColors.primary : systemColors.secondaryLabel}
+                      >
+                        {candidate}x
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+                {privateVideos.length > 0 && !comparisonOpen ? (
+                  <Pressable
+                    onPress={() => setComparisonOpen(true)}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('analysisNavigation.compareRecording')}
+                    style={[styles.compareButton, { borderColor: systemColors.separator }]}
+                  >
+                    <Icon name="video" size={18} color={brandColors.primary} />
+                    <Text variant="caption1" color={brandColors.primary}>
+                      {t('analysisNavigation.yourRecordings', { count: privateVideos.length })}
                     </Text>
                   </Pressable>
-                ))}
+                ) : null}
               </View>
             </View>
+
+            {comparisonOpen && selectedRecording ? (
+              <PrivateAttemptComparison
+                video={selectedRecording}
+                index={recordingIndex}
+                count={privateVideos.length}
+                speed={speed}
+                onPrevious={() => setRecordingIndex((current) => Math.max(0, current - 1))}
+                onNext={() => setRecordingIndex((current) => Math.min(privateVideos.length - 1, current + 1))}
+                onClose={() => setComparisonOpen(false)}
+              />
+            ) : null}
           </View>
 
-          <View style={[styles.movePane, { borderColor: systemColors.separator }]}>
+          <View
+            style={[
+              styles.movePane,
+              wideLayout && !stackMovePaneForComparison ? styles.movePaneWide : styles.movePaneStacked,
+              { borderColor: systemColors.separator },
+            ]}
+          >
             <View style={[styles.moveHeader, { borderColor: systemColors.separator }]}>
               <Text variant="headline">{t('analysisNavigation.moves')}</Text>
               <Text variant="caption1" color={systemColors.secondaryLabel}>
@@ -629,7 +784,9 @@ const styles = StyleSheet.create({
   },
   statusAction: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing[4] },
   workspace: { gap: spacing[3] },
-  workspaceTablet: { flexDirection: 'row', alignItems: 'flex-start' },
+  workspaceWide: { flexDirection: 'row', alignItems: 'flex-start' },
+  mediaGroup: { flex: 1, minWidth: 0, gap: spacing[3] },
+  mediaGroupCompare: { flexDirection: 'row', alignItems: 'flex-start' },
   videoColumn: { flex: 1, minWidth: 0, gap: spacing[2] },
   attemptBar: {
     minHeight: 48,
@@ -640,20 +797,54 @@ const styles = StyleSheet.create({
   },
   arrowButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   disabled: { opacity: 0.3 },
+  videoStage: { width: '100%', position: 'relative' },
   video: { width: '100%', aspectRatio: 9 / 16, maxHeight: 620, backgroundColor: '#000000' },
   videoEmpty: { alignItems: 'center', justifyContent: 'center' },
-  videoMeta: { minHeight: 60, flexDirection: 'row', alignItems: 'flex-start', gap: spacing[3] },
+  fullscreenRoot: { flex: 1, backgroundColor: '#000000' },
+  fullscreenStage: { flex: 1, position: 'relative', backgroundColor: '#000000' },
+  fullscreenVideo: { flex: 1, backgroundColor: '#000000' },
+  fullscreenButton: {
+    width: 44,
+    height: 44,
+    position: 'absolute',
+    top: spacing[3],
+    right: spacing[3],
+    zIndex: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.62)',
+  },
+  fullscreenExitButton: { top: spacing[4], right: spacing[4] },
+  videoMeta: {
+    minHeight: 60,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'flex-start',
+    gap: spacing[2],
+  },
   sourceMeta: { flex: 1, gap: 2 },
   speedControl: { flexDirection: 'row', padding: 3, borderRadius: 8 },
   speedButton: { minWidth: 48, height: 32, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
+  compareButton: {
+    minHeight: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing[2],
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 8,
+    paddingHorizontal: spacing[3],
+  },
   movePane: {
-    flex: 1,
-    minWidth: 260,
+    minWidth: 0,
     maxHeight: 620,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: borderRadius.lg,
     overflow: 'hidden',
   },
+  movePaneWide: { width: 230, flexGrow: 0, flexShrink: 0 },
+  movePaneStacked: { width: '100%', maxHeight: 360 },
   moveHeader: {
     minHeight: 48,
     flexDirection: 'row',

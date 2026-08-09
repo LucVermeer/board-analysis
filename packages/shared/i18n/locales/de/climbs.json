@@ -394,7 +394,19 @@
     "moves": "Züge",
     "allMoves": "Alle Züge",
     "videoCount": "{{count}} Videos",
-    "coverage": "{{videos}}/{{total}} Videos"
+    "coverage": "{{videos}}/{{total}} Videos",
+    "compareRecording": "Mit deiner Aufnahme vergleichen",
+    "yourRecordings": "Deine ({{count}})",
+    "yourRecording": "Deine Aufnahme",
+    "previousRecording": "Vorherige eigene Aufnahme",
+    "nextRecording": "Nächste eigene Aufnahme",
+    "closeRecording": "Eigene Aufnahme schließen",
+    "recordingUnavailable": "Aufnahme nicht verfügbar",
+    "loopStart": "Start {{time}}",
+    "loopEnd": "Ende {{time}}",
+    "resetLoop": "Schleife zurücksetzen",
+    "enterFullscreen": "Vollbild öffnen",
+    "exitFullscreen": "Vollbild schließen"
   },
   "analyzedBeta": {
     "loading": "Analysierte Beta wird geladen",

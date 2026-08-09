@@ -37,6 +37,7 @@ describe('settings', () => {
       expect(getSetting('theme')).toBe('system');
       expect(getSetting('defaultBoardUuid')).toBeNull();
       expect(getSetting('syncEnabledBoards')).toEqual([]);
+      expect(getSetting('analysisPlaybackSpeed')).toBe(1);
     });
 
     it('returns stored value parsed from JSON', () => {
@@ -211,6 +212,11 @@ describe('settings', () => {
       expect(getSetting('defaultBoardUuid')).toBe('some-uuid');
       setSetting('defaultBoardUuid', null);
       expect(getSetting('defaultBoardUuid')).toBeNull();
+    });
+
+    it('roundtrips the analysis playback speed', () => {
+      setSetting('analysisPlaybackSpeed', 0.5);
+      expect(getSetting('analysisPlaybackSpeed')).toBe(0.5);
     });
   });
 });

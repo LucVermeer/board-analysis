@@ -184,6 +184,8 @@ export const iconMap = {
   sort: { ios: 'arrow.up.arrow.down', android: 'sort-variant' },
   refresh: { ios: 'arrow.clockwise', android: 'refresh' },
   'crop.free': { ios: 'viewfinder', android: 'crop-free' },
+  fullscreen: { ios: 'arrow.up.left.and.arrow.down.right', android: 'fullscreen' },
+  'fullscreen.exit': { ios: 'arrow.down.right.and.arrow.up.left', android: 'fullscreen-exit' },
   photo: { ios: 'photo', android: 'image-outline' },
   camera: { ios: 'camera', android: 'camera-outline' },
   video: { ios: 'video', android: 'video-outline' },
