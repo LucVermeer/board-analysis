@@ -48,6 +48,57 @@ const BetaVideoSchema = z.object({
 const BetaResponseSchema = z.object({ videos: z.array(BetaVideoSchema) });
 export type AnalysisBetaVideo = z.infer<typeof BetaVideoSchema>;
 
+const HoldSchema = z.object({
+  key: z.string(),
+  col: z.number(),
+  row: z.number(),
+});
+
+const MoveSummarySchema = z.object({
+  move_key: z.string().startsWith('targets:'),
+  target_holds: z.array(HoldSchema),
+  video_count: z.number().int().nonnegative(),
+  confirmed_video_count: z.number().int().nonnegative(),
+  hand_counts: z.array(z.object({ hand: z.string(), count: z.number().int().nonnegative() })),
+});
+
+const NavigationResponseSchema = z.object({
+  climb: z.object({ id: z.string(), normalized_id: z.string().optional().default('') }),
+  confirmed_video_count: z.number().int().nonnegative(),
+  analyzed_video_count: z.number().int().nonnegative(),
+  moves: z.array(MoveSummarySchema),
+});
+
+const MoveAttemptSchema = z.object({
+  move_key: z.string().startsWith('targets:'),
+  video_id: z.string().regex(/^scraped-[A-Za-z0-9._-]+$/),
+  source_account: z.string(),
+  local_move_id: z.string(),
+  local_ordinal: z.number().int().nonnegative(),
+  target_holds: z.array(HoldSchema),
+  transitions: z.array(
+    z.object({
+      hand: z.string(),
+      source: HoldSchema,
+      destination: HoldSchema,
+      source_assumed: z.boolean().optional().default(false),
+    }),
+  ),
+  playback: z.object({ start_s: z.number().nonnegative(), end_s: z.number().nonnegative() }),
+  confidence: z.number().min(0).max(1),
+  warnings: z.array(z.string()),
+  occurrence_count: z.number().int().positive(),
+});
+
+const MoveAttemptsResponseSchema = z.object({
+  climb: z.object({ id: z.string(), normalized_id: z.string().optional().default('') }),
+  move_key: z.string().startsWith('targets:'),
+  attempts: z.array(MoveAttemptSchema),
+});
+
+export type AnalysisBetaNavigation = z.infer<typeof NavigationResponseSchema>;
+export type AnalysisBetaMoveAttempt = z.infer<typeof MoveAttemptSchema>;
+
 const CACHE_TTL_MS = 30_000;
 const cache = new Map<string, { expiresAt: number; videos: AnalysisBetaVideo[] }>();
 
@@ -111,4 +162,72 @@ export async function authorizeAnalyzedBetaVideo(
 export function analysisServiceUrl(pathname: string): URL | null {
   const baseUrl = getAnalysisServiceBaseUrl();
   return baseUrl ? new URL(pathname, `${baseUrl}/`) : null;
+}
+
+function matchesRequestedClimb(climb: { id: string; normalized_id: string }, climbUuid: string): boolean {
+  return climb.id === climbUuid || climb.normalized_id === climbUuid;
+}
+
+export async function fetchAnalyzedBetaNavigation(
+  boardType: string,
+  layoutId: number,
+  climbUuid: string,
+): Promise<AnalysisBetaNavigation | null> {
+  if (boardType !== 'moonboard' || layoutId !== MOONBOARD_2024_LAYOUT_ID) return null;
+  const upstreamUrl = analysisServiceUrl('/api/analysis-climb-moves');
+  if (!upstreamUrl) return null;
+  upstreamUrl.searchParams.set('dataset', 'moonboard_2024_7a');
+  upstreamUrl.searchParams.set('climb', climbUuid);
+  try {
+    const [response, catalogVideos] = await Promise.all([
+      fetch(upstreamUrl, { cache: 'no-store', signal: AbortSignal.timeout(8_000) }),
+      fetchAnalyzedBetaVideos(boardType, layoutId, climbUuid),
+    ]);
+    if (!response.ok) throw new Error(`analysis service returned ${response.status}`);
+    const parsed = NavigationResponseSchema.parse(await response.json());
+    if (!matchesRequestedClimb(parsed.climb, climbUuid)) return null;
+    const confirmedVideoCount = catalogVideos.filter((video) => video.is_definitive && video.has_move_analysis).length;
+    return {
+      ...parsed,
+      confirmed_video_count: confirmedVideoCount,
+      moves: parsed.moves.map((move) => ({
+        ...move,
+        confirmed_video_count: confirmedVideoCount,
+        video_count: Math.min(move.video_count, confirmedVideoCount),
+      })),
+    };
+  } catch (error) {
+    logger.warn('[AnalyzedBetaVideos] Navigation fetch failed:', error);
+    return null;
+  }
+}
+
+export async function fetchAnalyzedBetaMoveAttempts(
+  boardType: string,
+  layoutId: number,
+  climbUuid: string,
+  moveKey: string,
+): Promise<AnalysisBetaMoveAttempt[]> {
+  if (boardType !== 'moonboard' || layoutId !== MOONBOARD_2024_LAYOUT_ID || !moveKey.startsWith('targets:')) return [];
+  const upstreamUrl = analysisServiceUrl('/api/analysis-move-attempts');
+  if (!upstreamUrl) return [];
+  upstreamUrl.searchParams.set('dataset', 'moonboard_2024_7a');
+  upstreamUrl.searchParams.set('climb', climbUuid);
+  upstreamUrl.searchParams.set('move', moveKey);
+  try {
+    const [response, catalogVideos] = await Promise.all([
+      fetch(upstreamUrl, { cache: 'no-store', signal: AbortSignal.timeout(8_000) }),
+      fetchAnalyzedBetaVideos(boardType, layoutId, climbUuid),
+    ]);
+    if (!response.ok) throw new Error(`analysis service returned ${response.status}`);
+    const parsed = MoveAttemptsResponseSchema.parse(await response.json());
+    if (parsed.move_key !== moveKey || !matchesRequestedClimb(parsed.climb, climbUuid)) return [];
+    const allowedVideoIds = new Set(
+      catalogVideos.filter((video) => video.is_definitive && video.has_move_analysis).map((video) => video.id),
+    );
+    return parsed.attempts.filter((attempt) => allowedVideoIds.has(attempt.video_id));
+  } catch (error) {
+    logger.warn('[AnalyzedBetaVideos] Move attempts fetch failed:', error);
+    return [];
+  }
 }

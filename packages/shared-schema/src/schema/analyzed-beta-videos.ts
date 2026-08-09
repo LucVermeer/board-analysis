@@ -46,4 +46,51 @@ export const analyzedBetaVideoTypeDefs = /* GraphQL */ `
     playbackPath: String!
     movesPath: String
   }
+
+  type AnalyzedBetaHold {
+    key: String!
+    col: Float!
+    row: Float!
+  }
+
+  type AnalyzedBetaHandCount {
+    hand: String!
+    count: Int!
+  }
+
+  type AnalyzedBetaMoveSummary {
+    moveKey: String!
+    targetHolds: [AnalyzedBetaHold!]!
+    videoCount: Int!
+    confirmedVideoCount: Int!
+    handCounts: [AnalyzedBetaHandCount!]!
+  }
+
+  type AnalyzedBetaMoveTransition {
+    hand: String!
+    source: AnalyzedBetaHold!
+    destination: AnalyzedBetaHold!
+    sourceAssumed: Boolean!
+  }
+
+  type AnalyzedBetaMoveAttempt {
+    moveKey: String!
+    videoId: String!
+    sourceAccount: String!
+    localMoveId: String!
+    localOrdinal: Int!
+    targetHolds: [AnalyzedBetaHold!]!
+    transitions: [AnalyzedBetaMoveTransition!]!
+    playbackStartS: Float!
+    playbackEndS: Float!
+    confidence: Float!
+    warnings: [String!]!
+    occurrenceCount: Int!
+  }
+
+  type AnalyzedBetaNavigation {
+    confirmedVideoCount: Int!
+    analyzedVideoCount: Int!
+    moves: [AnalyzedBetaMoveSummary!]!
+  }
 `;

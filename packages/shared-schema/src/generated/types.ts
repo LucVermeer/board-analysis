@@ -209,6 +209,59 @@ export type AnalyzedBetaClimbCandidate = {
   normalizedClimbId: Scalars['String']['output'];
 };
 
+export type AnalyzedBetaHandCount = {
+  __typename?: 'AnalyzedBetaHandCount';
+  count: Scalars['Int']['output'];
+  hand: Scalars['String']['output'];
+};
+
+export type AnalyzedBetaHold = {
+  __typename?: 'AnalyzedBetaHold';
+  col: Scalars['Float']['output'];
+  key: Scalars['String']['output'];
+  row: Scalars['Float']['output'];
+};
+
+export type AnalyzedBetaMoveAttempt = {
+  __typename?: 'AnalyzedBetaMoveAttempt';
+  confidence: Scalars['Float']['output'];
+  localMoveId: Scalars['String']['output'];
+  localOrdinal: Scalars['Int']['output'];
+  moveKey: Scalars['String']['output'];
+  occurrenceCount: Scalars['Int']['output'];
+  playbackEndS: Scalars['Float']['output'];
+  playbackStartS: Scalars['Float']['output'];
+  sourceAccount: Scalars['String']['output'];
+  targetHolds: Array<AnalyzedBetaHold>;
+  transitions: Array<AnalyzedBetaMoveTransition>;
+  videoId: Scalars['String']['output'];
+  warnings: Array<Scalars['String']['output']>;
+};
+
+export type AnalyzedBetaMoveSummary = {
+  __typename?: 'AnalyzedBetaMoveSummary';
+  confirmedVideoCount: Scalars['Int']['output'];
+  handCounts: Array<AnalyzedBetaHandCount>;
+  moveKey: Scalars['String']['output'];
+  targetHolds: Array<AnalyzedBetaHold>;
+  videoCount: Scalars['Int']['output'];
+};
+
+export type AnalyzedBetaMoveTransition = {
+  __typename?: 'AnalyzedBetaMoveTransition';
+  destination: AnalyzedBetaHold;
+  hand: Scalars['String']['output'];
+  source: AnalyzedBetaHold;
+  sourceAssumed: Scalars['Boolean']['output'];
+};
+
+export type AnalyzedBetaNavigation = {
+  __typename?: 'AnalyzedBetaNavigation';
+  analyzedVideoCount: Scalars['Int']['output'];
+  confirmedVideoCount: Scalars['Int']['output'];
+  moves: Array<AnalyzedBetaMoveSummary>;
+};
+
 /** A provider-scoped beta item with explicit post/item/segment provenance. */
 export type AnalyzedBetaVideo = {
   __typename?: 'AnalyzedBetaVideo';
@@ -4608,6 +4661,13 @@ export type Query = {
    * Optional boardType/layoutId filter. Requires authentication.
    */
   allUserPlaylists: AllUserPlaylistsResult;
+  /** Get confirmed video attempts containing one stable target-based move key. */
+  analyzedBetaMoveAttempts: Array<AnalyzedBetaMoveAttempt>;
+  /**
+   * Get confirmed target-move coverage for one analyzed MoonBoard climb.
+   * Ambiguous candidate assignments are excluded.
+   */
+  analyzedBetaNavigation: AnalyzedBetaNavigation;
   /**
    * Get provenance-preserving analyzed beta and unresolved candidates from the
    * configured local analysis provider. Currently available for MoonBoard 2024.
@@ -5200,6 +5260,21 @@ export type QueryAdminAppFeedbackArgs = {
 /** Root query type for all read operations. */
 export type QueryAllUserPlaylistsArgs = {
   input: GetAllUserPlaylistsInput;
+};
+
+/** Root query type for all read operations. */
+export type QueryAnalyzedBetaMoveAttemptsArgs = {
+  boardType: Scalars['String']['input'];
+  climbUuid: Scalars['String']['input'];
+  layoutId: Scalars['Int']['input'];
+  moveKey: Scalars['String']['input'];
+};
+
+/** Root query type for all read operations. */
+export type QueryAnalyzedBetaNavigationArgs = {
+  boardType: Scalars['String']['input'];
+  climbUuid: Scalars['String']['input'];
+  layoutId: Scalars['Int']['input'];
 };
 
 /** Root query type for all read operations. */
@@ -8038,6 +8113,12 @@ export type ResolversTypes = ResolversObject<{
   AllUserPlaylistsResult: ResolverTypeWrapper<AllUserPlaylistsResult>;
   AnalyzedBetaClimb: ResolverTypeWrapper<AnalyzedBetaClimb>;
   AnalyzedBetaClimbCandidate: ResolverTypeWrapper<AnalyzedBetaClimbCandidate>;
+  AnalyzedBetaHandCount: ResolverTypeWrapper<AnalyzedBetaHandCount>;
+  AnalyzedBetaHold: ResolverTypeWrapper<AnalyzedBetaHold>;
+  AnalyzedBetaMoveAttempt: ResolverTypeWrapper<AnalyzedBetaMoveAttempt>;
+  AnalyzedBetaMoveSummary: ResolverTypeWrapper<AnalyzedBetaMoveSummary>;
+  AnalyzedBetaMoveTransition: ResolverTypeWrapper<AnalyzedBetaMoveTransition>;
+  AnalyzedBetaNavigation: ResolverTypeWrapper<AnalyzedBetaNavigation>;
   AnalyzedBetaVideo: ResolverTypeWrapper<AnalyzedBetaVideo>;
   Angle: ResolverTypeWrapper<Angle>;
   AppFeedbackContext: ResolverTypeWrapper<AppFeedbackContext>;
@@ -8409,6 +8490,12 @@ export type ResolversParentTypes = ResolversObject<{
   AllUserPlaylistsResult: AllUserPlaylistsResult;
   AnalyzedBetaClimb: AnalyzedBetaClimb;
   AnalyzedBetaClimbCandidate: AnalyzedBetaClimbCandidate;
+  AnalyzedBetaHandCount: AnalyzedBetaHandCount;
+  AnalyzedBetaHold: AnalyzedBetaHold;
+  AnalyzedBetaMoveAttempt: AnalyzedBetaMoveAttempt;
+  AnalyzedBetaMoveSummary: AnalyzedBetaMoveSummary;
+  AnalyzedBetaMoveTransition: AnalyzedBetaMoveTransition;
+  AnalyzedBetaNavigation: AnalyzedBetaNavigation;
   AnalyzedBetaVideo: AnalyzedBetaVideo;
   Angle: Angle;
   AppFeedbackContext: AppFeedbackContext;
@@ -8828,6 +8915,78 @@ export type AnalyzedBetaClimbCandidateResolvers<
   climbName?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   grades?: Resolver<Array<ResolversTypes['String']>, ParentType, ContextType>;
   normalizedClimbId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
+export type AnalyzedBetaHandCountResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['AnalyzedBetaHandCount'] = ResolversParentTypes['AnalyzedBetaHandCount'],
+> = ResolversObject<{
+  count?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  hand?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
+export type AnalyzedBetaHoldResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['AnalyzedBetaHold'] = ResolversParentTypes['AnalyzedBetaHold'],
+> = ResolversObject<{
+  col?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
+  key?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  row?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
+export type AnalyzedBetaMoveAttemptResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['AnalyzedBetaMoveAttempt'] = ResolversParentTypes['AnalyzedBetaMoveAttempt'],
+> = ResolversObject<{
+  confidence?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
+  localMoveId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  localOrdinal?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  moveKey?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  occurrenceCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  playbackEndS?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
+  playbackStartS?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
+  sourceAccount?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  targetHolds?: Resolver<Array<ResolversTypes['AnalyzedBetaHold']>, ParentType, ContextType>;
+  transitions?: Resolver<Array<ResolversTypes['AnalyzedBetaMoveTransition']>, ParentType, ContextType>;
+  videoId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  warnings?: Resolver<Array<ResolversTypes['String']>, ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
+export type AnalyzedBetaMoveSummaryResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['AnalyzedBetaMoveSummary'] = ResolversParentTypes['AnalyzedBetaMoveSummary'],
+> = ResolversObject<{
+  confirmedVideoCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  handCounts?: Resolver<Array<ResolversTypes['AnalyzedBetaHandCount']>, ParentType, ContextType>;
+  moveKey?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  targetHolds?: Resolver<Array<ResolversTypes['AnalyzedBetaHold']>, ParentType, ContextType>;
+  videoCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
+export type AnalyzedBetaMoveTransitionResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['AnalyzedBetaMoveTransition'] =
+    ResolversParentTypes['AnalyzedBetaMoveTransition'],
+> = ResolversObject<{
+  destination?: Resolver<ResolversTypes['AnalyzedBetaHold'], ParentType, ContextType>;
+  hand?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  source?: Resolver<ResolversTypes['AnalyzedBetaHold'], ParentType, ContextType>;
+  sourceAssumed?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
+export type AnalyzedBetaNavigationResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['AnalyzedBetaNavigation'] = ResolversParentTypes['AnalyzedBetaNavigation'],
+> = ResolversObject<{
+  analyzedVideoCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  confirmedVideoCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  moves?: Resolver<Array<ResolversTypes['AnalyzedBetaMoveSummary']>, ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
@@ -11315,6 +11474,18 @@ export type QueryResolvers<
     ContextType,
     RequireFields<QueryAllUserPlaylistsArgs, 'input'>
   >;
+  analyzedBetaMoveAttempts?: Resolver<
+    Array<ResolversTypes['AnalyzedBetaMoveAttempt']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryAnalyzedBetaMoveAttemptsArgs, 'boardType' | 'climbUuid' | 'layoutId' | 'moveKey'>
+  >;
+  analyzedBetaNavigation?: Resolver<
+    ResolversTypes['AnalyzedBetaNavigation'],
+    ParentType,
+    ContextType,
+    RequireFields<QueryAnalyzedBetaNavigationArgs, 'boardType' | 'climbUuid' | 'layoutId'>
+  >;
   analyzedBetaVideos?: Resolver<
     Array<ResolversTypes['AnalyzedBetaVideo']>,
     ParentType,
@@ -13043,6 +13214,12 @@ export type Resolvers<ContextType = ConnectionContext> = ResolversObject<{
   AllUserPlaylistsResult?: AllUserPlaylistsResultResolvers<ContextType>;
   AnalyzedBetaClimb?: AnalyzedBetaClimbResolvers<ContextType>;
   AnalyzedBetaClimbCandidate?: AnalyzedBetaClimbCandidateResolvers<ContextType>;
+  AnalyzedBetaHandCount?: AnalyzedBetaHandCountResolvers<ContextType>;
+  AnalyzedBetaHold?: AnalyzedBetaHoldResolvers<ContextType>;
+  AnalyzedBetaMoveAttempt?: AnalyzedBetaMoveAttemptResolvers<ContextType>;
+  AnalyzedBetaMoveSummary?: AnalyzedBetaMoveSummaryResolvers<ContextType>;
+  AnalyzedBetaMoveTransition?: AnalyzedBetaMoveTransitionResolvers<ContextType>;
+  AnalyzedBetaNavigation?: AnalyzedBetaNavigationResolvers<ContextType>;
   AnalyzedBetaVideo?: AnalyzedBetaVideoResolvers<ContextType>;
   Angle?: AngleResolvers<ContextType>;
   AppFeedbackContext?: AppFeedbackContextResolvers<ContextType>;

@@ -85,3 +85,11 @@ provider namespace `boardsesh_public_graphql_search_climbs`. Definitive and
 unresolved candidates remain distinct. Move controls render only when the
 analysis service explicitly reports `has_move_analysis=true`; private attempt
 players expose ordinary video controls and 0.25x, 0.5x, and 1x speed only.
+
+The native Video analysis screen searches the ordinary BoardSesh MoonBoard 2024
+catalogue. For the selected BoardSesh UUID it contacts the separate workstation
+service configured by `EXPO_PUBLIC_ANALYSIS_URL` (defaulting to the current
+Tailscale host), then admits only definitive provider-join rows to playback and
+move navigation. Candidate rows remain excluded and are shown only as an
+unresolved count. Playback and inferred move data remain inspection output, not
+ground truth or training labels.

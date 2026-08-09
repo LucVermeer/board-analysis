@@ -40,3 +40,45 @@ export type AnalyzedBetaVideo = {
   playbackPath: string;
   movesPath: string | null;
 };
+
+export type AnalyzedBetaHold = {
+  key: string;
+  col: number;
+  row: number;
+};
+
+export type AnalyzedBetaMoveSummary = {
+  moveKey: string;
+  targetHolds: AnalyzedBetaHold[];
+  videoCount: number;
+  confirmedVideoCount: number;
+  handCounts: { hand: string; count: number }[];
+};
+
+export type AnalyzedBetaMoveTransition = {
+  hand: string;
+  source: AnalyzedBetaHold;
+  destination: AnalyzedBetaHold;
+  sourceAssumed: boolean;
+};
+
+export type AnalyzedBetaMoveAttempt = {
+  moveKey: string;
+  videoId: string;
+  sourceAccount: string;
+  localMoveId: string;
+  localOrdinal: number;
+  targetHolds: AnalyzedBetaHold[];
+  transitions: AnalyzedBetaMoveTransition[];
+  playbackStartS: number;
+  playbackEndS: number;
+  confidence: number;
+  warnings: string[];
+  occurrenceCount: number;
+};
+
+export type AnalyzedBetaNavigation = {
+  confirmedVideoCount: number;
+  analyzedVideoCount: number;
+  moves: AnalyzedBetaMoveSummary[];
+};

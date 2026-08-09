@@ -531,6 +531,10 @@ export default ({ config, projectRoot }: ConfigContext): ExpoConfig & { newArchE
       // survives. Same ordering rule the BoardseshWidgets build-settings plugin
       // relies on below.
       './plugins/with-share-intent-app-group-dedup',
+      // The read-only workstation analysis service is exposed over HTTP inside
+      // Tailscale. This sets Android's manifest flag without relying on an Expo
+      // config field that SDK 57 does not expose.
+      './plugins/with-android-analysis-networking',
       'expo-router',
       'expo-secure-store',
       // Native Sign in with Apple (adds the entitlement alongside usesAppleSignIn).

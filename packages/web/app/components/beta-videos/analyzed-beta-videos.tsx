@@ -19,12 +19,15 @@ import NavigateNext from '@mui/icons-material/NavigateNext';
 import OpenInNew from '@mui/icons-material/OpenInNew';
 import type { AnalyzedBetaVideo } from '@boardsesh/shared-schema';
 import {
+  GET_ANALYZED_BETA_NAVIGATION,
   GET_ANALYZED_BETA_VIDEOS,
+  type GetAnalyzedBetaNavigationResponse,
   type GetAnalyzedBetaVideosResponse,
 } from '@boardsesh/graphql/operations/analyzed-beta-videos';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import { getBackendHttpUrl } from '@/app/lib/backend-url';
 import VideoSpeedControl from '@/app/components/attempt-videos/video-speed-control';
+import { AnalyzedBetaNavigator } from './analyzed-beta-navigator';
 
 type ClimbingMove = {
   number: number;
@@ -79,6 +82,7 @@ export function AnalyzedBetaPlayer({ beta }: { beta: AnalyzedBetaVideo }) {
         ref={videoRef}
         src={backendUrl(beta.playbackPath)}
         controls
+        muted
         playsInline
         preload="metadata"
         aria-label={t('analyzedBeta.videoAria')}
@@ -164,7 +168,7 @@ export default function AnalyzedBetaVideos({
   layoutId: number;
 }) {
   const { t } = useTranslation('climbs');
-  const { data = [], isLoading } = useQuery({
+  const { data = [], isLoading: videosLoading } = useQuery({
     queryKey: ['analyzedBetaVideos', boardType, climbUuid, layoutId],
     queryFn: async () => {
       const result = await createGraphQLHttpClient().request<GetAnalyzedBetaVideosResponse>(GET_ANALYZED_BETA_VIDEOS, {
@@ -177,11 +181,38 @@ export default function AnalyzedBetaVideos({
     enabled: boardType === 'moonboard' && layoutId === 3,
     staleTime: 60_000,
   });
-  if (isLoading) return <CircularProgress size={24} aria-label={t('analyzedBeta.loading')} />;
+  const { data: navigation, isLoading: navigationLoading } = useQuery({
+    queryKey: ['analyzedBetaNavigation', boardType, climbUuid, layoutId],
+    queryFn: async () => {
+      const result = await createGraphQLHttpClient().request<GetAnalyzedBetaNavigationResponse>(
+        GET_ANALYZED_BETA_NAVIGATION,
+        { boardType, climbUuid, layoutId },
+      );
+      return result.analyzedBetaNavigation;
+    },
+    enabled: boardType === 'moonboard' && layoutId === 3,
+    staleTime: 60_000,
+  });
+  if (videosLoading || navigationLoading) {
+    return <CircularProgress size={24} aria-label={t('analyzedBeta.loading')} />;
+  }
   if (data.length === 0) return null;
+  const navigableBetas = data.filter((beta) => beta.isDefinitive && beta.hasMoveAnalysis && beta.movesPath);
+  const fallbackBetas = data.filter((beta) => !navigableBetas.includes(beta));
   return (
     <Box>
-      {data.map((beta) => (
+      {navigation && navigation.confirmedVideoCount > 0 && navigableBetas.length > 0 ? (
+        <AnalyzedBetaNavigator
+          betas={navigableBetas}
+          navigation={navigation}
+          boardType={boardType}
+          climbUuid={climbUuid}
+          layoutId={layoutId}
+        />
+      ) : (
+        navigableBetas.map((beta) => <AnalyzedBetaPlayer key={beta.segmentKey} beta={beta} />)
+      )}
+      {fallbackBetas.map((beta) => (
         <AnalyzedBetaPlayer key={beta.segmentKey} beta={beta} />
       ))}
     </Box>

@@ -213,6 +213,22 @@ export const queriesTypeDefs = /* GraphQL */ `
     analyzedBetaVideos(boardType: String!, climbUuid: String!, layoutId: Int!): [AnalyzedBetaVideo!]!
 
     """
+    Get confirmed target-move coverage for one analyzed MoonBoard climb.
+    Ambiguous candidate assignments are excluded.
+    """
+    analyzedBetaNavigation(boardType: String!, climbUuid: String!, layoutId: Int!): AnalyzedBetaNavigation!
+
+    """
+    Get confirmed video attempts containing one stable target-based move key.
+    """
+    analyzedBetaMoveAttempts(
+      boardType: String!
+      climbUuid: String!
+      layoutId: Int!
+      moveKey: String!
+    ): [AnalyzedBetaMoveAttempt!]!
+
+    """
     Get public ticks for any user by their ID.
     """
     userTicks(userId: ID!, boardType: String!): [Tick!]!

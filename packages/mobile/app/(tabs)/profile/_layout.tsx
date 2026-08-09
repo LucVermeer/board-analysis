@@ -6,6 +6,7 @@ import { BoardArtVisibilityProvider } from '../../../src/providers/board-art-vis
 
 export default function ProfileLayout() {
   const { t } = useTranslation('common');
+  const { t: tClimbs } = useTranslation('climbs');
   const { t: tSettings } = useTranslation('settings');
   const screenOptions = useStackScreenOptions();
 
@@ -24,6 +25,7 @@ export default function ProfileLayout() {
         <Stack.Screen name="more" options={{ title: t('mobile.more.title') }} />
         <Stack.Screen name="accessibility" options={{ title: t('mobile.more.accessibility.title') }} />
         <Stack.Screen name="storage" options={{ title: t('mobile.more.storage.title') }} />
+        <Stack.Screen name="video-analysis" options={{ title: tClimbs('analysisNavigation.title') }} />
         <Stack.Screen name="edit" options={{ title: tSettings('profile.editAction') }} />
         <Stack.Screen name="integrations" options={{ title: tSettings('integrations.title') }} />
         <Stack.Screen name="watch-pair" options={{ title: tSettings('watchPairing.title') }} />

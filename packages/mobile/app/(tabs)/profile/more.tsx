@@ -70,6 +70,7 @@ export default function MoreScreen() {
   const { t: tPlaylists } = useTranslation('playlists');
   const { t: tSettings } = useTranslation('settings');
   const { t: tBoards } = useTranslation('boards');
+  const { t: tClimbs } = useTranslation('climbs');
   const { signOut } = useAuth();
   const { data: profile } = useProfile();
   const { gradeFormat, setGradeFormat } = useGradeFormat();
@@ -508,6 +509,20 @@ export default function MoreScreen() {
       ],
     });
   }
+
+  // Confirmed MoonBoard video-analysis catalogue.
+  sections.push({
+    key: 'videoAnalysis',
+    rows: [
+      {
+        kind: 'nav',
+        key: 'videoAnalysis',
+        label: tClimbs('analysisNavigation.title'),
+        subtitle: tClimbs('analysisNavigation.subtitle'),
+        onPress: navAction(() => router.push('/(tabs)/profile/video-analysis')),
+      },
+    ],
+  });
 
   // Accessibility (nav).
   sections.push({

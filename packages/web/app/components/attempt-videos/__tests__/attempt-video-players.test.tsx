@@ -1,10 +1,22 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type { AnalyzedBetaVideo, PrivateAttemptVideo } from '@boardsesh/shared-schema';
+import type {
+  AnalyzedBetaMoveAttempt,
+  AnalyzedBetaNavigation,
+  AnalyzedBetaVideo,
+  PrivateAttemptVideo,
+} from '@boardsesh/shared-schema';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import { AnalyzedBetaPlayer } from '../../beta-videos/analyzed-beta-videos';
+import { AnalyzedBetaNavigator } from '../../beta-videos/analyzed-beta-navigator';
 import { PrivateAttemptVideoRow } from '../private-attempt-videos';
+
+const graphQLRequestMock = vi.hoisted(() => vi.fn());
+
+vi.mock('@/app/lib/graphql/client', () => ({
+  createGraphQLHttpClient: () => ({ request: graphQLRequestMock }),
+}));
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -17,9 +29,28 @@ vi.mock('react-i18next', () => ({
         'analyzedBeta.previousMoveAria': 'Previous move',
         'analyzedBeta.nextMoveAria': 'Next move',
         'analyzedBeta.moveLabel': 'Move',
+        'analyzedBeta.previousAttemptAria': 'Previous video attempt',
+        'analyzedBeta.nextAttemptAria': 'Next video attempt',
+        'analyzedBeta.movePaneAria': 'Analyzed moves',
+        'analyzedBeta.movesTitle': 'Moves',
+        'analyzedBeta.loadingMoves': 'Loading moves',
       };
       if (key === 'attemptVideos.duration') return `${String(options?.seconds)} seconds`;
       if (key === 'analyzedBeta.moveCount') return `Move ${String(options?.move)} of ${String(options?.count)}`;
+      if (key === 'analyzedBeta.moveNumber') return `Move ${String(options?.move)}`;
+      if (key === 'analyzedBeta.allMovesCount') return `All moves · ${String(options?.count)} videos`;
+      if (key === 'analyzedBeta.moveCoverage') {
+        return `${String(options?.target)} · ${String(options?.videos)}/${String(options?.total)}`;
+      }
+      if (key === 'analyzedBeta.attemptPosition') {
+        return `${String(options?.current)}/${String(options?.count)} attempts`;
+      }
+      if (key === 'analyzedBeta.videoPosition') {
+        return `${String(options?.current)}/${String(options?.count)} videos`;
+      }
+      if (key === 'analyzedBeta.moveConfidence') {
+        return `Move ${String(options?.move)} · ${String(options?.confidence)}% confidence`;
+      }
       return labels[key] ?? key;
     },
     i18n: { language: 'en-US' },
@@ -72,8 +103,66 @@ const analyzedBeta: AnalyzedBetaVideo = {
   playbackPath: '/api/analyzed-beta-videos/scraped-beta-1/stream?climbUuid=climb-1',
   movesPath: '/api/analyzed-beta-videos/scraped-beta-1/moves?climbUuid=climb-1',
 };
+const secondAnalyzedBeta: AnalyzedBetaVideo = {
+  ...analyzedBeta,
+  id: 'scraped-beta-2',
+  sourceAccount: 'second',
+  postKey: 'post-2',
+  postUrl: 'https://example.test/post-2',
+  mediaItemKey: 'post-2:item-1',
+  segmentKey: 'post-2:item-1:segment-1',
+  playbackPath: '/api/analyzed-beta-videos/scraped-beta-2/stream?climbUuid=climb-1',
+  movesPath: '/api/analyzed-beta-videos/scraped-beta-2/moves?climbUuid=climb-1',
+};
+
+const analyzedNavigation: AnalyzedBetaNavigation = {
+  confirmedVideoCount: 2,
+  analyzedVideoCount: 2,
+  moves: [
+    {
+      moveKey: 'targets:grid:H9',
+      targetHolds: [{ key: 'grid:H9', col: 8, row: 9 }],
+      videoCount: 2,
+      confirmedVideoCount: 2,
+      handCounts: [{ hand: 'RH', count: 2 }],
+    },
+    {
+      moveKey: 'targets:grid:F13',
+      targetHolds: [{ key: 'grid:F13', col: 6, row: 13 }],
+      videoCount: 2,
+      confirmedVideoCount: 2,
+      handCounts: [{ hand: 'LH', count: 2 }],
+    },
+  ],
+};
+
+function analyzedAttempt(videoId: string, moveKey: string, localMoveId: string): AnalyzedBetaMoveAttempt {
+  const isF13 = moveKey === 'targets:grid:F13';
+  return {
+    moveKey,
+    videoId,
+    sourceAccount: videoId === analyzedBeta.id ? 'setter' : 'second',
+    localMoveId,
+    localOrdinal: isF13 ? 2 : 1,
+    targetHolds: [isF13 ? { key: 'grid:F13', col: 6, row: 13 } : { key: 'grid:H9', col: 8, row: 9 }],
+    transitions: [
+      {
+        hand: isF13 ? 'left_hand' : 'right_hand',
+        source: isF13 ? { key: 'grid:C7', col: 3, row: 7 } : { key: 'grid:E4', col: 5, row: 4 },
+        destination: isF13 ? { key: 'grid:F13', col: 6, row: 13 } : { key: 'grid:H9', col: 8, row: 9 },
+        sourceAssumed: false,
+      },
+    ],
+    playbackStartS: isF13 ? 2.5 : 0.5,
+    playbackEndS: isF13 ? 3.5 : 1.5,
+    confidence: 0.9,
+    warnings: [],
+    occurrenceCount: 1,
+  };
+}
 const mediaPlayMock = vi.fn<() => Promise<void>>();
 const mediaPauseMock = vi.fn<() => void>();
+const mediaLoadMock = vi.fn<() => void>();
 
 function renderAnalyzed(beta: AnalyzedBetaVideo) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -89,8 +178,11 @@ beforeEach(() => {
   mediaPlayMock.mockReset();
   mediaPlayMock.mockResolvedValue();
   mediaPauseMock.mockReset();
+  mediaLoadMock.mockReset();
   vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(mediaPlayMock);
   vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(mediaPauseMock);
+  vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(mediaLoadMock);
+  graphQLRequestMock.mockReset();
 });
 
 afterEach(() => {
@@ -152,5 +244,86 @@ describe('attempt and analyzed beta players', () => {
     video.currentTime = 3.5;
     fireEvent.timeUpdate(video);
     expect(mediaPauseMock).toHaveBeenCalledOnce();
+  });
+
+  it('navigates target moves vertically and matching video attempts horizontally', async () => {
+    const localMoves = [
+      {
+        id: 'move-h9',
+        number: 1,
+        move_key: 'targets:grid:H9',
+        playback: { start_s: 0.5, end_s: 1.5 },
+        transitions: [
+          {
+            hand: 'right_hand',
+            source: { key: 'grid:E4', col: 5, row: 4 },
+            destination: { key: 'grid:H9', col: 8, row: 9 },
+          },
+        ],
+      },
+      {
+        id: 'move-f13',
+        number: 2,
+        move_key: 'targets:grid:F13',
+        playback: { start_s: 2.5, end_s: 3.5 },
+        transitions: [
+          {
+            hand: 'left_hand',
+            source: { key: 'grid:C7', col: 3, row: 7 },
+            destination: { key: 'grid:F13', col: 6, row: 13 },
+          },
+        ],
+      },
+    ];
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ moves: localMoves }) }));
+    graphQLRequestMock.mockImplementation(async (_query: unknown, variables: { moveKey: string }) => ({
+      analyzedBetaMoveAttempts: [
+        analyzedAttempt(analyzedBeta.id, variables.moveKey, variables.moveKey.endsWith('F13') ? 'move-f13' : 'move-h9'),
+        analyzedAttempt(
+          secondAnalyzedBeta.id,
+          variables.moveKey,
+          variables.moveKey.endsWith('F13') ? 'move-f13' : 'move-h9',
+        ),
+      ],
+    }));
+
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <AnalyzedBetaNavigator
+          betas={[analyzedBeta, secondAnalyzedBeta]}
+          navigation={analyzedNavigation}
+          boardType="moonboard"
+          climbUuid="climb-1"
+          layoutId={3}
+        />
+      </QueryClientProvider>,
+    );
+
+    const video = screen.getByLabelText('Analyzed beta video') as HTMLVideoElement;
+    expect(video.muted).toBe(true);
+    expect(await screen.findByRole('button', { name: /Move 2.*F13/ })).toBeTruthy();
+
+    fireEvent.keyDown(video, { key: 'ArrowDown' });
+    expect(await screen.findByText('1/2 attempts')).toBeTruthy();
+    await waitFor(() =>
+      expect(graphQLRequestMock).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ moveKey: 'targets:grid:H9' }),
+      ),
+    );
+
+    fireEvent.keyDown(video, { key: 'ArrowDown' });
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Move' }).textContent).toContain('F13'));
+    expect(await screen.findByText('LH C7 → F13')).toBeTruthy();
+
+    fireEvent.keyDown(video, { key: 'ArrowRight' });
+    await waitFor(() =>
+      expect((screen.getByLabelText('Analyzed beta video') as HTMLVideoElement).src).toContain('scraped-beta-2'),
+    );
+    expect(screen.getByText('2/2 attempts')).toBeTruthy();
+    expect(await screen.findByRole('button', { name: /Move 1.*H9/ })).toBeTruthy();
+
+    fireEvent.keyDown(screen.getByLabelText('Analyzed beta video'), { key: 'ArrowUp' });
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Move' }).textContent).toContain('H9'));
   });
 });

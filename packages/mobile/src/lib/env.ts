@@ -1,6 +1,13 @@
 export const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL ?? 'https://ws.boardsesh.com';
 export const WEB_BASE_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://www.boardsesh.com';
 
+// The analysis service runs on the workstation over Tailscale. It is separate
+// from the public Boardsesh API: climb metadata still comes from BoardSesh.
+export const ANALYSIS_URL = (process.env.EXPO_PUBLIC_ANALYSIS_URL?.trim() ?? 'http://100.87.7.109:8002').replace(
+  /\/+$/,
+  '',
+);
+
 /**
  * Resolve a Next.js web API path (e.g. `/api/auth/session`) to the URL the
  * Expo-web app should fetch.

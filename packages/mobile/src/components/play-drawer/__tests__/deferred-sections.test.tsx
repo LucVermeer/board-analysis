@@ -57,6 +57,10 @@ vi.mock('../BetaVideosSection', () => ({
   BetaVideosSection: () => createElement('div', { 'data-testid': 'beta-videos' }),
 }));
 
+vi.mock('../../attempt-videos/PrivateAttemptVideosSection', () => ({
+  PrivateAttemptVideosSection: () => createElement('div', { 'data-testid': 'private-attempt-videos' }),
+}));
+
 vi.mock('../LogbookSection', () => ({
   LogbookSection: () => createElement('div', { 'data-testid': 'logbook' }),
 }));

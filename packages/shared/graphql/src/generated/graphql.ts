@@ -206,6 +206,59 @@ export type AnalyzedBetaClimbCandidate = {
   normalizedClimbId: Scalars['String']['output'];
 };
 
+export type AnalyzedBetaHandCount = {
+  __typename?: 'AnalyzedBetaHandCount';
+  count: Scalars['Int']['output'];
+  hand: Scalars['String']['output'];
+};
+
+export type AnalyzedBetaHold = {
+  __typename?: 'AnalyzedBetaHold';
+  col: Scalars['Float']['output'];
+  key: Scalars['String']['output'];
+  row: Scalars['Float']['output'];
+};
+
+export type AnalyzedBetaMoveAttempt = {
+  __typename?: 'AnalyzedBetaMoveAttempt';
+  confidence: Scalars['Float']['output'];
+  localMoveId: Scalars['String']['output'];
+  localOrdinal: Scalars['Int']['output'];
+  moveKey: Scalars['String']['output'];
+  occurrenceCount: Scalars['Int']['output'];
+  playbackEndS: Scalars['Float']['output'];
+  playbackStartS: Scalars['Float']['output'];
+  sourceAccount: Scalars['String']['output'];
+  targetHolds: Array<AnalyzedBetaHold>;
+  transitions: Array<AnalyzedBetaMoveTransition>;
+  videoId: Scalars['String']['output'];
+  warnings: Array<Scalars['String']['output']>;
+};
+
+export type AnalyzedBetaMoveSummary = {
+  __typename?: 'AnalyzedBetaMoveSummary';
+  confirmedVideoCount: Scalars['Int']['output'];
+  handCounts: Array<AnalyzedBetaHandCount>;
+  moveKey: Scalars['String']['output'];
+  targetHolds: Array<AnalyzedBetaHold>;
+  videoCount: Scalars['Int']['output'];
+};
+
+export type AnalyzedBetaMoveTransition = {
+  __typename?: 'AnalyzedBetaMoveTransition';
+  destination: AnalyzedBetaHold;
+  hand: Scalars['String']['output'];
+  source: AnalyzedBetaHold;
+  sourceAssumed: Scalars['Boolean']['output'];
+};
+
+export type AnalyzedBetaNavigation = {
+  __typename?: 'AnalyzedBetaNavigation';
+  analyzedVideoCount: Scalars['Int']['output'];
+  confirmedVideoCount: Scalars['Int']['output'];
+  moves: Array<AnalyzedBetaMoveSummary>;
+};
+
 /** A provider-scoped beta item with explicit post/item/segment provenance. */
 export type AnalyzedBetaVideo = {
   __typename?: 'AnalyzedBetaVideo';
@@ -4605,6 +4658,13 @@ export type Query = {
    * Optional boardType/layoutId filter. Requires authentication.
    */
   allUserPlaylists: AllUserPlaylistsResult;
+  /** Get confirmed video attempts containing one stable target-based move key. */
+  analyzedBetaMoveAttempts: Array<AnalyzedBetaMoveAttempt>;
+  /**
+   * Get confirmed target-move coverage for one analyzed MoonBoard climb.
+   * Ambiguous candidate assignments are excluded.
+   */
+  analyzedBetaNavigation: AnalyzedBetaNavigation;
   /**
    * Get provenance-preserving analyzed beta and unresolved candidates from the
    * configured local analysis provider. Currently available for MoonBoard 2024.
@@ -5197,6 +5257,21 @@ export type QueryAdminAppFeedbackArgs = {
 /** Root query type for all read operations. */
 export type QueryAllUserPlaylistsArgs = {
   input: GetAllUserPlaylistsInput;
+};
+
+/** Root query type for all read operations. */
+export type QueryAnalyzedBetaMoveAttemptsArgs = {
+  boardType: Scalars['String']['input'];
+  climbUuid: Scalars['String']['input'];
+  layoutId: Scalars['Int']['input'];
+  moveKey: Scalars['String']['input'];
+};
+
+/** Root query type for all read operations. */
+export type QueryAnalyzedBetaNavigationArgs = {
+  boardType: Scalars['String']['input'];
+  climbUuid: Scalars['String']['input'];
+  layoutId: Scalars['Int']['input'];
 };
 
 /** Root query type for all read operations. */
@@ -7981,6 +8056,61 @@ export type GetAnalyzedBetaVideosQuery = {
       boardLayout: string;
       setterUsername: string;
     } | null;
+  }>;
+};
+
+export type GetAnalyzedBetaNavigationQueryVariables = Exact<{
+  boardType: Scalars['String']['input'];
+  climbUuid: Scalars['String']['input'];
+  layoutId: Scalars['Int']['input'];
+}>;
+
+export type GetAnalyzedBetaNavigationQuery = {
+  __typename?: 'Query';
+  analyzedBetaNavigation: {
+    __typename?: 'AnalyzedBetaNavigation';
+    confirmedVideoCount: number;
+    analyzedVideoCount: number;
+    moves: Array<{
+      __typename?: 'AnalyzedBetaMoveSummary';
+      moveKey: string;
+      videoCount: number;
+      confirmedVideoCount: number;
+      targetHolds: Array<{ __typename?: 'AnalyzedBetaHold'; key: string; col: number; row: number }>;
+      handCounts: Array<{ __typename?: 'AnalyzedBetaHandCount'; hand: string; count: number }>;
+    }>;
+  };
+};
+
+export type GetAnalyzedBetaMoveAttemptsQueryVariables = Exact<{
+  boardType: Scalars['String']['input'];
+  climbUuid: Scalars['String']['input'];
+  layoutId: Scalars['Int']['input'];
+  moveKey: Scalars['String']['input'];
+}>;
+
+export type GetAnalyzedBetaMoveAttemptsQuery = {
+  __typename?: 'Query';
+  analyzedBetaMoveAttempts: Array<{
+    __typename?: 'AnalyzedBetaMoveAttempt';
+    moveKey: string;
+    videoId: string;
+    sourceAccount: string;
+    localMoveId: string;
+    localOrdinal: number;
+    playbackStartS: number;
+    playbackEndS: number;
+    confidence: number;
+    warnings: Array<string>;
+    occurrenceCount: number;
+    targetHolds: Array<{ __typename?: 'AnalyzedBetaHold'; key: string; col: number; row: number }>;
+    transitions: Array<{
+      __typename?: 'AnalyzedBetaMoveTransition';
+      hand: string;
+      sourceAssumed: boolean;
+      source: { __typename?: 'AnalyzedBetaHold'; key: string; col: number; row: number };
+      destination: { __typename?: 'AnalyzedBetaHold'; key: string; col: number; row: number };
+    }>;
   }>;
 };
 
@@ -10787,6 +10917,226 @@ export const GetAnalyzedBetaVideosDocument = {
     },
   ],
 } as unknown as DocumentNode<GetAnalyzedBetaVideosQuery, GetAnalyzedBetaVideosQueryVariables>;
+export const GetAnalyzedBetaNavigationDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'GetAnalyzedBetaNavigation' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'boardType' } },
+          type: { kind: 'NonNullType', type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'climbUuid' } },
+          type: { kind: 'NonNullType', type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'layoutId' } },
+          type: { kind: 'NonNullType', type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } } },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'analyzedBetaNavigation' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'boardType' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'boardType' } },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'climbUuid' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'climbUuid' } },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'layoutId' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'layoutId' } },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'confirmedVideoCount' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'analyzedVideoCount' } },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'moves' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      { kind: 'Field', name: { kind: 'Name', value: 'moveKey' } },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'targetHolds' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            { kind: 'Field', name: { kind: 'Name', value: 'key' } },
+                            { kind: 'Field', name: { kind: 'Name', value: 'col' } },
+                            { kind: 'Field', name: { kind: 'Name', value: 'row' } },
+                          ],
+                        },
+                      },
+                      { kind: 'Field', name: { kind: 'Name', value: 'videoCount' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'confirmedVideoCount' } },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'handCounts' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            { kind: 'Field', name: { kind: 'Name', value: 'hand' } },
+                            { kind: 'Field', name: { kind: 'Name', value: 'count' } },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<GetAnalyzedBetaNavigationQuery, GetAnalyzedBetaNavigationQueryVariables>;
+export const GetAnalyzedBetaMoveAttemptsDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'GetAnalyzedBetaMoveAttempts' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'boardType' } },
+          type: { kind: 'NonNullType', type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'climbUuid' } },
+          type: { kind: 'NonNullType', type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'layoutId' } },
+          type: { kind: 'NonNullType', type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'moveKey' } },
+          type: { kind: 'NonNullType', type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } } },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'analyzedBetaMoveAttempts' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'boardType' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'boardType' } },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'climbUuid' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'climbUuid' } },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'layoutId' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'layoutId' } },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'moveKey' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'moveKey' } },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'moveKey' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'videoId' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'sourceAccount' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'localMoveId' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'localOrdinal' } },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'targetHolds' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      { kind: 'Field', name: { kind: 'Name', value: 'key' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'col' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'row' } },
+                    ],
+                  },
+                },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'transitions' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      { kind: 'Field', name: { kind: 'Name', value: 'hand' } },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'source' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            { kind: 'Field', name: { kind: 'Name', value: 'key' } },
+                            { kind: 'Field', name: { kind: 'Name', value: 'col' } },
+                            { kind: 'Field', name: { kind: 'Name', value: 'row' } },
+                          ],
+                        },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'destination' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            { kind: 'Field', name: { kind: 'Name', value: 'key' } },
+                            { kind: 'Field', name: { kind: 'Name', value: 'col' } },
+                            { kind: 'Field', name: { kind: 'Name', value: 'row' } },
+                          ],
+                        },
+                      },
+                      { kind: 'Field', name: { kind: 'Name', value: 'sourceAssumed' } },
+                    ],
+                  },
+                },
+                { kind: 'Field', name: { kind: 'Name', value: 'playbackStartS' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'playbackEndS' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'confidence' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'warnings' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'occurrenceCount' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<GetAnalyzedBetaMoveAttemptsQuery, GetAnalyzedBetaMoveAttemptsQueryVariables>;
 export const GetBetaLinksDocument = {
   kind: 'Document',
   definitions: [

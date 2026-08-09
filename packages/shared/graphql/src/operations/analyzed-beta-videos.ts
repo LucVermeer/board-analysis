@@ -1,5 +1,5 @@
 import { gql } from 'graphql-request';
-import type { AnalyzedBetaVideo } from '@boardsesh/shared-schema';
+import type { AnalyzedBetaMoveAttempt, AnalyzedBetaNavigation, AnalyzedBetaVideo } from '@boardsesh/shared-schema';
 
 export const GET_ANALYZED_BETA_VIDEOS = gql`
   query GetAnalyzedBetaVideos($boardType: String!, $climbUuid: String!, $layoutId: Int!) {
@@ -54,4 +54,71 @@ export type GetAnalyzedBetaVideosVariables = {
 
 export type GetAnalyzedBetaVideosResponse = {
   analyzedBetaVideos: AnalyzedBetaVideo[];
+};
+
+export const GET_ANALYZED_BETA_NAVIGATION = gql`
+  query GetAnalyzedBetaNavigation($boardType: String!, $climbUuid: String!, $layoutId: Int!) {
+    analyzedBetaNavigation(boardType: $boardType, climbUuid: $climbUuid, layoutId: $layoutId) {
+      confirmedVideoCount
+      analyzedVideoCount
+      moves {
+        moveKey
+        targetHolds {
+          key
+          col
+          row
+        }
+        videoCount
+        confirmedVideoCount
+        handCounts {
+          hand
+          count
+        }
+      }
+    }
+  }
+`;
+
+export type GetAnalyzedBetaNavigationResponse = {
+  analyzedBetaNavigation: AnalyzedBetaNavigation;
+};
+
+export const GET_ANALYZED_BETA_MOVE_ATTEMPTS = gql`
+  query GetAnalyzedBetaMoveAttempts($boardType: String!, $climbUuid: String!, $layoutId: Int!, $moveKey: String!) {
+    analyzedBetaMoveAttempts(boardType: $boardType, climbUuid: $climbUuid, layoutId: $layoutId, moveKey: $moveKey) {
+      moveKey
+      videoId
+      sourceAccount
+      localMoveId
+      localOrdinal
+      targetHolds {
+        key
+        col
+        row
+      }
+      transitions {
+        hand
+        source {
+          key
+          col
+          row
+        }
+        destination {
+          key
+          col
+          row
+        }
+        sourceAssumed
+      }
+      playbackStartS
+      playbackEndS
+      confidence
+      warnings
+      occurrenceCount
+    }
+  }
+`;
+
+export type GetAnalyzedBetaMoveAttemptsResponse = {
+  analyzedBetaMoveAttempts: AnalyzedBetaMoveAttempt[];
 };
