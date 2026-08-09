@@ -45,6 +45,7 @@ import { PrivateAttemptComparison } from './PrivateAttemptComparison';
 
 const SPEEDS = [0.25, 0.5, 1] as const;
 const SEARCH_DELAY_MS = 250;
+const CONTROLS_HIDE_DELAY_MS = 2_500;
 
 function holdLabel(key: string): string {
   return key.replace(/^grid:/, '');
@@ -71,6 +72,7 @@ function transitionLabel(attempt: AnalyzedBetaMoveAttempt): string {
 
 export function AnalyzedBetaNavigationScreen() {
   const { t } = useTranslation('climbs');
+  const { t: tCommon } = useTranslation('common');
   const { systemColors, brandColors } = useTheme();
   const bottomChrome = useBottomChromeMetrics();
   const { width, height } = useWindowDimensions();
@@ -86,8 +88,28 @@ export function AnalyzedBetaNavigationScreen() {
   const speedRef = useRef<(typeof SPEEDS)[number]>(speed);
   const [comparisonOpen, setComparisonOpen] = useState(false);
   const [betaFullscreen, setBetaFullscreen] = useState(false);
+  const [betaControlsVisible, setBetaControlsVisible] = useState(false);
+  const [betaPlaying, setBetaPlaying] = useState(false);
   const [recordingIndex, setRecordingIndex] = useState(0);
   const segmentEndRef = useRef<number | null>(null);
+  const controlsHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const hideBetaControls = useCallback(() => {
+    if (controlsHideTimerRef.current) clearTimeout(controlsHideTimerRef.current);
+    controlsHideTimerRef.current = null;
+    setBetaControlsVisible(false);
+  }, []);
+
+  const showBetaControls = useCallback(() => {
+    if (controlsHideTimerRef.current) clearTimeout(controlsHideTimerRef.current);
+    setBetaControlsVisible(true);
+    controlsHideTimerRef.current = setTimeout(() => {
+      controlsHideTimerRef.current = null;
+      setBetaControlsVisible(false);
+    }, CONTROLS_HIDE_DELAY_MS);
+  }, []);
+
+  useEffect(() => hideBetaControls, [hideBetaControls]);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim()), SEARCH_DELAY_MS);
@@ -224,6 +246,10 @@ export function AnalyzedBetaNavigationScreen() {
     if (!currentVideo) setBetaFullscreen(false);
   }, [currentVideo]);
 
+  useEffect(() => {
+    hideBetaControls();
+  }, [betaFullscreen, hideBetaControls, moveKey, videoId]);
+
   const player = useVideoPlayer(null, (createdPlayer) => {
     createdPlayer.loop = false;
     createdPlayer.muted = true;
@@ -241,6 +267,10 @@ export function AnalyzedBetaNavigationScreen() {
     player.pause();
     player.currentTime = segmentEnd;
     segmentEndRef.current = null;
+  });
+
+  useEventListener(player, 'playingChange', ({ isPlaying }) => {
+    setBetaPlaying(isPlaying);
   });
 
   useEffect(() => {
@@ -305,16 +335,27 @@ export function AnalyzedBetaNavigationScreen() {
     [navigateAttempt],
   );
 
-  const betaSwipeGesture = useMemo(
-    () =>
-      Gesture.Pan()
-        .activeOffsetX([-24, 24])
-        .failOffsetY([-20, 20])
-        .onEnd((event) => {
-          runOnJS(handleBetaSwipe)(event.translationX, event.velocityX);
-        }),
-    [handleBetaSwipe],
-  );
+  const betaSwipeGesture = useMemo(() => {
+    const pan = Gesture.Pan()
+      .activeOffsetX([-24, 24])
+      .failOffsetY([-20, 20])
+      .onStart(() => {
+        runOnJS(hideBetaControls)();
+      })
+      .onEnd((event) => {
+        runOnJS(handleBetaSwipe)(event.translationX, event.velocityX);
+      });
+    const tap = Gesture.Tap().onEnd(() => {
+      runOnJS(showBetaControls)();
+    });
+    return Gesture.Race(pan, tap);
+  }, [handleBetaSwipe, hideBetaControls, showBetaControls]);
+
+  const toggleBetaPlayback = useCallback(() => {
+    if (player.playing) player.pause();
+    else player.play();
+    showBetaControls();
+  }, [player, showBetaControls]);
 
   const updateSpeed = useCallback(
     (nextSpeed: (typeof SPEEDS)[number]) => {
@@ -529,11 +570,21 @@ export function AnalyzedBetaNavigationScreen() {
                           player={player}
                           style={styles.video}
                           contentFit="contain"
-                          nativeControls
+                          nativeControls={false}
                           fullscreenOptions={{ enable: false }}
                           surfaceType="textureView"
                           accessibilityLabel={t('analysisNavigation.videoAria')}
                         />
+                        {betaControlsVisible ? (
+                          <Pressable
+                            onPress={toggleBetaPlayback}
+                            accessibilityRole="button"
+                            accessibilityLabel={tCommon(betaPlaying ? 'playback.pause' : 'playback.play')}
+                            style={styles.playbackButton}
+                          >
+                            <Icon name={betaPlaying ? 'pause' : 'play.fill'} size={32} color="#ffffff" />
+                          </Pressable>
+                        ) : null}
                         <Pressable
                           onPress={() => setBetaFullscreen(true)}
                           accessibilityRole="button"
@@ -566,11 +617,21 @@ export function AnalyzedBetaNavigationScreen() {
                             player={player}
                             style={styles.fullscreenVideo}
                             contentFit="contain"
-                            nativeControls
+                            nativeControls={false}
                             fullscreenOptions={{ enable: false }}
                             surfaceType="textureView"
                             accessibilityLabel={t('analysisNavigation.videoAria')}
                           />
+                          {betaControlsVisible ? (
+                            <Pressable
+                              onPress={toggleBetaPlayback}
+                              accessibilityRole="button"
+                              accessibilityLabel={tCommon(betaPlaying ? 'playback.pause' : 'playback.play')}
+                              style={styles.playbackButton}
+                            >
+                              <Icon name={betaPlaying ? 'pause' : 'play.fill'} size={32} color="#ffffff" />
+                            </Pressable>
+                          ) : null}
                           <Pressable
                             onPress={() => setBetaFullscreen(false)}
                             accessibilityRole="button"
@@ -803,6 +864,20 @@ const styles = StyleSheet.create({
   fullscreenRoot: { flex: 1, backgroundColor: '#000000' },
   fullscreenStage: { flex: 1, position: 'relative', backgroundColor: '#000000' },
   fullscreenVideo: { flex: 1, backgroundColor: '#000000' },
+  playbackButton: {
+    width: 64,
+    height: 64,
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    zIndex: 2,
+    marginTop: -32,
+    marginLeft: -32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.62)',
+  },
   fullscreenButton: {
     width: 44,
     height: 44,
