@@ -9,6 +9,7 @@ import { ANALYSIS_URL } from './env';
 const DATASET = 'moonboard_2024_7a';
 const PROVIDER = 'boardsesh_public_graphql_search_climbs';
 const VIDEO_ID = /^scraped-[A-Za-z0-9._-]+$/;
+const CLIMB_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const REQUEST_TIMEOUT_MS = 12_000;
 
 export type AnalysisCatalogVideo = {
@@ -22,6 +23,14 @@ export type ClimbAnalysisAvailability = {
   candidateVideoCount: number;
   analysisClimbId: string;
 };
+
+export async function fetchAnalyzedClimbIds(): Promise<string[]> {
+  const payload = await fetchAnalysis('/api/analysis-climbs', { dataset: DATASET });
+  return arrayValue(payload.climbs).flatMap((value) => {
+    const climbId = stringValue(record(value)?.id);
+    return CLIMB_UUID.test(climbId) ? [climbId] : [];
+  });
+}
 
 function record(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null && !Array.isArray(value)

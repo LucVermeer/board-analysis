@@ -376,6 +376,7 @@
     "searchPlaceholder": "Search climbs",
     "climbMeta": "{{grade}} · {{angle}}° · {{count}} videos",
     "catalogClimbMeta": "{{grade}} · {{angle}}° · {{setter}}",
+    "analysisAvailable": "Analysis available",
     "loadMore": "Load more climbs",
     "deviceUnavailable": "Analysis device unavailable",
     "deviceUnavailableBody": "Connect to Tailscale and make sure the analysis server is running.",

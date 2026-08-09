@@ -93,3 +93,8 @@ Tailscale host), then admits only definitive provider-join rows to playback and
 move navigation. Candidate rows remain excluded and are shown only as an
 unresolved count. Playback and inferred move data remain inspection output, not
 ground truth or training labels.
+
+The workstation's `/api/analysis-climbs` response is used only to discover which
+stable BoardSesh UUIDs have local analysis. The app rehydrates each climb's name,
+grade, angle, and setter from the BoardSesh catalogue and pins available climbs
+above the otherwise complete, searchable MoonBoard 2024 catalogue.

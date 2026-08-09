@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
 import { useEventListener } from 'expo';
 import { VideoView, useVideoPlayer } from 'expo-video';
-import { useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type {
   AnalyzedBetaMoveAttempt,
@@ -11,6 +11,8 @@ import type {
   ClimbSearchInput,
 } from '@boardsesh/shared-schema';
 import { useInfiniteSearchClimbs } from '../../lib/graphql/hooks/use-infinite-search-climbs';
+import { getHttpClient } from '../../lib/graphql/client';
+import { GET_CLIMB, type GetClimbQueryResponse, type GetClimbQueryVariables } from '../../lib/graphql/operations';
 import { useTheme } from '../../providers/theme-provider';
 import { useBottomChromeMetrics } from '../../hooks/use-bottom-chrome-metrics';
 import { Text } from '../Text';
@@ -19,6 +21,7 @@ import { ActivityIndicator } from '../ActivityIndicator';
 import { spacing, borderRadius } from '../../theme/tokens';
 import {
   analysisVideoUrl,
+  fetchAnalyzedClimbIds,
   fetchClimbAnalysisAvailability,
   fetchClimbAnalysisNavigation,
   fetchClimbMoveAttempts,
@@ -87,11 +90,54 @@ export function AnalyzedBetaNavigationScreen() {
     [debouncedSearch],
   );
   const climbsQuery = useInfiniteSearchClimbs(searchInput, true, { staleTime: 5 * 60_000 });
-  const climbs = useMemo(() => climbsQuery.data?.pages.flatMap((page) => page.climbs) ?? [], [climbsQuery.data]);
+  const catalogClimbs = useMemo(() => climbsQuery.data?.pages.flatMap((page) => page.climbs) ?? [], [climbsQuery.data]);
+  const analyzedClimbIdsQuery = useQuery({
+    queryKey: ['deviceAnalyzedClimbIds'],
+    queryFn: fetchAnalyzedClimbIds,
+    staleTime: 60_000,
+    retry: 1,
+  });
+  const analyzedClimbIds = analyzedClimbIdsQuery.data ?? [];
+  const analyzedClimbQueries = useQueries({
+    queries: analyzedClimbIds.map((climbUuid) => {
+      const variables: GetClimbQueryVariables = {
+        boardName: 'moonboard',
+        layoutId: 3,
+        sizeId: 1,
+        setIds: '5,6,7,8,9,10',
+        angle: 40,
+        climbUuid,
+      };
+      return {
+        queryKey: ['climb', variables],
+        queryFn: async () => (await getHttpClient().request<GetClimbQueryResponse>(GET_CLIMB, variables)).climb,
+        staleTime: 5 * 60_000,
+      };
+    }),
+  });
+  const analyzedClimbs = analyzedClimbQueries.flatMap((query) => (query.data ? [query.data] : []));
+  const analyzedClimbIdSet = useMemo(() => new Set(analyzedClimbIds), [analyzedClimbIds]);
+  const climbs = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase();
+    const matchingAnalyzed = query
+      ? analyzedClimbs.filter((climb) =>
+          `${climb.name} ${climb.difficulty} ${climb.setter_username}`.toLocaleLowerCase().includes(query),
+        )
+      : analyzedClimbs;
+    const seen = new Set(matchingAnalyzed.map((climb) => climb.uuid));
+    return [...matchingAnalyzed, ...catalogClimbs.filter((climb) => !seen.has(climb.uuid))];
+  }, [analyzedClimbs, catalogClimbs, search]);
 
   useEffect(() => {
-    if (!selectedClimb && climbs[0]) setSelectedClimb(climbs[0]);
-  }, [climbs, selectedClimb]);
+    if (selectedClimb) return;
+    if (analyzedClimbs[0]) {
+      setSelectedClimb(analyzedClimbs[0]);
+      return;
+    }
+    const analyzedCatalogueLoaded =
+      !analyzedClimbIdsQuery.isLoading && !analyzedClimbQueries.some((query) => query.isLoading);
+    if (analyzedCatalogueLoaded && catalogClimbs[0]) setSelectedClimb(catalogClimbs[0]);
+  }, [analyzedClimbIdsQuery.isLoading, analyzedClimbQueries, analyzedClimbs, catalogClimbs, selectedClimb]);
 
   const availabilityQuery = useQuery({
     queryKey: ['deviceClimbAnalysisAvailability', selectedClimb?.uuid],
@@ -311,9 +357,16 @@ export function AnalyzedBetaNavigationScreen() {
                 ]}
               >
                 <View style={styles.climbRowText}>
-                  <Text variant="subheadline" numberOfLines={1}>
-                    {climb.name}
-                  </Text>
+                  <View style={styles.climbTitleRow}>
+                    <Text variant="subheadline" numberOfLines={1} style={styles.climbTitle}>
+                      {climb.name}
+                    </Text>
+                    {analyzedClimbIdSet.has(climb.uuid) ? (
+                      <Text variant="caption2" color={brandColors.primary}>
+                        {t('analysisNavigation.analysisAvailable')}
+                      </Text>
+                    ) : null}
+                  </View>
                   <Text variant="caption1" color={systemColors.secondaryLabel} numberOfLines={1}>
                     {t('analysisNavigation.catalogClimbMeta', {
                       grade: climb.difficulty,
@@ -561,6 +614,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[2],
   },
   climbRowText: { flex: 1, gap: 2 },
+  climbTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
+  climbTitle: { flex: 1 },
   loadMoreButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center' },
   climbLoading: { minHeight: 240, alignItems: 'center', justifyContent: 'center' },
   statusPanel: {

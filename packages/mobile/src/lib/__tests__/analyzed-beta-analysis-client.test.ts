@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import {
+  fetchAnalyzedClimbIds,
   fetchClimbAnalysisAvailability,
   fetchClimbAnalysisNavigation,
   fetchClimbMoveAttempts,
@@ -12,6 +13,22 @@ function response(payload: unknown) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('device analysis client', () => {
+  it('uses the device climb index only as a stable UUID availability list', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        response({
+          climbs: [
+            { id: '9fcceb8b-06aa-55a1-8372-f281308a0703', name: 'display metadata is ignored' },
+            { id: 'not-a-provider-uuid', name: 'invalid' },
+          ],
+        }),
+      ),
+    );
+
+    await expect(fetchAnalyzedClimbIds()).resolves.toEqual(['9fcceb8b-06aa-55a1-8372-f281308a0703']);
+  });
+
   it('keeps only definitive videos joined to the requested BoardSesh climb', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       response({

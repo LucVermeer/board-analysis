@@ -376,6 +376,7 @@
     "searchPlaceholder": "Rechercher des blocs",
     "climbMeta": "{{grade}} · {{angle}}° · {{count}} vidéos",
     "catalogClimbMeta": "{{grade}} · {{angle}}° · {{setter}}",
+    "analysisAvailable": "Analyse disponible",
     "loadMore": "Charger plus de blocs",
     "deviceUnavailable": "Appareil d’analyse indisponible",
     "deviceUnavailableBody": "Connectez Tailscale et vérifiez que le serveur d’analyse fonctionne.",

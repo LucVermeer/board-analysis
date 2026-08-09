@@ -376,6 +376,7 @@
     "searchPlaceholder": "Boulder suchen",
     "climbMeta": "{{grade}} · {{angle}}° · {{count}} Videos",
     "catalogClimbMeta": "{{grade}} · {{angle}}° · {{setter}}",
+    "analysisAvailable": "Analyse verfügbar",
     "loadMore": "Mehr Boulder laden",
     "deviceUnavailable": "Analysegerät nicht verfügbar",
     "deviceUnavailableBody": "Mit Tailscale verbinden und sicherstellen, dass der Analyseserver läuft.",
