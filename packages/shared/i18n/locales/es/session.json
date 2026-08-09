@@ -682,6 +682,7 @@
     "retryCamera": "Reintentar cámara",
     "saved": "Intento guardado",
     "savedToast": "Video del intento guardado",
+    "storage": { "local": "En este dispositivo", "cloud": "Nube" },
     "done": "Listo",
     "status": {
       "permission": "Abriendo cámara...",

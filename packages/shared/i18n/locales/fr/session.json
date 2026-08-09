@@ -682,6 +682,7 @@
     "retryCamera": "Réessayer la caméra",
     "saved": "Essai enregistré",
     "savedToast": "Vidéo d'essai enregistrée",
+    "storage": { "local": "Sur cet appareil", "cloud": "Cloud" },
     "done": "Terminé",
     "status": {
       "permission": "Ouverture de la caméra...",

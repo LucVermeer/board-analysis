@@ -1,7 +1,7 @@
 # Private Attempt Videos
 
-MoonBoard 2024 attempt videos are private, owner-scoped recordings stored on
-the backend's local filesystem. They are not community beta and never enter
+MoonBoard 2024 attempt videos are private recordings stored either on the
+recording device or in the owner's backend-scoped library. They are not community beta and never enter
 `board_beta_links`, public feeds, social activity, or analysis exports.
 
 ## Configuration
@@ -72,11 +72,20 @@ interruption, and long-recording behavior still require a final smoke test on
 the target Android Chrome/tablet combination.
 
 The native Android app records a silent 720p MP4 into Expo Camera's private
-cache. It initializes the owner-scoped upload before capture, then sends bounded
-4 MiB file slices after the camera closes. Retry reads the server's authoritative
-offset and resumes from the retained cache file. Save and cancel both delete the
-temporary local file; cancel also deletes the unfinished backend upload and
-never creates a tick. Camera permission is declared without microphone access.
+cache. On-device storage is the default: after capture, the app copies the MP4
+into its persistent document directory and records a small metadata index in
+device app storage. These recordings survive app restarts, appear in climb
+details and analysis comparison, and are removed by the same owner-facing
+delete action. They are device-scoped, are removed when app data is cleared or
+the app is uninstalled, and do not create a tick or become training labels.
+
+Cloud storage remains an explicit, persistent recorder choice. For cloud saves,
+the app initializes the owner-scoped upload after capture, then sends bounded
+4 MiB file slices. Retry reads the server's authoritative offset and resumes
+from the retained cache file. A successful local copy or cloud upload deletes
+the temporary camera file; cancellation deletes both the temporary file and any
+unfinished backend upload. Camera permission is declared without microphone
+access.
 
 ## Analysis Adapter
 

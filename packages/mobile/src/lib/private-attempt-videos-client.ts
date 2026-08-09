@@ -43,6 +43,7 @@ const CHUNK_SIZE = 4 * 1024 * 1024;
 const MAX_OFFSET_REPAIRS = 3;
 
 export async function protectedPrivateAttemptVideoSource(playbackPath: string): Promise<VideoSource> {
+  if (playbackPath.startsWith('file:')) return { uri: playbackPath };
   await ensureFreshToken();
   const token = await getAuthToken();
   if (!token) throw new Error('Missing authentication token');

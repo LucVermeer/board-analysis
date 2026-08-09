@@ -41,6 +41,7 @@ import {
 } from '../../lib/analyzed-beta-analysis-client';
 import { buildAnalyzedBetaNavigationItems, type AnalyzedBetaNavigationItem } from '../../lib/analyzed-beta-navigation';
 import { attemptSwipeOffset } from '../../lib/private-attempt-loop';
+import { listLocalAttemptVideos, localAttemptVideosQueryKey } from '../../lib/local-attempt-videos';
 import { useSetting } from '../../settings/hooks';
 import { PrivateAttemptComparison } from './PrivateAttemptComparison';
 
@@ -228,7 +229,15 @@ export function AnalyzedBetaNavigationScreen() {
   const privateVideosQuery = usePrivateAttemptVideos(selectedClimb?.uuid ?? '', 3, selectedClimb?.angle ?? 40, {
     enabled: !!selectedClimb,
   });
-  const privateVideos = privateVideosQuery.data ?? [];
+  const localVideosQuery = useQuery({
+    queryKey: localAttemptVideosQueryKey(selectedClimb?.uuid ?? '', 3, selectedClimb?.angle ?? 40),
+    queryFn: () => listLocalAttemptVideos(selectedClimb!.uuid, 3, selectedClimb!.angle ?? 40),
+    enabled: !!selectedClimb,
+  });
+  const privateVideos = useMemo(
+    () => [...(localVideosQuery.data ?? []), ...(privateVideosQuery.data ?? [])],
+    [localVideosQuery.data, privateVideosQuery.data],
+  );
 
   useEffect(() => {
     setRecordingIndex((current) => Math.min(current, Math.max(0, privateVideos.length - 1)));

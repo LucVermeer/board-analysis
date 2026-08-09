@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { useTranslation } from 'react-i18next';
 import type { PrivateAttemptVideo } from '@boardsesh/shared-schema';
@@ -14,6 +14,12 @@ import {
   protectedPrivateAttemptVideoSource,
 } from '../../lib/private-attempt-videos-client';
 import { spacing } from '../../theme/tokens';
+import {
+  deleteLocalAttemptVideo,
+  isLocalAttemptVideo,
+  listLocalAttemptVideos,
+  localAttemptVideosQueryKey,
+} from '../../lib/local-attempt-videos';
 
 type PrivateAttemptVideosSectionProps = {
   climbUuid: string;
@@ -111,7 +117,13 @@ export function PrivateAttemptVideosSection({ climbUuid, layoutId, angle }: Priv
   const { t } = useTranslation('climbs');
   const queryClient = useQueryClient();
   const { systemColors } = useTheme();
-  const { data: videos, isLoading } = usePrivateAttemptVideos(climbUuid, layoutId, angle);
+  const { data: cloudVideos, isLoading: cloudLoading } = usePrivateAttemptVideos(climbUuid, layoutId, angle);
+  const localQueryKey = localAttemptVideosQueryKey(climbUuid, layoutId, angle);
+  const { data: localVideos, isLoading: localLoading } = useQuery({
+    queryKey: localQueryKey,
+    queryFn: () => listLocalAttemptVideos(climbUuid, layoutId, angle),
+  });
+  const videos = [...(localVideos ?? []), ...(cloudVideos ?? [])];
 
   const confirmDelete = useCallback(
     (videoUuid: string) => {
@@ -121,17 +133,27 @@ export function PrivateAttemptVideosSection({ climbUuid, layoutId, angle }: Priv
           text: t('attemptVideos.delete'),
           style: 'destructive',
           onPress: () => {
-            void deletePrivateAttemptUpload(videoUuid).then(() =>
-              queryClient.invalidateQueries({ queryKey: privateAttemptVideosQueryKey(climbUuid, layoutId, angle) }),
+            const video = videos.find((item) => item.uuid === videoUuid);
+            const deletion =
+              video && isLocalAttemptVideo(video)
+                ? deleteLocalAttemptVideo(videoUuid)
+                : deletePrivateAttemptUpload(videoUuid);
+            void deletion.then(() =>
+              queryClient.invalidateQueries({
+                queryKey:
+                  video && isLocalAttemptVideo(video)
+                    ? localQueryKey
+                    : privateAttemptVideosQueryKey(climbUuid, layoutId, angle),
+              }),
             );
           },
         },
       ]);
     },
-    [angle, climbUuid, layoutId, queryClient, t],
+    [angle, climbUuid, layoutId, localQueryKey, queryClient, t, videos],
   );
 
-  if (isLoading) {
+  if (localLoading && cloudLoading && videos.length === 0) {
     return (
       <View style={styles.state} accessibilityLabel={t('attemptVideos.loading')}>
         <ActivityIndicator />

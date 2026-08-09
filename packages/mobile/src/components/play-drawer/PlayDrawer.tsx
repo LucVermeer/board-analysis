@@ -63,6 +63,7 @@ import type { OpenClimbActionsOptions } from '../../providers/drawer-host-provid
 import { useAuth } from '../../providers/auth-provider';
 import { useToast } from '../../providers/toast-provider';
 import { privateAttemptVideosQueryKey, useToggleFavorite, useFavoriteStatus } from '../../lib/graphql/hooks';
+import { localAttemptVideosQueryKey } from '../../lib/local-attempt-videos';
 import { fetchClimbAnalysisAvailability } from '../../lib/analyzed-beta-analysis-client';
 import { useDisplayGrade } from '../../hooks/use-display-grade';
 import { resolveTickDefaultGradeName } from '../../lib/boardsesh-grade-display';
@@ -509,6 +510,9 @@ export function PlayDrawer({
     if (!target) return;
     void queryClient.invalidateQueries({
       queryKey: privateAttemptVideosQueryKey(target.climbUuid, 3, target.angle),
+    });
+    void queryClient.invalidateQueries({
+      queryKey: localAttemptVideosQueryKey(target.climbUuid, 3, target.angle),
     });
     showToast(t('attemptRecorder.savedToast'), 'success');
   }, [attemptRecorderTarget, queryClient, showToast, t]);

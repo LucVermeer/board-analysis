@@ -14,4 +14,5 @@ export const DEFAULT_SETTINGS: AppSettings = {
   kioskHintSeen: false,
   bottomChromeDiagnostics: false,
   analysisPlaybackSpeed: 1,
+  attemptVideoStorage: 'local',
 };

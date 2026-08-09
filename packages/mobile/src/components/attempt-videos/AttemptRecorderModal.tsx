@@ -9,6 +9,8 @@ import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { ActivityIndicator } from '../ActivityIndicator';
 import { useTheme } from '../../providers/theme-provider';
+import { useSetting } from '../../settings/hooks';
+import { saveLocalAttemptVideo } from '../../lib/local-attempt-videos';
 import {
   createPrivateAttemptUpload,
   deletePrivateAttemptUpload,
@@ -56,6 +58,7 @@ export function AttemptRecorderModal({ visible, target, onClose, onSaved }: Atte
   const { t } = useTranslation('session');
   const { systemColors, brandColors } = useTheme();
   const insets = useSafeAreaInsets();
+  const [storage, setStorage] = useSetting('attemptVideoStorage');
   const [permission, requestPermission] = useCameraPermissions();
   const permissionLoaded = permission != null;
   const permissionGranted = permission?.granted ?? false;
@@ -189,6 +192,28 @@ export function AttemptRecorderModal({ visible, target, onClose, onSaved }: Atte
     [target, uploadAndFinalize],
   );
 
+  const saveLocally = useCallback(
+    async (file: File) => {
+      if (!target) return;
+      setPhase('finalizing');
+      await saveLocalAttemptVideo({
+        source: file,
+        uuid: randomUUID(),
+        climbUuid: target.climbUuid,
+        layoutId: 3,
+        angle: target.angle,
+        isMirror: target.isMirror,
+        mimeType: 'video/mp4',
+        durationMs: durationMsRef.current,
+        recordedAt: recordedAtRef.current,
+      });
+      removeLocalFile();
+      setPhase('saved');
+      onSaved();
+    },
+    [onSaved, removeLocalFile, target],
+  );
+
   const handleStart = useCallback(async () => {
     if (!target || !cameraRef.current || phase !== 'ready') return;
     cancelledRef.current = false;
@@ -213,7 +238,11 @@ export function AttemptRecorderModal({ visible, target, onClose, onSaved }: Atte
         await finishCancellation();
         return;
       }
-      await initializeUpload(localFileRef.current);
+      if (storage === 'local') {
+        await saveLocally(localFileRef.current);
+      } else {
+        await initializeUpload(localFileRef.current);
+      }
     } catch (error) {
       if (cancelledRef.current) {
         await finishCancellation();
@@ -223,7 +252,7 @@ export function AttemptRecorderModal({ visible, target, onClose, onSaved }: Atte
       setErrorCode(error instanceof PrivateAttemptApiError ? error.code : 'default');
       setPhase('error');
     }
-  }, [finishCancellation, initializeUpload, phase, target]);
+  }, [finishCancellation, initializeUpload, phase, saveLocally, storage, target]);
 
   const handleStop = useCallback(() => {
     if (phase !== 'recording') return;
@@ -261,6 +290,10 @@ export function AttemptRecorderModal({ visible, target, onClose, onSaved }: Atte
       return;
     }
     try {
+      if (storage === 'local') {
+        await saveLocally(file);
+        return;
+      }
       if (!uploadUuid) {
         await initializeUpload(file);
         return;
@@ -271,7 +304,7 @@ export function AttemptRecorderModal({ visible, target, onClose, onSaved }: Atte
       setErrorCode(error instanceof PrivateAttemptApiError ? error.code : 'default');
       setPhase('error');
     }
-  }, [deleteUnfinishedUpload, initializeUpload, permission?.granted, uploadAndFinalize]);
+  }, [deleteUnfinishedUpload, initializeUpload, permission?.granted, saveLocally, storage, uploadAndFinalize]);
 
   const statusLabel =
     phase === 'uploading'
@@ -332,14 +365,32 @@ export function AttemptRecorderModal({ visible, target, onClose, onSaved }: Atte
           </Text>
           {busy ? <ActivityIndicator color="#FFFFFF" size="large" /> : null}
           {phase === 'ready' ? (
-            <Pressable
-              onPress={() => void handleStart()}
-              accessibilityRole="button"
-              accessibilityLabel={t('attemptRecorder.startAria')}
-              style={[styles.recordButton, { borderColor: '#FFFFFF' }]}
-            >
-              <View style={[styles.recordButtonInner, { backgroundColor: brandColors.error }]} />
-            </Pressable>
+            <>
+              <View style={styles.storageControl} accessibilityRole="radiogroup">
+                {(['local', 'cloud'] as const).map((option) => (
+                  <Pressable
+                    key={option}
+                    onPress={() => setStorage(option)}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: storage === option }}
+                    style={[styles.storageButton, storage === option && styles.storageButtonSelected]}
+                  >
+                    <Icon name={option === 'local' ? 'video' : 'upload'} size={18} color="#FFFFFF" />
+                    <Text variant="subheadline" color="#FFFFFF">
+                      {t(`attemptRecorder.storage.${option}`)}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              <Pressable
+                onPress={() => void handleStart()}
+                accessibilityRole="button"
+                accessibilityLabel={t('attemptRecorder.startAria')}
+                style={[styles.recordButton, { borderColor: '#FFFFFF' }]}
+              >
+                <View style={[styles.recordButtonInner, { backgroundColor: brandColors.error }]} />
+              </Pressable>
+            </>
           ) : null}
           {phase === 'recording' ? (
             <Pressable
@@ -409,6 +460,24 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
   },
   status: { minHeight: 24, textAlign: 'center', paddingHorizontal: 20 },
+  storageControl: {
+    flexDirection: 'row',
+    gap: 8,
+    padding: 4,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  storageButton: {
+    minWidth: 124,
+    height: 40,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    gap: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 6,
+  },
+  storageButtonSelected: { backgroundColor: 'rgba(255,255,255,0.22)' },
   recordButton: {
     width: 76,
     height: 76,

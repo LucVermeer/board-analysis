@@ -25,6 +25,8 @@ export type AppSettings = {
   bottomChromeDiagnostics: boolean;
   /** Playback speed shared by analyzed beta and comparison videos. */
   analysisPlaybackSpeed: 0.25 | 0.5 | 1;
+  /** Where newly recorded climbing attempts are saved. */
+  attemptVideoStorage: 'local' | 'cloud';
 };
 
 export type SettingsKey = keyof AppSettings;
