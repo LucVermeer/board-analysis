@@ -1,14 +1,14 @@
 {
-  "generatedAt": "2026-08-10T07:34:27.396Z",
+  "generatedAt": "2026-08-17T07:23:58.442Z",
   "contributors": [
     {
       "login": "marcodejongh",
       "name": "Marco de Jongh",
       "avatarUrl": "https://avatars.githubusercontent.com/u/1107647?u=63993f18e3d652404c7a04ae91a5f7a505fdef5c&v=4",
       "htmlUrl": "https://github.com/marcodejongh",
-      "pullRequests": 3085,
-      "issues": 726,
-      "contributions": 3811
+      "pullRequests": 3253,
+      "issues": 833,
+      "contributions": 4086
     },
     {
       "login": "ES-Alexander",
@@ -16,8 +16,8 @@
       "avatarUrl": "https://avatars.githubusercontent.com/u/25898329?u=02154126eda9e5537b1cf9f1b139096031f8e57b&v=4",
       "htmlUrl": "https://github.com/ES-Alexander",
       "pullRequests": 1,
-      "issues": 74,
-      "contributions": 75
+      "issues": 79,
+      "contributions": 80
     },
     {
       "login": "azuttre",
@@ -42,18 +42,18 @@
       "name": "Alex Sánchez",
       "avatarUrl": "https://avatars.githubusercontent.com/u/10997544?u=41ac204494f58d9a5f32b3652af16a75c20869df&v=4",
       "htmlUrl": "https://github.com/alejandrosanchezcabana",
-      "pullRequests": 14,
+      "pullRequests": 16,
       "issues": 2,
-      "contributions": 16
+      "contributions": 18
     },
     {
       "login": "fallaciousreasoning",
       "name": "Jay Harris",
       "avatarUrl": "https://avatars.githubusercontent.com/u/7678024?v=4",
       "htmlUrl": "https://github.com/fallaciousreasoning",
-      "pullRequests": 8,
+      "pullRequests": 12,
       "issues": 0,
-      "contributions": 8
+      "contributions": 12
     },
     {
       "login": "shelldandy",
@@ -116,6 +116,15 @@
       "htmlUrl": "https://github.com/giannilariosa",
       "pullRequests": 3,
       "issues": 1,
+      "contributions": 4
+    },
+    {
+      "login": "mohitkyadav",
+      "name": "Mohit Kumar Yadav",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/25580776?v=4",
+      "htmlUrl": "https://github.com/mohitkyadav",
+      "pullRequests": 0,
+      "issues": 4,
       "contributions": 4
     },
     {
