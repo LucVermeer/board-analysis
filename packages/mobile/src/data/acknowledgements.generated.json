@@ -1,23 +1,23 @@
 {
-  "generatedAt": "2026-08-17T07:23:58.442Z",
+  "generatedAt": "2026-08-24T07:26:24.157Z",
   "contributors": [
     {
       "login": "marcodejongh",
       "name": "Marco de Jongh",
       "avatarUrl": "https://avatars.githubusercontent.com/u/1107647?u=63993f18e3d652404c7a04ae91a5f7a505fdef5c&v=4",
       "htmlUrl": "https://github.com/marcodejongh",
-      "pullRequests": 3253,
-      "issues": 833,
-      "contributions": 4086
+      "pullRequests": 3351,
+      "issues": 920,
+      "contributions": 4271
     },
     {
       "login": "ES-Alexander",
       "name": null,
       "avatarUrl": "https://avatars.githubusercontent.com/u/25898329?u=02154126eda9e5537b1cf9f1b139096031f8e57b&v=4",
       "htmlUrl": "https://github.com/ES-Alexander",
-      "pullRequests": 1,
-      "issues": 79,
-      "contributions": 80
+      "pullRequests": 2,
+      "issues": 91,
+      "contributions": 93
     },
     {
       "login": "azuttre",
@@ -42,18 +42,18 @@
       "name": "Alex Sánchez",
       "avatarUrl": "https://avatars.githubusercontent.com/u/10997544?u=41ac204494f58d9a5f32b3652af16a75c20869df&v=4",
       "htmlUrl": "https://github.com/alejandrosanchezcabana",
-      "pullRequests": 16,
+      "pullRequests": 17,
       "issues": 2,
-      "contributions": 18
+      "contributions": 19
     },
     {
       "login": "fallaciousreasoning",
       "name": "Jay Harris",
       "avatarUrl": "https://avatars.githubusercontent.com/u/7678024?v=4",
       "htmlUrl": "https://github.com/fallaciousreasoning",
-      "pullRequests": 12,
+      "pullRequests": 18,
       "issues": 0,
-      "contributions": 12
+      "contributions": 18
     },
     {
       "login": "shelldandy",
@@ -121,7 +121,7 @@
     {
       "login": "mohitkyadav",
       "name": "Mohit Kumar Yadav",
-      "avatarUrl": "https://avatars.githubusercontent.com/u/25580776?v=4",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/25580776?u=be6f0c0e5a50095fdece1e6a1a9b205d59f1e212&v=4",
       "htmlUrl": "https://github.com/mohitkyadav",
       "pullRequests": 0,
       "issues": 4,
@@ -247,7 +247,7 @@
     {
       "login": "mayank-dev-15",
       "name": "Mayank Basena",
-      "avatarUrl": "https://avatars.githubusercontent.com/u/289773841?u=3808d1f61663cdc4cac6f2b18c60d91a5c5b765b&v=4",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/289773841?v=4",
       "htmlUrl": "https://github.com/mayank-dev-15",
       "pullRequests": 1,
       "issues": 0,
