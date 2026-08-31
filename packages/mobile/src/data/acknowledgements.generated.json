@@ -1,14 +1,14 @@
 {
-  "generatedAt": "2026-08-24T07:26:24.157Z",
+  "generatedAt": "2026-08-31T07:19:13.681Z",
   "contributors": [
     {
       "login": "marcodejongh",
       "name": "Marco de Jongh",
       "avatarUrl": "https://avatars.githubusercontent.com/u/1107647?u=63993f18e3d652404c7a04ae91a5f7a505fdef5c&v=4",
       "htmlUrl": "https://github.com/marcodejongh",
-      "pullRequests": 3351,
-      "issues": 920,
-      "contributions": 4271
+      "pullRequests": 3432,
+      "issues": 1049,
+      "contributions": 4481
     },
     {
       "login": "ES-Alexander",
@@ -16,8 +16,8 @@
       "avatarUrl": "https://avatars.githubusercontent.com/u/25898329?u=02154126eda9e5537b1cf9f1b139096031f8e57b&v=4",
       "htmlUrl": "https://github.com/ES-Alexander",
       "pullRequests": 2,
-      "issues": 91,
-      "contributions": 93
+      "issues": 98,
+      "contributions": 100
     },
     {
       "login": "azuttre",
@@ -27,6 +27,15 @@
       "pullRequests": 27,
       "issues": 2,
       "contributions": 29
+    },
+    {
+      "login": "fallaciousreasoning",
+      "name": "Jay Harris",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/7678024?v=4",
+      "htmlUrl": "https://github.com/fallaciousreasoning",
+      "pullRequests": 21,
+      "issues": 1,
+      "contributions": 22
     },
     {
       "login": "gardaholm",
@@ -42,18 +51,9 @@
       "name": "Alex Sánchez",
       "avatarUrl": "https://avatars.githubusercontent.com/u/10997544?u=41ac204494f58d9a5f32b3652af16a75c20869df&v=4",
       "htmlUrl": "https://github.com/alejandrosanchezcabana",
-      "pullRequests": 17,
-      "issues": 2,
-      "contributions": 19
-    },
-    {
-      "login": "fallaciousreasoning",
-      "name": "Jay Harris",
-      "avatarUrl": "https://avatars.githubusercontent.com/u/7678024?v=4",
-      "htmlUrl": "https://github.com/fallaciousreasoning",
       "pullRequests": 18,
-      "issues": 0,
-      "contributions": 18
+      "issues": 2,
+      "contributions": 20
     },
     {
       "login": "shelldandy",
@@ -341,6 +341,12 @@
       "name": "Shuying Zhang",
       "avatarUrl": "https://avatars.githubusercontent.com/u/26174891?v=4",
       "url": "https://github.com/bluejayio"
+    },
+    {
+      "login": "axelmarciano",
+      "name": "Axel Marciano",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/12605993?u=414a078bf0072e97d9cbb2252a957755081b8fb4&v=4",
+      "url": "https://github.com/axelmarciano"
     }
   ],
   "privateSponsorCount": 2
