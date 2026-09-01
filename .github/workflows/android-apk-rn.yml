@@ -405,6 +405,57 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
+      # Firebase App Distribution is an optional convenience channel for
+      # sideload testers. Keep it separate from the app's runtime Firebase
+      # configuration: distributing an APK only needs the registered Firebase
+      # App ID and CI credentials; google-services.json is not required.
+      - name: Configure Firebase App Distribution
+        env:
+          FIREBASE_ANDROID_APP_ID: ${{ vars.FIREBASE_ANDROID_APP_ID }}
+          FIREBASE_APP_DISTRIBUTION_TESTERS: ${{ vars.FIREBASE_APP_DISTRIBUTION_TESTERS }}
+          FIREBASE_APP_DISTRIBUTION_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_APP_DISTRIBUTION_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -n "$FIREBASE_ANDROID_APP_ID" ] && \
+             [ -n "$FIREBASE_APP_DISTRIBUTION_TESTERS" ] && \
+             [ -n "$FIREBASE_APP_DISTRIBUTION_SERVICE_ACCOUNT_JSON" ]; then
+            credentials_path="$RUNNER_TEMP/firebase-app-distribution-service-account.json"
+            printf '%s' "$FIREBASE_APP_DISTRIBUTION_SERVICE_ACCOUNT_JSON" > "$credentials_path"
+            echo "GOOGLE_APPLICATION_CREDENTIALS=$credentials_path" >> "$GITHUB_ENV"
+            echo "FIREBASE_DISTRIBUTION_ENABLED=true" >> "$GITHUB_ENV"
+            echo "Firebase App Distribution is configured — the APK will be sent to testers."
+          else
+            echo "FIREBASE_DISTRIBUTION_ENABLED=false" >> "$GITHUB_ENV"
+            echo "::notice::Firebase App Distribution is not configured — skipping it; the GitHub artifact/release path remains available."
+          fi
+
+      - name: Distribute APK with Firebase
+        id: firebase_distribution
+        if: env.FIREBASE_DISTRIBUTION_ENABLED == 'true'
+        # Firebase is an additional tester convenience. An outage or a stale
+        # tester address must not block the existing GitHub Release / Play paths.
+        continue-on-error: true
+        env:
+          FIREBASE_ANDROID_APP_ID: ${{ vars.FIREBASE_ANDROID_APP_ID }}
+          FIREBASE_APP_DISTRIBUTION_TESTERS: ${{ vars.FIREBASE_APP_DISTRIBUTION_TESTERS }}
+        run: |
+          release_notes="$RUNNER_TEMP/firebase-release-notes.txt"
+          printf 'Boardsesh %s (GitHub build %s)\nBranch: %s\nCommit: %s\n' \
+            "$BOARDSESH_MOBILE_VERSION" "$GITHUB_RUN_NUMBER" "$GITHUB_REF_NAME" "$GITHUB_SHA" \
+            > "$release_notes"
+          bunx --bun firebase-tools@15.28.2 appdistribution:distribute \
+            packages/mobile/android/app/build/outputs/apk/release/boardsesh-rn-android-arm64-v8a.apk \
+            --app "$FIREBASE_ANDROID_APP_ID" \
+            --testers "$FIREBASE_APP_DISTRIBUTION_TESTERS" \
+            --release-notes-file "$release_notes"
+
+      - name: Remove Firebase credentials
+        if: always() && env.FIREBASE_DISTRIBUTION_ENABLED == 'true'
+        run: rm -f "$GOOGLE_APPLICATION_CREDENTIALS"
+
+      - name: Report Firebase distribution failure
+        if: always() && steps.firebase_distribution.outcome == 'failure'
+        run: echo "::warning::Firebase App Distribution failed; the APK will still be published through the existing GitHub Release path."
+
       - name: Create GitHub Release
         id: github_release
         if: github.ref == 'refs/heads/main'

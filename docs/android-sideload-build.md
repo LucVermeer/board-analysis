@@ -23,7 +23,8 @@ needs a macOS runner, which is why that one prebuilds locally too.)
   packages it imports), and manual `workflow_dispatch`.
 - **Output:** a GitHub Release tagged `rn-android-<major>.<minor>.<run_number>`
   with `boardsesh-rn-android-arm64-v8a.apk` attached, plus a 30-day build
-  artifact.
+  artifact. When the optional Firebase settings are present, the same APK is
+  also sent to Firebase App Distribution testers.
 - The job runs in the `Production` GitHub Environment so it can read the
   signing and deployment-notification secrets.
 
@@ -62,6 +63,35 @@ runtime `System.getenv(...) != null` check means a local `expo prebuild` (no
 keystore env) falls back to debug signing. The plugin is **excluded under
 `EAS_BUILD`** so `eas build` (used by `mobile:preview-build`) keeps managing its
 own signing.
+
+## Firebase App Distribution (optional)
+
+Firebase App Distribution gives sideload testers a phone-friendly inbox without
+replacing GitHub Releases or the Play internal track. The workflow uploads the
+already signed APK after signature verification. It does not add a Firebase SDK
+to the app and does not require `google-services.json` at build time.
+
+One-time setup:
+
+1. In Firebase, create or select a project and register Android package
+   `com.boardsesh.app`. Open App Distribution for that app and click **Get
+   started**.
+2. In the corresponding Google Cloud project, create a service account with the
+   **Firebase App Distribution Admin** role and create a JSON key.
+3. In the GitHub `Production` environment, add secret
+   `FIREBASE_APP_DISTRIBUTION_SERVICE_ACCOUNT_JSON` containing the complete JSON
+   key.
+4. In the same environment, add variable `FIREBASE_ANDROID_APP_ID` with the
+   Firebase App ID (`1:...:android:...`) and variable
+   `FIREBASE_APP_DISTRIBUTION_TESTERS` with a comma-separated tester email list.
+5. Dispatch **Android APK Build (React Native)** once. Each tester accepts the
+   initial email invitation, then installs future builds through Firebase App
+   Tester.
+
+All three settings are required. When any is missing, the Firebase step skips
+cleanly and the existing artifact, GitHub Release, and Play flows continue. The
+service-account JSON is written only to the runner's temporary directory and is
+removed after the upload.
 
 ## versionCode and coexistence with the Capacitor app
 
