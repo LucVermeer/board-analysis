@@ -1,14 +1,14 @@
 {
-  "generatedAt": "2026-11-09T07:10:04.970Z",
+  "generatedAt": "2026-11-16T07:16:26.518Z",
   "contributors": [
     {
       "login": "marcodejongh",
       "name": "Marco de Jongh",
       "avatarUrl": "https://avatars.githubusercontent.com/u/1107647?u=63993f18e3d652404c7a04ae91a5f7a505fdef5c&v=4",
       "htmlUrl": "https://github.com/marcodejongh",
-      "pullRequests": 4895,
-      "issues": 1697,
-      "contributions": 6592
+      "pullRequests": 5086,
+      "issues": 1707,
+      "contributions": 6793
     },
     {
       "login": "ES-Alexander",
@@ -24,9 +24,9 @@
       "name": "Alex Sánchez",
       "avatarUrl": "https://avatars.githubusercontent.com/u/10997544?u=41ac204494f58d9a5f32b3652af16a75c20869df&v=4",
       "htmlUrl": "https://github.com/alejandrosanchezcabana",
-      "pullRequests": 48,
+      "pullRequests": 50,
       "issues": 24,
-      "contributions": 72
+      "contributions": 74
     },
     {
       "login": "fallaciousreasoning",
@@ -89,6 +89,15 @@
       "htmlUrl": "https://github.com/0at",
       "pullRequests": 3,
       "issues": 2,
+      "contributions": 5
+    },
+    {
+      "login": "higubar",
+      "name": null,
+      "avatarUrl": "https://avatars.githubusercontent.com/u/35271065?v=4",
+      "htmlUrl": "https://github.com/higubar",
+      "pullRequests": 4,
+      "issues": 1,
       "contributions": 5
     },
     {
